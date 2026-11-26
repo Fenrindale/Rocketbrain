@@ -17,29 +17,63 @@ const roles = value => list(value,12) && value.every(role=>typeof role==='string
 const providerOutcomes=new Set(['skipped','abstained','returned','rejected','error','support-error','unobserved']);
 const managerOutcomes=new Set(['returned','rejected','error','unobserved']);
 const authenticationCoverage=new Set(['observed','unobserved','partial','unavailable']);
+const providerManager='org.springframework.security.authentication.ProviderManager';
+const parentOutcomes=new Set(['returned','empty','rejected','error','provider-not-found','unobserved']);
+const parentDispositions=new Set(['propagated','unused','ignored-not-found','unobserved']);
+const managerId=value=>typeof value==='string'&&/^manager-[1-9][0-9]{0,15}$/.test(value);
+const childOutcome=outcome=>outcome==='provider-not-found'?'rejected':outcome;
+
+function parentEvidence(parent,manager,managerCount,invalid){
+  if(!parent||!manager.delegated||(parent.managerId!==null&&!managerId(parent.managerId))||
+      !parentOutcomes.has(parent.outcome)||!parentDispositions.has(parent.disposition)||
+      (parent.childIndex!==null&&(!managerId(parent.managerId)||manager.parentType!==providerManager||
+        !integer(parent.childIndex,manager.index+1,managerCount)))||
+      (parent.outcome==='unobserved')!==(parent.disposition==='unobserved')||
+      (parent.disposition==='ignored-not-found'&&parent.outcome!=='provider-not-found')||
+      (parent.outcome==='provider-not-found'&&parent.disposition==='unused')||
+      (parent.disposition==='propagated'&&childOutcome(parent.outcome)!==manager.outcome)||
+      (manager.complete&&(parent.childIndex===null||parent.outcome==='unobserved')))return invalid();
+  return {managerId:parent.managerId,childIndex:parent.childIndex,outcome:parent.outcome,disposition:parent.disposition};
+}
+
 function authenticationEvidence(trace, hooked, invalid){
   const coverage=trace.authenticationCoverage;
   if(!authenticationCoverage.has(coverage)||!list(trace.authenticationManagers,6)||(coverage==='unavailable')===hooked||
     (['unobserved','unavailable'].includes(coverage)&&trace.authenticationManagers.length)||
     (coverage==='observed'&&!trace.authenticationManagers.length))return invalid();
   const managers=trace.authenticationManagers.map((manager,index)=>{
-    if(!manager||manager.index!==index+1||typeof manager.managerId!=='string'||!/^manager-[1-9][0-9]{0,15}$/.test(manager.managerId)||
+    if(!manager||manager.index!==index+1||!managerId(manager.managerId)||
       manager.managerType===null||!className(manager.managerType)||!managerOutcomes.has(manager.outcome)||
       typeof manager.delegated!=='boolean'||typeof manager.complete!=='boolean'||!className(manager.parentType)||
-      (!manager.delegated&&manager.parentType!==null)||(manager.delegated&&manager.complete)||
+      (!manager.delegated&&manager.parentType!==null)||(manager.delegated&&manager.complete&&manager.parentCall===undefined)||
       (manager.outcome==='unobserved'&&manager.complete)||!list(manager.providers,12))return invalid();
     const providers=manager.providers.map((provider,pos)=>{
       if(!provider||provider.index!==pos+1||provider.providerType===null||!className(provider.providerType)||
         !providerOutcomes.has(provider.outcome)||(manager.complete&&provider.outcome==='unobserved'))return invalid();
       return {index:provider.index,providerType:provider.providerType,outcome:provider.outcome};
     });
+    const parentCall=manager.parentCall===undefined?undefined:parentEvidence(manager.parentCall,manager,trace.authenticationManagers.length,invalid);
     const selected=manager.selectedProvider;
-    if(selected!==null&&(!manager.complete||manager.outcome!=='returned'||!integer(selected,1,providers.length)||
+    if(selected!==null&&(manager.delegated||!manager.complete||manager.outcome!=='returned'||!integer(selected,1,providers.length)||
       providers[selected-1].outcome!=='returned'||providers.filter(provider=>provider.outcome==='returned').length!==1))return invalid();
-    if(manager.complete&&manager.outcome==='returned'&&selected===null)return invalid();
+    if(manager.complete&&manager.outcome==='returned'&&(manager.delegated?parentCall.disposition!=='propagated':selected===null))return invalid();
+    const failureProvider=manager.failureProvider;
+    if(failureProvider!==undefined&&(!['rejected','error'].includes(manager.outcome)||
+        !integer(failureProvider,1,providers.length)||providers[failureProvider-1].outcome!==manager.outcome||
+        parentCall?.disposition==='propagated'))return invalid();
     return {index:manager.index,managerId:manager.managerId,managerType:manager.managerType,outcome:manager.outcome,
-      selectedProvider:selected,delegated:manager.delegated,parentType:manager.parentType,complete:manager.complete,providers};
+      selectedProvider:selected,delegated:manager.delegated,parentType:manager.parentType,complete:manager.complete,providers,
+      ...(parentCall&&{parentCall}),...(failureProvider!==undefined&&{failureProvider})};
   });
+  const linked=new Set();
+  for(const manager of managers){
+    const parent=manager.parentCall;
+    if(parent?.childIndex===undefined||parent.childIndex===null)continue;
+    const child=managers[parent.childIndex-1];
+    if(!child||linked.has(child.index)||child.managerId!==parent.managerId||child.managerType!==manager.parentType||
+        (manager.complete&&(!child.complete||child.outcome!==childOutcome(parent.outcome))))return invalid();
+    linked.add(child.index);
+  }
   if(coverage==='observed'&&managers.some(manager=>!manager.complete))return invalid();
   return {authenticationCoverage:coverage,authenticationManagers:managers};
 }

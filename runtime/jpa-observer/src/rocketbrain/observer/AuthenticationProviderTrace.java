@@ -31,8 +31,10 @@ public final class AuthenticationProviderTrace {
     private static final String CORE="org/springframework/security/core/";
     private static final String AUTH="org/springframework/security/authentication/";
     private static final String MANAGER=AUTH+"ProviderManager";
+    private static final String MANAGER_TYPE=MANAGER.replace('/','.');
     private static final String REJECTION_TYPE=CORE.replace('/','.')+"AuthenticationException";
     private static final String SERVICE_ERROR=AUTH.replace('/','.')+"InternalAuthenticationServiceException";
+    private static final String NOT_FOUND=AUTH+"ProviderNotFoundException";
     private static final String AUTHENTICATION="L"+CORE+"Authentication;";
     private static final String AUTHENTICATE="("+AUTHENTICATION+")"+AUTHENTICATION;
     private static final int MAX_MANAGERS=6, MAX_PROVIDERS=12, MAX_IDENTITIES=64;
@@ -47,35 +49,76 @@ public final class AuthenticationProviderTrace {
     private static final class Attempt {
         final String providerType;
         String stage="checking", outcome="unobserved";
+        WeakReference<Throwable> failure;
         Attempt(String providerType){this.providerType=providerType;}
         Map<String,Object> report(int index){return Map.of("index",index,"providerType",providerType,"outcome",outcome);}
     }
     private static final class Frame {
         final AuthenticationProviderTrace trace;
         final String managerId, managerType;
+        final int index;
         final List<Attempt> attempts=new ArrayList<>();
         Attempt pending;
+        ParentCall parent;
         String outcome="unobserved", parentType;
-        Integer selectedProvider;
+        Integer selectedProvider, failureProvider;
         boolean incomplete, delegated, extraProviders;
-        Frame(AuthenticationProviderTrace trace,String managerId,String managerType){
-            this.trace=trace;this.managerId=managerId;this.managerType=managerType;
+        Frame(AuthenticationProviderTrace trace,String managerId,String managerType,int index){
+            this.trace=trace;this.managerId=managerId;this.managerType=managerType;this.index=index;
         }
-        Map<String,Object> report(int index){
+        boolean complete(){
+            return !incomplete&&pending==null&&!outcome.equals("unobserved")&&(!delegated||parent!=null&&parent.complete());
+        }
+        Map<String,Object> report(){
             List<Map<String,Object>> ordered=new ArrayList<>();
             for(int at=0;at<attempts.size();at++)ordered.add(attempts.get(at).report(at+1));
             Map<String,Object> result=new LinkedHashMap<>();
             result.put("index",index);result.put("managerId",managerId);result.put("managerType",managerType);
             result.put("outcome",outcome);result.put("selectedProvider",selectedProvider);result.put("parentType",parentType);
-            result.put("delegated",delegated);result.put("complete",!incomplete&&!delegated&&pending==null&&!outcome.equals("unobserved"));
+            result.put("delegated",delegated);result.put("complete",complete());
+            if(parent!=null)result.put("parentCall",parent.report());
+            if(failureProvider!=null)result.put("failureProvider",failureProvider);
             result.put("providers",ordered);
             return result;
         }
     }
+
+    private static final class ParentCall {
+        final String managerId;
+        Object expected;
+        Frame child;
+        String outcome="unobserved", disposition="unobserved";
+        // Kept only while this stack frame is active, for reference equality with the actual outward decision.
+        WeakReference<Object> boundaryValue;
+        ParentCall(String managerId,Object expected){this.managerId=managerId;this.expected=expected;}
+        private void observed(String state,Object value){
+            expected=null;outcome=state;
+            if(value!=null)boundaryValue=new WeakReference<>(value);
+        }
+        void finish(Object outward,boolean failure){
+            if(outcome.equals("unobserved")&&failure)observed(authenticationException((Throwable)outward)?"rejected":"error",outward);
+            if(!outcome.equals("unobserved")){
+                boolean propagated=outward!=null&&boundaryValue!=null&&boundaryValue.get()==outward;
+                disposition=propagated?"propagated":outcome.equals("provider-not-found")?"ignored-not-found":"unused";
+            }
+            boundaryValue=null;expected=null;
+        }
+        boolean complete(){
+            if(child==null||!child.complete()||outcome.equals("unobserved")||disposition.equals("unobserved"))return false;
+            return (outcome.equals("provider-not-found")?"rejected":outcome).equals(child.outcome);
+        }
+        Map<String,Object> report(){
+            Map<String,Object> row=new LinkedHashMap<>();
+            row.put("managerId",managerId);row.put("childIndex",child==null?null:child.index);
+            row.put("outcome",outcome);row.put("disposition",disposition);
+            return row;
+        }
+    }
     private final List<Frame> managers=new ArrayList<>();
+    private ParentCall pendingParent;
     private boolean limited;
 
-    static synchronized void configure(boolean option){enabled=option;identities.clear();}
+    static synchronized void configure(boolean option){enabled=option;identities.clear();managerSequence=0;}
     static boolean enabled(){return enabled;}
     private static synchronized String identity(Object owner){
         identities.removeIf(entry->entry.owner().get()==null);
@@ -91,14 +134,11 @@ public final class AuthenticationProviderTrace {
         return name.length()<=192&&name.matches("[A-Za-z0-9_.$]+")?name:null;
     }
     List<Map<String,Object>> reports(){
-        List<Map<String,Object>> result=new ArrayList<>();
-        for(int at=0;at<managers.size();at++)result.add(managers.get(at).report(at+1));
-        return result;
+        return managers.stream().map(Frame::report).toList();
     }
     String coverage(boolean instrumented,boolean partial){
         if(!instrumented)return "unavailable";
-        if(partial||limited||managers.stream().anyMatch(frame->frame.incomplete||frame.delegated||
-            frame.pending!=null||frame.outcome.equals("unobserved")))return "partial";
+        if(partial||limited||pendingParent!=null||managers.stream().anyMatch(frame->!frame.complete()))return "partial";
         return managers.isEmpty()?"unobserved":"observed";
     }
 
@@ -109,7 +149,11 @@ public final class AuthenticationProviderTrace {
             if(trace.managers.size()>=MAX_MANAGERS){trace.limited=true;return null;}
             String id=identity(manager), name=type(manager);
             if(id==null||name==null){trace.limited=true;return null;}
-            Frame frame=new Frame(trace,id,name);
+            Frame frame=new Frame(trace,id,name,trace.managers.size()+1);
+            ParentCall edge=trace.pendingParent;
+            if(edge!=null&&edge.expected==manager){
+                edge.child=frame;edge.expected=null;trace.pendingParent=null;
+            }
             trace.managers.add(frame);
             return frame;
         }catch(Throwable ignored){trace.limited=true;return null;}
@@ -148,20 +192,50 @@ public final class AuthenticationProviderTrace {
         if(frame.pending==null||!frame.pending.stage.equals("authenticating")){frame.incomplete=true;return;}
         seal(frame,returned?"returned":"abstained");
     }
-    public static void delegated(Object parent,Object token){
+    public static void delegated(Object parent,Object token,boolean observedBoundary){
         Frame frame=live(token);if(frame==null)return;
-        try{frame.delegated=true;frame.parentType=type(parent);}
+        try{
+            frame.delegated=true;frame.parentType=type(parent);
+            if(!observedBoundary)return;
+            if(frame.parent!=null||parent==null||frame.trace.pendingParent!=null){frame.incomplete=true;return;}
+            boolean exactParent=MANAGER_TYPE.equals(frame.parentType);
+            frame.parent=new ParentCall(identity(parent),exactParent?parent:null);
+            if(exactParent)frame.trace.pendingParent=frame.parent;
+        }
         catch(Throwable ignored){frame.incomplete=true;}
+    }
+
+    private static void closePendingParent(Frame frame){
+        if(frame.parent!=null&&frame.trace.pendingParent==frame.parent)frame.trace.pendingParent=null;
+    }
+
+    public static void parentReturned(Object result,Object token){
+        Frame frame=live(token);if(frame==null||frame.parent==null)return;
+        closePendingParent(frame);
+        try{frame.parent.observed(result==null?"empty":"returned",result);}
+        catch(Throwable ignored){frame.incomplete=true;}
+    }
+
+    public static void parentCaught(Throwable error,Object token,boolean ignoredNotFound){
+        Frame frame=live(token);if(frame==null||frame.parent==null)return;
+        closePendingParent(frame);
+        try{
+            frame.parent.observed(ignoredNotFound?"provider-not-found":authenticationException(error)?"rejected":"error",error);
+        }catch(Throwable ignored){frame.incomplete=true;}
     }
     public static void caught(Throwable error,Object token){
         Frame frame=live(token);
-        if(frame!=null&&frame.pending!=null&&frame.pending.stage.equals("authenticating"))
+        if(frame!=null&&frame.pending!=null&&frame.pending.stage.equals("authenticating")){
+            try{frame.pending.failure=new WeakReference<>(error);}catch(Throwable ignored){}
             seal(frame,authenticationException(error)?"rejected":"error");
+        }
     }
-    public static void returned(boolean returned,Object token){
+    public static void returned(Object result,Object token){
         Frame frame=live(token);if(frame==null)return;
-        frame.outcome=returned?"returned":"unobserved";
-        if(!returned||frame.incomplete||frame.pending!=null||frame.delegated)return;
+        frame.outcome=result!=null?"returned":"unobserved";
+        finishParent(frame,result,false);
+        sealLocalFailure(frame,null);
+        if(result==null||frame.incomplete||frame.pending!=null||frame.delegated)return;
         for(int at=0;at<frame.attempts.size();at++)if(frame.attempts.get(at).outcome.equals("returned")){
             if(frame.selectedProvider!=null){frame.incomplete=true;frame.selectedProvider=null;return;}
             frame.selectedProvider=at+1;
@@ -172,8 +246,27 @@ public final class AuthenticationProviderTrace {
         Frame frame=live(token);if(frame==null)return;
         boolean rejected=authenticationException(error);
         frame.outcome=rejected?"rejected":"error";
+        finishParent(frame,error,true);
+        sealLocalFailure(frame,error);
         if(frame.pending!=null)seal(frame,frame.pending.stage.equals("authenticating")?
             (rejected?"rejected":"error"):frame.pending.stage.equals("checking")?"support-error":"unobserved");
+    }
+    private static void sealLocalFailure(Frame frame,Throwable outward){
+        boolean parentPropagated=frame.parent!=null&&frame.parent.disposition.equals("propagated");
+        int found=0;
+        for(int at=0;at<frame.attempts.size();at++){
+            Attempt attempt=frame.attempts.get(at);
+            if(outward!=null&&!parentPropagated&&attempt.failure!=null&&attempt.failure.get()==outward)found=found==0?at+1:-1;
+            attempt.failure=null;
+        }
+        if(found>0)frame.failureProvider=found;
+    }
+    private static void finishParent(Frame frame,Object outward,boolean failure){
+        closePendingParent(frame);
+        if(frame.parent!=null){
+            try{frame.parent.finish(outward,failure);}
+            catch(Throwable ignored){frame.incomplete=true;}
+        }
     }
     private static void seal(Frame frame,String outcome){
         frame.pending.outcome=outcome;frame.pending=null;
@@ -203,13 +296,22 @@ public final class AuthenticationProviderTrace {
                 var model=format.parse(bytes);
                 var method=model.methods().stream().filter(item->item.methodName().equalsString("authenticate")&&
                     item.methodType().equalsString(AUTHENTICATE)).findFirst().orElseThrow();
-                Set<Label> handlers=providerHandlers(method);
-                Scope scope=new Scope(handlers);
+                Map<String,Label> providerCatches=callHandlers(method,AUTH+"AuthenticationProvider");
+                if(!providerCatches.keySet().equals(Set.of(AUTH+"AccountStatusException",AUTH+"InternalAuthenticationServiceException",CORE+"AuthenticationException")))
+                    throw new IllegalStateException("Unsupported ProviderManager provider exception handling");
+                Set<Label> handlers=Set.copyOf(providerCatches.values());
+                Map<String,Label> parentCatches=callHandlers(method,AUTH+"AuthenticationManager");
+                boolean parentShape=parentCatches.keySet().equals(Set.of(NOT_FOUND,CORE+"AuthenticationException"))&&
+                    parentCatches.values().stream().distinct().count()==2&&parentCatches.values().stream().noneMatch(handlers::contains);
+                Map<Label,Boolean> parentHandlers=parentShape?Map.of(parentCatches.get(NOT_FOUND),true,
+                    parentCatches.get(CORE+"AuthenticationException"),false):Map.of();
+                Scope scope=new Scope(handlers,parentHandlers);
                 byte[] transformed=format.transformClass(model,(builder,element)->{
                     if(element==method)builder.transformMethod(method,MethodTransform.transformingCode(scope));
                     else builder.with(element);
                 });
-                if(scope.supports!=1||scope.authenticates!=1||scope.parents!=1||scope.handlers!=handlers.size()||scope.returns!=1)
+                if(scope.supports!=1||scope.authenticates!=1||scope.parents!=1||scope.handlers!=handlers.size()||
+                    scope.parentHandlers!=parentHandlers.size()||scope.returns!=1)
                     throw new IllegalStateException("Unsupported ProviderManager bytecode shape");
                 SecurityTraceRuntime.instrumented(HOOK);
                 return transformed;
@@ -220,7 +322,7 @@ public final class AuthenticationProviderTrace {
         }
     }
 
-    private static Set<Label> providerHandlers(MethodModel method){
+    private static Map<String,Label> callHandlers(MethodModel method,String owner){
         var code=method.code().orElseThrow();
         List<CodeElement> elements=code.elementList();
         int invoke=-1;
@@ -228,17 +330,18 @@ public final class AuthenticationProviderTrace {
         for(int at=0;at<elements.size();at++){
             CodeElement element=elements.get(at);
             if(element instanceof LabelTarget target)labels.put(target.label(),at);
-            if(call(element,AUTH+"AuthenticationProvider","authenticate",AUTHENTICATE))invoke=at;
+            if(call(element,owner,"authenticate",AUTHENTICATE)){
+                if(invoke>=0)return Map.of();
+                invoke=at;
+            }
         }
         Map<String,Label> found=new LinkedHashMap<>();
         for(ExceptionCatch item:code.exceptionHandlers()){
             if(invoke<=labels.getOrDefault(item.tryStart(),Integer.MAX_VALUE)||invoke>=labels.getOrDefault(item.tryEnd(),-1))continue;
-            String caught=item.catchType().orElseThrow().asInternalName();
-            if(found.put(caught,item.handler())!=null)throw new IllegalStateException("Repeated ProviderManager catch type");
+            String caught=item.catchType().map(type->type.asInternalName()).orElse("");
+            if(found.put(caught,item.handler())!=null)return Map.of();
         }
-        if(!found.keySet().equals(Set.of(AUTH+"AccountStatusException",AUTH+"InternalAuthenticationServiceException",CORE+"AuthenticationException")))
-            throw new IllegalStateException("Unsupported ProviderManager exception handling");
-        return Set.copyOf(found.values());
+        return found;
     }
     private static boolean call(CodeElement element,String owner,String name,String descriptor){
         return element instanceof InvokeInstruction invoke&&invoke.owner().asInternalName().equals(owner)&&
@@ -246,9 +349,10 @@ public final class AuthenticationProviderTrace {
     }
     private static final class Scope implements CodeTransform {
         final Set<Label> catches;
-        int token,supports,authenticates,parents,handlers,returns;
+        final Map<Label,Boolean> parentCatches;
+        int token,supports,authenticates,parents,handlers,parentHandlers,returns;
         Label first,last,failed;
-        Scope(Set<Label> catches){this.catches=catches;}
+        Scope(Set<Label> catches,Map<Label,Boolean> parentCatches){this.catches=catches;this.parentCatches=parentCatches;}
         @Override public void atStart(CodeBuilder code){
             token=code.allocateLocal(TypeKind.REFERENCE);
             code.aload(0).invokestatic(HELPER,"enter",MethodTypeDesc.of(OBJECT,OBJECT)).astore(token);
@@ -266,14 +370,23 @@ public final class AuthenticationProviderTrace {
                 isNonNull(code,"result");
             }else if(call(element,AUTH+"AuthenticationManager","authenticate",AUTHENTICATE)){
                 parents++;
-                code.dup2().pop().aload(token).invokestatic(HELPER,"delegated",MethodTypeDesc.of(VOID,OBJECT,OBJECT)).with(element);
+                code.dup2().pop().aload(token);
+                if(parentCatches.isEmpty())code.iconst_0();else code.iconst_1();
+                code.invokestatic(HELPER,"delegated",MethodTypeDesc.of(VOID,OBJECT,OBJECT,BOOLEAN)).with(element);
+                if(!parentCatches.isEmpty())code.dup().aload(token)
+                    .invokestatic(HELPER,"parentReturned",MethodTypeDesc.of(VOID,OBJECT,OBJECT));
             }else if(element instanceof LabelTarget target&&catches.contains(target.label())){
                 handlers++;
                 code.with(element).dup().aload(token).invokestatic(HELPER,"caught",MethodTypeDesc.of(VOID,THROWABLE,OBJECT));
+            }else if(element instanceof LabelTarget target&&parentCatches.containsKey(target.label())){
+                parentHandlers++;
+                code.with(element).dup().aload(token);
+                if(parentCatches.get(target.label()))code.iconst_1();else code.iconst_0();
+                code.invokestatic(HELPER,"parentCaught",MethodTypeDesc.of(VOID,THROWABLE,OBJECT,BOOLEAN));
             }else{
                 if(element instanceof ReturnInstruction ret&&ret.typeKind()==TypeKind.REFERENCE){
                     returns++;
-                    isNonNull(code,"returned");
+                    code.dup().aload(token).invokestatic(HELPER,"returned",MethodTypeDesc.of(VOID,OBJECT,OBJECT));
                 }
                 code.with(element);
             }

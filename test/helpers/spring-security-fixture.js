@@ -38,7 +38,8 @@ async function buildSpringSecurityFixture() {
   return jar;
 }
 
-async function startSpringSecurityFixture(config,{trace=false,methodTrace=false,traceRoles=[],authenticationProviderTrace=false,customAuthentication=false,observerJar}={}) {
+async function startSpringSecurityFixture(config,{trace=false,methodTrace=false,traceRoles=[],authenticationProviderTrace=false,
+  customAuthentication=false,parentAuthentication=false,observerJar}={}) {
   const {home,java}=await javaRuntime();
   const selected=process.env.ROCKETBRAIN_SPRING_SECURITY_JAR ?? jar;
   await fs.access(selected);
@@ -56,7 +57,8 @@ async function startSpringSecurityFixture(config,{trace=false,methodTrace=false,
   const env={...process.env,SPRING_DATASOURCE_URL:datasource,SPRING_DATASOURCE_USERNAME:db.user,SPRING_DATASOURCE_PASSWORD:db.password,
     RB_SECURITY_OPERATOR:operator.name,RB_SECURITY_OPERATOR_PASSWORD:operator.password,
     RB_SECURITY_REVIEWER:reviewer.name,RB_SECURITY_REVIEWER_PASSWORD:reviewer.password,
-    RB_SECURITY_VIEWER:viewer.name,RB_SECURITY_VIEWER_PASSWORD:viewer.password,RB_FIXTURE_CUSTOM_AUTHENTICATION:String(customAuthentication)};
+    RB_SECURITY_VIEWER:viewer.name,RB_SECURITY_VIEWER_PASSWORD:viewer.password,RB_FIXTURE_CUSTOM_AUTHENTICATION:String(customAuthentication),
+    RB_FIXTURE_PARENT_AUTHENTICATION:String(parentAuthentication)};
   let traceFiles,agentArgs=[];
   async function discardTraceFiles(){
     if(!traceFiles)return;
