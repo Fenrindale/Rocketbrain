@@ -64,14 +64,20 @@ object KotlinWatchInspection {
     private fun observedEntries(amount: Int, side: WatchSideEffect): LinkedHashMap<Any?, Any?> {
         // Force hash-bin tree nodes, while the public encounter order remains the same as insertion.
         val tree = LinkedHashMap<WatchTrapKey, Int>(64)
-        repeat(12) { tree[WatchTrapKey(side, it)] = it }
+        for (index in 0..11) tree[WatchTrapKey(side, index)] = index
         val map = LinkedHashMap<Any?, Any?>()
         map["database"] = amount
         map[null] = null
         map["precision"] = 9007199254740999L
         map[false] = true
         map["unicode🙂"] = "fixture🙂"
-        map["nested"] = arrayListOf(null, arrayOf<Any?>("label", 9007199254740997L), linkedMapOf("inside" to false))
+        val nested = ArrayList<Any?>()
+        nested.add(null)
+        nested.add(arrayOf<Any?>("label", 9007199254740997L))
+        val inside = LinkedHashMap<String, Boolean>()
+        inside["inside"] = false
+        nested.add(inside)
+        map["nested"] = nested
         map["cycle"] = map
         map["trap"] = WatchTrapList(side)
         map["tree"] = tree
@@ -154,7 +160,8 @@ object KotlinWatchInspection {
             val nested = arrayOf(numbers, intArrayOf(0))
             val target = WatchObject(side)
             val map = observedEntries(amount, side)
-            val oversized = (0..128).associateWithTo(LinkedHashMap()) { it }
+            val oversized = LinkedHashMap<Int, Int>()
+            for (index in 0..128) oversized[index] = index
             val accessOrdered = LinkedHashMap<Any?, Any?>(4, 0.75f, true)
             val unsupported = WatchTrapMap(side)
             val unordered = HashMap<String, Int>()
