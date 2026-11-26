@@ -318,6 +318,9 @@
       { "command": "rocketbrain.acp.reviewWorkspaceEdit", "title": "Review an ACP Multi-File Edit", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.localSqlAssistant.continueGrounded", "title": "Continue Grounded SQL Exploration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.localSqlAssistant.groundedTranscript", "title": "Show Grounded SQL Exploration Transcript", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
+      { "command": "rocketbrain.acp.savedSession", "title": "Start or Continue a Saved ACP Session", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.acp.removeSavedSession", "title": "Remove a Saved ACP Session", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.acp.recoverSavedSessions", "title": "Recover Saved ACP Workspace Storage", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.localSqlAssistant.compareProposals", "title": "Compare Local SQL Proposals", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
       { "command": "rocketbrain.sql.explainVisual", "title": "Visualize SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.measurePlan", "title": "Measure SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
@@ -2030,7 +2033,7 @@
         },
         "rocketbrain.acp.workspaceEditOpenCodePath": {
           "type": "string", "default": "", "scope": "machine-overridable",
-          "description": "Absolute path to the optional OpenCode executable for ACP source edit reviews with the configured loopback code model."
+          "description": "Absolute path to the optional OpenCode executable for reviewed ACP source edits and saved sessions with the configured loopback code model."
         },
         "rocketbrain.acp.databaseAgents": {
           "type": "array", "default": [], "scope": "machine-overridable", "maxItems": 20,

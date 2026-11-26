@@ -23,11 +23,15 @@ async function agentProgram(profile) {
   return { label: profile.label.trim(), executable, args: [...args] };
 }
 
-async function runAgent(profile, { cwd, text, signal, onUpdate, promptTimeout = 90000, env }) {
+async function runAgent(profile, { cwd, text, signal, onUpdate, promptTimeout = 90000, env, recovery }) {
   const { label, executable, args } = await agentProgram(profile);
   if (!path.isAbsolute(cwd) || !(await fs.stat(cwd)).isDirectory()) throw Error('Open a local workspace folder.');
   if (typeof text !== 'string' || !text.trim() || Buffer.byteLength(text) > 16 * 1024) {
     throw Error('Enter a request of up to 16 KiB.');
+  }
+  const resumed = recovery?.sessionId;
+  if (resumed !== undefined && (typeof resumed !== 'string' || !resumed || Buffer.byteLength(resumed) > 256 || /[\x00-\x1f]/.test(resumed))) {
+    throw Error('Choose a verified saved ACP session.');
   }
   if (signal?.aborted) throw aborted();
   const child = spawn(executable,args,{cwd,env,shell:false,windowsHide:true,stdio:['pipe','pipe','pipe']});
@@ -41,6 +45,9 @@ async function runAgent(profile, { cwd, text, signal, onUpdate, promptTimeout = 
   let denied = 0;
   let closed = false;
   let completed = false;
+  let loading = false;
+  let replayBytes = 0;
+  const replay = [];
 
   const stop = new Promise(resolve => child.once('close', () => {
     closed = true;
@@ -87,8 +94,20 @@ async function runAgent(profile, { cwd, text, signal, onUpdate, promptTimeout = 
     }
     if (method === 'session/update' && sessionId && params?.sessionId === sessionId) {
       const update = params.update;
-      if (update?.sessionUpdate === 'agent_message_chunk' && update.content?.type === 'text' &&
-          typeof update.content.text === 'string') {
+      const role = update?.sessionUpdate === 'agent_message_chunk' ? 'agent' : update?.sessionUpdate === 'user_message_chunk' ? 'user' : undefined;
+      if (role && update.content?.type === 'text' && typeof update.content.text === 'string' && update.content.text) {
+        if (loading) {
+          replayBytes += Buffer.byteLength(update.content.text);
+          if (replayBytes > maxReview) throw Error('The saved ACP history exceeded its review limit.');
+          const prior = replay.at(-1);
+          if (prior?.role === role && prior.messageId === update.messageId) prior.text += update.content.text;
+          else {
+            if (replay.length >= 80) throw Error('The saved ACP history returned too many messages.');
+            replay.push({ role, messageId: update.messageId, text: update.content.text });
+          }
+          return;
+        }
+        if (role !== 'agent') return;
         outputBytes += Buffer.byteLength(update.content.text);
         if (outputBytes > maxReview) throw Error('The ACP reply exceeded its review limit.');
         output += update.content.text;
@@ -128,20 +147,31 @@ async function runAgent(profile, { cwd, text, signal, onUpdate, promptTimeout = 
   signal?.addEventListener('abort',cancel,{ once:true });
   if (signal?.aborted) cancel();
   try {
+    if (recovery?.onStarted) {
+      if (!Number.isSafeInteger(child.pid)) throw Error('The recoverable ACP peer process could not be confirmed.');
+      await recovery.onStarted(child.pid);
+    }
     const support = await request('initialize',{ protocolVersion:1,
       clientInfo:{ name:'rocketbrain',version:'1.0.0' },clientCapabilities:{ fs:{ readTextFile:false,writeTextFile:false },terminal:false } });
     if (support?.protocolVersion !== 1) throw Error('Choose a peer supporting stable ACP version 1.');
-    const session = await request('session/new',{ cwd,mcpServers:[] });
-    if (typeof session?.sessionId !== 'string' || !session.sessionId || session.sessionId.length > 256) {
+    if (recovery && support.agentCapabilities?.loadSession !== true) throw Error('This ACP peer does not advertise recoverable sessions.');
+    const session = resumed ? { sessionId: resumed } : await request('session/new',{ cwd,mcpServers:[] });
+    if (typeof session?.sessionId !== 'string' || !session.sessionId || Buffer.byteLength(session.sessionId) > 256 || /[\x00-\x1f]/.test(session.sessionId)) {
       throw Error('The ACP peer returned an invalid session ID.');
     }
     sessionId = session.sessionId;
+    if (resumed) {
+      loading = true;
+      await request('session/load', { cwd, sessionId, mcpServers: [] });
+      loading = false;
+    }
     const reply = await request('session/prompt',{ sessionId,prompt:[{ type:'text',text }] },promptTimeout);
     if (typeof reply?.stopReason !== 'string' || !/^[a-z_]{1,40}$/.test(reply.stopReason)) {
       throw Error('The ACP peer returned an invalid stop reason.');
     }
     completed = true;
-    return { label,output,stopReason:reply.stopReason,denied };
+    return { label,output,stopReason:reply.stopReason,denied,
+      ...(recovery && { recovery: { sessionId, resumed: Boolean(resumed), replay: replay.map(({ role, text }) => ({ role, text })) } }) };
   } finally {
     signal?.removeEventListener('abort',cancel);
     child.stdin.end();
