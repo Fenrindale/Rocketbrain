@@ -1,5 +1,5 @@
 {
-  "version": "0.160.0",
+  "version": "0.164.0",
   "asOf": "2026-11-27",
   "total": 216,
   "fullProductParityVerified": false,
@@ -43,16 +43,12 @@
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-028",
-    "IDEA-045",
-    "IDEA-053",
-    "IDEA-113"
+    "DG-012",
+    "DG-083"
   ],
   "expandedFeatures": [
-    "IDEA-028",
-    "IDEA-045",
-    "IDEA-053",
-    "IDEA-113"
+    "DG-012",
+    "DG-083"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -833,8 +829,8 @@
       "verification": {
         "state": "v0.160-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.160.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1330,8 +1326,8 @@
       "verification": {
         "state": "v0.160-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.160.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1563,8 +1559,8 @@
       "verification": {
         "state": "v0.160-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.160.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3291,8 +3287,8 @@
       "verification": {
         "state": "v0.160-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.160.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -3835,23 +3831,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "AWS RDS IAM에 Azure Database for MySQL의 Microsoft Entra 토큰 발급을 추가한다. 검토한 Azure CLI 계정과 테넌트·구독을 다시 확인하고 인증서·호스트가 검증된 TLS에서 토큰을 사용한다.",
+      "scope": "기존 AWS RDS IAM과 Azure MySQL Entra 연결에 실제 환경을 대상으로 하는 읽기 전용 연결 검증 명령을 추가했다. AWS 만료 확인은 별도 명시 승인된 테스트 설정과 제한 시간에서 동작한다.",
       "remaining": [
-        "직접 관리하는 실제 Azure·AWS 계정의 공급자 인증과 다른 클라우드 연결이 남아 있다."
+        "승인된 실제 AWS RDS와 Azure MySQL 엔드포인트에서 공급자 토큰 인증을 검증해야 한다."
       ],
       "verification": {
-        "state": "v0.148-installed-coverage",
+        "state": "v0.164-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.148.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "설치본에서 로컬 계정 메타데이터가 휴대용 프로필에 빠지는 것을 검사했다. 모의 토큰 발급기를 사용한 실제 MySQL TLS 교환과 불일치 거부를 확인했고, 일반 TLS Spring JDBC 연결은 MySQL과 MariaDB에서 각각 동작했다.",
+        "testedScope": "실제 AWS CLI의 합성 입력과 로컬 MySQL TLS 연결로 인증 흐름과 잘못된 CA의 거부를 확인했다. 테스트에 사용한 Azure 토큰 발급은 모의 공급자였다.",
         "publicEvidence": [
-          "src/db/azure-mysql-entra.js",
-          "test/azure-mysql-entra-host.js",
-          "test/helpers/azure-mysql-entra-fixture.js"
+          "scripts/verify-cloud-mysql-auth.js",
+          "test/cloud-mysql-auth-proof.test.js",
+          "docs/rds-iam.md"
         ],
         "originalProductParityVerified": false
       }
@@ -5932,24 +5928,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "선택 스키마 변경이 첫 내구성 기록을 제출하기 전에 거부되면 변경 없이 종료됐다고 표시한다. 제출 이후 응답이 끊기면 복구 필요 상태를 유지하고 별도 연결에서 확인·복구할 수 있다.",
+      "scope": "동일 서버의 검토된 컬럼 매핑을 복사와 복구에 유지한다. 기존 정보를 새 타입으로 옮기면서 인덱스와 영향받는 두 테이블의 복합 외래 키를 보존한다.",
       "remaining": [
-        "임의 동적 SQL, 추가 공간 타입과 분산 원자적 DDL은 남아 있다."
+        "별도 서버에 걸친 원자적 DDL과 임의 동적 SQL·사용자 정의 종속성은 남아 있다."
       ],
       "verification": {
-        "state": "v0.136-installed-coverage",
+        "state": "v0.164-vendor-runtime-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.136.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring JDBC의 MySQL과 MariaDB에서 검토 후 변경 전 거부와 작업 제출 후 통신 실패를 구분했다. 내구성 기록을 찾아 원본 스키마·데이터를 복구했다.",
+        "testedScope": "실제 MySQL·MariaDB에서 INT를 BIGINT로 바꾸면서 이름도 변경했다. 경계 정수와 NULL, 복합 인덱스·외래 키가 유지됐고 새 세션으로 복구해도 Spring JDBC 결과가 일치했다. 불완전한 외래 키와 승인 후 데이터 변경은 거부했다.",
         "publicEvidence": [
+          "src/db/schema-column-mappings.js",
           "src/db/schema-recovery.js",
-          "src/db/schema-designer-vscode.js",
-          "src/db/schema-diff-vscode.js",
-          "test/schema-recovery-host.js"
+          "test/schema-column-mapping.test.js",
+          "test/schema-column-mapping-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6336,8 +6332,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "88b0cc6e816f352215a29b0ce6368512a8db3f9496b3fbe43f45adc306f407db",
-    "sourceManifestSha256": "830d2399944d1cebf77449ad16d791b90c5214ff2f9b36fddf2bb289e7ae9696",
+    "vsixSha256": "eabaa395065edc98e612be05489ed46829906dd78c728c6b0439f54cc4585094",
+    "sourceManifestSha256": "e3397e281becc0cb108218321c31297edc4752a24270756dc27c9756a5b8b7d9",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6349,35 +6345,19 @@
       }
     ]
   },
-  "stateChanges": [
-    {
-      "id": "IDEA-028",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "IDEA-053",
-      "before": "partial",
-      "after": "implemented"
-    },
-    {
-      "id": "IDEA-113",
-      "before": "partial",
-      "after": "implemented"
-    }
-  ],
+  "stateChanges": [],
   "offline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "head": "bb56210be59cd94daf8776e34c3419a7ac7574eb",
-    "run": 45869817050,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45869817050",
-    "tests": 2248,
+    "head": "92388152aacf295ce0b6e99cf14be5e1670628d2",
+    "run": 45874716214,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45874716214",
+    "tests": 2256,
     "suites": 0,
-    "pass": 2002,
+    "pass": 2006,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 246,
+    "skipped": 250,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

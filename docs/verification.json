@@ -1,30 +1,30 @@
 {
-  "version": "0.160.0",
-  "verifiedAt": "2026-11-26T17:52:40.337Z",
+  "version": "0.164.0",
+  "verifiedAt": "2026-11-26T18:20:52.401Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.160.0.vsix",
-    "sha256": "88b0cc6e816f352215a29b0ce6368512a8db3f9496b3fbe43f45adc306f407db",
-    "bytes": 4718960,
+    "name": "rocketbrain-0.164.0.vsix",
+    "sha256": "eabaa395065edc98e612be05489ed46829906dd78c728c6b0439f54cc4585094",
+    "bytes": 4722208,
     "files": 38
   },
   "source": {
-    "frozenPublicInputs": 3141,
-    "inputVectorSha256": "830d2399944d1cebf77449ad16d791b90c5214ff2f9b36fddf2bb289e7ae9696",
+    "frozenPublicInputs": 3147,
+    "inputVectorSha256": "e3397e281becc0cb108218321c31297edc4752a24270756dc27c9756a5b8b7d9",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "head": "bb56210be59cd94daf8776e34c3419a7ac7574eb",
-    "run": 45869817050,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45869817050",
-    "tests": 2248,
+    "head": "92388152aacf295ce0b6e99cf14be5e1670628d2",
+    "run": 45874716214,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45874716214",
+    "tests": 2256,
     "suites": 0,
-    "pass": 2002,
+    "pass": 2006,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 246,
+    "skipped": 250,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -39,197 +39,106 @@
       "groups": []
     }
   ],
-  "additionalInstalledRuntimes": [
-    {
-      "group": "workspaceKeyboardProfile",
-      "state": "passed",
-      "platform": "linux",
-      "origin": "hosted stock VS Code with unchanged shortcut implementation and declared rules",
-      "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45867136794",
-      "sourceCommit": "fa9b72931535cc6d85f1391f9b2d97cdb69998f2",
-      "sha256": "9a635af3b139e396bb6d41d76a5d43891e55b7cd49cadb04f0ae19dd9b50a79a"
-    }
-  ],
-  "nativeCandidateStages": [],
   "vendorRuntime": {
-    "androidKotlinDebugRuntime": {
-      "sourceCommit": "e756fea0ff507941466f2f5bc458c9b55c078fc5",
-      "sha256": "c0dbe5c1031e057978a6bc5fe229a900b9d15da8c2aae45085d8f4a4238612f5",
-      "workflow": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45867261465",
-      "publishedArtifact": 15140648829,
-      "hostedZipSha256": "e463f44c56ec52e7e1655ece934a0ff1ff323d560e48bde020f24a12d0b37534",
-      "image": "system-images;android-35;google_apis;x86_64",
-      "kotlin": "2.4.21",
-      "source": {
-        "name": "MainActivity.kt",
-        "type": "dev.rocketbrain.androidfixture.MainActivity",
-        "line": 25
-      },
-      "primitive": {
-        "name": "measured",
-        "type": "int",
-        "value": "42"
-      },
-      "scope": "owned Android emulator and actual ART"
-    },
-    "workspaceKeyboardProfile": {
-      "sourceCommit": "fa9b72931535cc6d85f1391f9b2d97cdb69998f2",
-      "sha256": "9a635af3b139e396bb6d41d76a5d43891e55b7cd49cadb04f0ae19dd9b50a79a",
-      "workflow": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45867136794",
-      "manifestKeybindings": 52,
-      "physicallyObserved": [
-        {
-          "platform": "linux",
-          "key": "ctrl+shift+f10 f",
-          "command": "rocketbrain.sql.format"
-        },
-        {
-          "platform": "linux",
-          "key": "ctrl+shift+f9 d",
-          "command": "editor.action.revealDefinition"
-        }
-      ],
-      "editor": "1.100.3",
-      "settingsAndUserKeybindingsUnchanged": true,
-      "actualSpring": [
-        {
-          "engine": "mysql",
-          "databaseVersion": "8.4.13",
-          "readOnlySpringJdbc": {
-            "people": 2,
-            "departments": 1,
-            "rolledBackNames": 0
-          }
-        },
-        {
-          "engine": "mariadb",
-          "databaseVersion": "11.4.8-MariaDB",
-          "readOnlySpringJdbc": {
-            "people": 2,
-            "departments": 1,
-            "rolledBackNames": 0
-          }
-        }
-      ]
-    },
-    "javaJpmsServicePackageMove": {
-      "sourceCommit": "060c2fe498cd3d96069e929a4bbb7086f6cdcf4a",
-      "sha256": "a4034e009f1d85634dbb36feefaabf41a28119de3a46ad83917ca4ff86402c92",
-      "modules": [
-        "fixture.service.api",
-        "fixture.service.left",
-        "fixture.service.right",
-        "fixture.service.client"
-      ],
-      "providers": 2,
-      "consumers": 1,
-      "before": [
-        {
-          "engine": "mysql",
-          "version": "8.4.13",
-          "providerValues": "[17, 29]",
-          "jdbcValue": 46
-        },
-        {
-          "engine": "mariadb",
-          "version": "11.4.8-MariaDB",
-          "providerValues": "[17, 29]",
-          "jdbcValue": 46
-        }
-      ],
-      "after": [
-        {
-          "engine": "mysql",
-          "version": "8.4.13",
-          "providerValues": "[17, 29]",
-          "jdbcValue": 46
-        },
-        {
-          "engine": "mariadb",
-          "version": "11.4.8-MariaDB",
-          "providerValues": "[17, 29]",
-          "jdbcValue": 46
-        }
-      ],
-      "oneWorkspaceEdit": true
-    },
-    "springBootServletTrace": {
-      "sourceCommit": "5f91e1b0c4dddbe80e7b30d215bb8b14f1564372",
-      "sha256": "3101d1e2252e942119a85ceea3f1008c258b6d6c5a1e905b6526d1e140986b8e",
-      "manualV1RealPairPreserved": true,
+    "schemaColumnMapping": {
+      "sourceCommit": "d14fec9ac43aa91a2a94774adee96f1304a50356",
+      "sha256": "a8574f37fc728bcbd7994a6e51ffac935d4972b1137dc81d8d39fc89fb9b5649",
       "results": [
         {
           "engine": "mysql",
-          "server": "8.4.13",
-          "jdbc": 42,
-          "order": [
-            "earlyInit",
-            "lateInit",
-            "imported",
-            "priority",
-            "ordered"
-          ],
-          "lateMutations": 4,
-          "providerMutations": 6,
-          "lazySupplierInvocations": 1,
-          "contextCloses": 1,
-          "originalFailure": true,
-          "generatedAotRefused": true,
-          "buildAotRefused": true,
-          "traceEvents": 23
+          "planVersion": 5,
+          "before": {
+            "engine": "mysql",
+            "version": "8.4.13",
+            "joined": "[2147483647, -2147483648]"
+          },
+          "after": {
+            "engine": "mysql",
+            "version": "8.4.13",
+            "joined": "[2147483647, -2147483648]"
+          },
+          "restored": {
+            "engine": "mysql",
+            "version": "8.4.13",
+            "joined": "[2147483647, -2147483648]"
+          },
+          "explicitColumnRename": true,
+          "preservedValuesAndNulls": true,
+          "retainedCompositeIndex": true,
+          "retainedCompositeFK": true,
+          "bothOwnersSelected": true,
+          "readOnlyPreflightRefusals": true,
+          "columnMappingDriftRefused": true,
+          "noRowValuesInJournal": true,
+          "liveRowDriftRefused": true,
+          "freshSessionRestored": true,
+          "peerPreserved": true,
+          "atomicAcrossTables": false,
+          "receiptSha256": "527ac842d6142398b01037c227ccf2fdc98fcfb8376daf4ab4fa87b89a12cfbc"
         },
         {
           "engine": "mariadb",
-          "server": "11.4.8-MariaDB",
-          "jdbc": 42,
-          "order": [
-            "earlyInit",
-            "lateInit",
-            "imported",
-            "priority",
-            "ordered"
-          ],
-          "lateMutations": 4,
-          "providerMutations": 6,
-          "lazySupplierInvocations": 1,
-          "contextCloses": 1,
-          "originalFailure": true,
-          "generatedAotRefused": true,
-          "buildAotRefused": true,
-          "traceEvents": 23
+          "planVersion": 5,
+          "before": {
+            "engine": "mariadb",
+            "version": "11.4.8-MariaDB",
+            "joined": "[2147483647, -2147483648]"
+          },
+          "after": {
+            "engine": "mariadb",
+            "version": "11.4.8-MariaDB",
+            "joined": "[2147483647, -2147483648]"
+          },
+          "restored": {
+            "engine": "mariadb",
+            "version": "11.4.8-MariaDB",
+            "joined": "[2147483647, -2147483648]"
+          },
+          "explicitColumnRename": true,
+          "preservedValuesAndNulls": true,
+          "retainedCompositeIndex": true,
+          "retainedCompositeFK": true,
+          "bothOwnersSelected": true,
+          "readOnlyPreflightRefusals": true,
+          "columnMappingDriftRefused": true,
+          "noRowValuesInJournal": true,
+          "liveRowDriftRefused": true,
+          "freshSessionRestored": true,
+          "peerPreserved": true,
+          "atomicAcrossTables": false,
+          "receiptSha256": "2505d96708ca629bc79bfa661129412a08375c362a406d5ad08821be2b9f95c2"
         }
-      ]
+      ],
+      "legacySerializationSha256": "d3e3e02c872f990ba2e1e8a697983595ed37087f5ff6a643a284414676d5424c"
+    },
+    "cloudAuthVerifier": {
+      "sourceCommit": "1681cd6abc3ff8fe75b8397d1b28e31beb2500af",
+      "sha256": "5522051ee47fc7959ca4bf239a4605c02b4486868028b750e8ad3f828b589150",
+      "tests": 32,
+      "officialAwsCliWithSyntheticInput": true,
+      "realLocalTls": true,
+      "liveRdsVerified": false,
+      "liveAzureVerified": false,
+      "fixturePermissionRequired": true
     }
   },
   "newlyVerified": {
-    "IDEA-028": {
-      "scope": "Maven 3.9.11과 실제 JDT에서 서비스 소유 모듈, 두 제공자 모듈, 소비자 모듈을 가져왔다. 이동 전후 생성자·정적 팩터리 제공자의 결과 17·29와 두 DB의 Spring JDBC 결과 46이 일치했다.",
+    "DG-012": {
+      "scope": "실제 AWS CLI의 합성 입력과 로컬 MySQL TLS 연결로 인증 흐름과 잘못된 CA의 거부를 확인했다. 테스트에 사용한 Azure 토큰 발급은 모의 공급자였다.",
       "runtimeGroups": [
-        "javaJpmsServicePackageMove"
+        "cloudAuthVerifier"
       ]
     },
-    "IDEA-045": {
-      "scope": "Android API 35 실제 에뮬레이터에서 Kotlin 앱을 설치하고 MainActivity.kt의 목표 줄에서 멈췄다. 정수 42를 읽고 실행을 재개했다. 기존 앱, 변경한 소스, 다른 ADB 연결의 변경을 거부하는 경로도 검증했다.",
+    "DG-083": {
+      "scope": "실제 MySQL·MariaDB에서 INT를 BIGINT로 바꾸면서 이름도 변경했다. 경계 정수와 NULL, 복합 인덱스·외래 키가 유지됐고 새 세션으로 복구해도 Spring JDBC 결과가 일치했다. 불완전한 외래 키와 승인 후 데이터 변경은 거부했다.",
       "runtimeGroups": [
-        "androidKotlinDebugRuntime"
-      ]
-    },
-    "IDEA-053": {
-      "scope": "실제 Spring Boot 4.1.2 서블릿 앱에서 초기화 콜백, 가져오기 등록기, 순서가 지정된 후처리기, 나중에 일어난 등록 변경을 관찰했다. 빈 생성 횟수, 종료, 오류 전파와 두 DB의 HTTP·JDBC 결과를 비교했다.",
-      "runtimeGroups": [
-        "springBootServletTrace"
-      ]
-    },
-    "IDEA-113": {
-      "scope": "OS별 단축키 규칙 52개를 검증했다. Linux의 실제 VS Code에서 SQL 포맷과 Java 정의 이동 키 입력, Quick Pick 포커스, Escape, 작업공간 격리와 재시작을 확인했다.",
-      "runtimeGroups": [
-        "workspaceKeyboardProfile"
+        "schemaColumnMapping"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 729,
+    "sourceCorrespondences": 730,
     "sourceConfidence": "inferred",
     "archiveEntries": 38,
     "archiveConfidence": "observed"
@@ -244,40 +153,21 @@
       "platform-limited": 2
     },
     "weightedPoints": 212.5,
-    "previousWeightedPoints": 211,
+    "previousWeightedPoints": 212.5,
     "targetWeightedPoints": 216,
     "referencePercent": 98.4,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
-    "stateChanges": [
-      {
-        "id": "IDEA-028",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "IDEA-053",
-        "before": "partial",
-        "after": "implemented"
-      },
-      {
-        "id": "IDEA-113",
-        "before": "partial",
-        "after": "implemented"
-      }
-    ]
+    "stateChanges": []
   },
   "limits": [
-    "216개 기능의 기존 판정 기준과 가중치를 유지했다.",
-    "JPMS 서비스 패키지 이동은 소스를 확인한 Maven 리액터에서 원래 소유 모듈 안의 패키지에 적용한다.",
-    "Android 디버깅은 검토한 앱을 새로 설치할 수 있는 로컬 에뮬레이터와 지원하는 Kotlin 지역 변수에 적용한다.",
-    "키맵의 규칙 52개와 실제 Linux 키 입력 두 경로를 각각 검증했다.",
-    "Spring Boot 자동 기록은 직접 선택한 서블릿 컨텍스트의 등록 호출을 관찰한다.",
-    "JPMS 이동과 Spring Boot 등록 추적을 실제 두 DB에서 검증했다. 키맵 입력은 동일한 기능 코드와 규칙을 쓰는 별도 Linux VS Code에서 확인했다. 최종 VSIX와 GitHub 패키지의 파일 38개를 대조했다."
+    "216개 기능의 기존 가중치를 유지했다.",
+    "컬럼 이행은 사용자가 일대일로 짝지은 동일 서버 InnoDB 테이블에 적용한다. 검토한 인덱스·외래 키를 보존할 수 없으면 실행 전에 중단한다.",
+    "클라우드 연결 검증은 소유자가 승인한 실제 연결 설정이 제공된 경우에 실행한다."
   ],
   "next": [
-    "iOS Simulator의 실제 Kotlin 소스 탐색, 중단점과 지역 변수 조회",
-    "승인된 RDS MySQL IAM 연결의 토큰 만료·재연결·TLS 검증",
-    "지원 범위에서 남아 있는 분산 DDL과 호스트 창 배치의 제약 확인"
+    "macOS·Xcode에서 iOS Simulator의 Kotlin 중단점·지역 변수 흐름 검증",
+    "승인된 AWS RDS MySQL IAM과 Azure MySQL Entra 테스트 환경에서 실제 공급자 인증 검증",
+    "서로 다른 서버의 원자적 DDL과 VS Code 전체 창 배치의 구조 제약 기록"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
