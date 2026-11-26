@@ -151,6 +151,100 @@ test('selected rebuild requires explicit dependency selections and current works
  }finally{await h.api.dispose();}
 });
 
+test('the selected rebuild command reviews a dependent view with its base table',async()=>{
+ const {normalizeSnapshot}=require('../src/db/schema-diff');
+ const {projectSelectedRebuild}=require('../src/db/schema-rebuild-selection');
+ const {renderView}=require('../src/db/schema-dependency-graph');
+ const live=addColumn(fixture(),'legacy');
+ const beforeBody='select `one`.`people`.`id` AS `id` from `one`.`people` where (`one`.`people`.`id` > 0)';
+ const afterBody=beforeBody.replace('> 0','> 1');
+ const header='CREATE ALGORITHM=UNDEFINED DEFINER=`fixture`@`localhost` SQL SECURITY DEFINER VIEW `recent_people` AS ';
+ live.tables.push({...live.tables[0],name:'recent_people',kind:'view',engine:null,charset:null,collation:null,rowFormat:null,
+  createSql:header+beforeBody,columns:[{...live.tables[0].columns[0],key:''}],indexes:[]});
+ const current=normalizeSnapshot(live,{verifyFingerprint:false});
+ const target=structuredClone(current);
+ target.tables[0].columns=target.tables[0].columns.filter(column=>column.name!=='legacy');
+ target.tables[1].createSql=header+afterBody;
+ const desired=addColumn(target,'new_note');
+ let expected,viewOnly=true,prepared=0,applied=0,acknowledge=false;
+ const errors=[],shown=[];
+ const h=host(async()=>current,{
+  prepareRebuild:async request=>{
+   prepared++;
+   assert.deepEqual(request.desired,desired);
+   assert.deepEqual(request.changeIds,expected);
+   assert.deepEqual(request.tables,['people']);
+   assert.deepEqual(request.columnMappings,{});
+   assert.deepEqual(request.conversions,{});
+   const projection=projectSelectedRebuild(request.current,request.desired,request.changeIds);
+   const [{before,after}]=projection.selectedViews;
+   assert.equal(before.definition,beforeBody);
+   assert.equal(after.definition,afterBody);
+   assert.equal(before.definer,'fixture@localhost');
+   assert.equal(after.definer,before.definer);
+   const plan=makePlan(request.current,projection.desired,{tables:projection.tables});
+   plan.requiresDependencyChangeApproval=true;
+   plan.sql+='\n'+renderView(after,plan.database)+';\n-- RECOVERY '+renderView(before,plan.database)+';';
+   return {plan,reviewId:plan.id,expiresAt:Date.now()+120000,connectionEpoch:3};
+  },
+  applyRebuild:async request=>{
+   applied++;
+   assert.equal(request.allowDestructive,true);
+   assert.equal(request.allowImplicitCommit,true);
+   assert.equal(request.allowDependencyChanges,true);
+   assert.equal(request.autoRecover,true);
+   return {id:request.reviewId,state:'applied',steps:[]};
+  }
+ });
+ const content=uri=>h.providers.get('rocketbrain-schema-compare').provideTextDocumentContent(uri);
+ h.vscode.Uri={parse:value=>({path:new URL(value).pathname})};
+ h.vscode.workspace.openTextDocument=async uri=>({uri});
+ h.vscode.window.showTextDocument=async document=>shown.push(document.uri);
+ h.vscode.window.showInformationMessage=async()=>{};
+ h.vscode.window.showErrorMessage=async message=>errors.push(message);
+ h.vscode.ProgressLocation={Notification:3};
+ h.vscode.window.withProgress=async(_,run)=>run(undefined,undefined);
+ h.vscode.window.showWarningMessage=async(_message,_options,action)=>acknowledge?action:undefined;
+ h.vscode.window.showQuickPick=async(items,{title})=>{
+  if(title==='Review Selected Schema Rebuild'||title==='Apply Reviewed Schema Rebuild')return items[0];
+  assert.equal(title,'Select Individual Rebuild Changes');
+  const view=items.find(item=>item.label==='one.recent_people');
+  assert.equal(view.description,'Change view definition');
+  assert.match(view.detail,/base table/);
+  return viewOnly?[view]:items;
+ };
+ try{
+  const comparison=await h.api.compare(desired);
+  const view=comparison.changes.find(change=>change.kind==='change-view');
+  expected=comparison.changes.map(change=>change.id).sort();
+  assert.equal(expected.length,3);
+  const markdown=h.api.reviewText(comparison.id);
+  assert.match(markdown,/View definition: one\.recent_people/);
+  assert.ok(markdown.includes(header+beforeBody));
+  assert.ok(markdown.includes(header+afterBody));
+  const reviewSelected=h.commands.get('rocketbrain.schema.reviewSelectedRebuild');
+  await reviewSelected();
+  assert.equal(prepared,0);
+  assert.match(errors[0],/base table|base-table|table change/i);
+  viewOnly=false;
+  const plan=await reviewSelected();
+  assert.equal(prepared,1);
+  assert.equal(applied,0);
+  assert.deepEqual(plan.selectedChanges.map(change=>change.id),expected);
+  assert.ok(shown[0].path.endsWith('/migration.sql'));
+  const sql=content(shown[0]);
+  assert.ok(sql.includes('-- Change view definition "one"."recent_people"  '+view.id));
+  assert.ok(sql.includes('DEFINER=CURRENT_USER SQL SECURITY DEFINER VIEW `one`.`recent_people` AS '+afterBody));
+  assert.ok(sql.includes('-- RECOVERY CREATE ALGORITHM=UNDEFINED DEFINER=CURRENT_USER SQL SECURITY DEFINER VIEW `one`.`recent_people` AS '+beforeBody));
+  const apply=h.commands.get('rocketbrain.schema.applyRebuild');
+  await apply();
+  assert.equal(applied,0);
+  acknowledge=true;
+  assert.equal((await apply()).state,'applied');
+  assert.equal(applied,1);
+ }finally{await h.api.dispose();}
+});
+
 test('dependency and lossy approvals are independent, strict and checked before consuming the immutable rebuild review',async()=>{
  const current=fixture(),desired=fixture();desired.tables[0].columns[0].type='bigint';const target=require('../src/db/schema-diff').normalizeSnapshot(desired,{verifyFingerprint:false});let applications=0,preparations=0;
  const h=host(async()=>current,{prepareRebuild:async request=>{preparations++;assert.deepEqual(request.conversions,{});const plan=makePlan(request.current,request.desired,{tables:request.tables});plan.requiresDependencyChangeApproval=true;plan.requiresLossyConversionApproval=true;return{plan,reviewId:plan.id,expiresAt:Date.now()+120000,connectionEpoch:5};},applyRebuild:async request=>{applications++;assert.equal(request.allowDependencyChanges,true);assert.equal(request.allowLossyConversions,true);return{id:request.reviewId,state:'applied',steps:[]};}});

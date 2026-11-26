@@ -6,7 +6,7 @@ const {isSelectableRebuildChange,projectSelectedRebuild}=require('./schema-rebui
 const rebuildChangeLabels={
  'add-column':'Add column','drop-column':'Drop column','change-column':'Change column',
  'add-index':'Add index','drop-index':'Drop index','change-index':'Change index',
- 'change-foreignKeys':'Change foreign keys'
+ 'change-foreignKeys':'Change foreign keys','change-view':'Change view definition'
 };
 
 function registerSchemaComparison(context,vscode,{capture,prepare,apply:applyPrepared,discard,prepareRebuild,applyRebuild:applyPreparedRebuild,recoverRebuild:recoverPrepared,listRecoveries:readRecoveries,discardRebuild}={}){
@@ -95,7 +95,8 @@ function registerSchemaComparison(context,vscode,{capture,prepare,apply:applyPre
    '',`${report.summary.changes} differences; ${report.summary.selectable} additive SQL candidates; ${report.summary.blocked} changes need separate migration work.`,
    ...(rebuildIds.size?['Use Review Selected Schema Rebuild to choose individual changes for a guarded rebuild.']:[]),
    '',...report.warnings.map(v=>'- '+v),'','No row data was compared. Account visibility and non-atomic metadata reads limit this report.','',
-   ...report.changes.flatMap(change=>[`## ${change.kind}: ${change.table}.${change.object}`,
+   ...report.changes.flatMap(change=>[change.kind==='change-view'&&rebuildIds.has(change.id)
+    ?`## View definition: ${report.currentDatabase}.${change.table}`:`## ${change.kind}: ${change.table}.${change.object}`,
     change.selectable?'Selectable additive SQL review candidate.':rebuildIds.has(change.id)?'Selectable in a reviewed rebuild.':'Not selectable: '+change.reason,
     change.sql?'```sql\n'+change.sql+';\n```':'```json\n'+JSON.stringify({before:change.before,after:change.after},null,2)+'\n```','']),
    ...storedReviewLines(report.storedObjects)].join('\n');
@@ -162,8 +163,10 @@ function registerSchemaComparison(context,vscode,{capture,prepare,apply:applyPre
   const plan=plans.get(planId);
   if(!plan?.sql)return '-- This schema migration review is unavailable.';
   if(!plan.selectedChanges)return plan.sql;
-  return ['-- Selected schema changes',...plan.selectedChanges.map(change=>
-   '-- '+rebuildChangeLabels[change.kind]+' '+JSON.stringify(change.table)+'.'+JSON.stringify(change.object)+'  '+change.id),'',plan.sql].join('\n');
+  return ['-- Selected schema changes',...plan.selectedChanges.map(change=>{
+   const target=change.kind==='change-view'?[plan.database,change.table]:[change.table,change.object];
+   return '-- '+rebuildChangeLabels[change.kind]+' '+target.map(part=>JSON.stringify(part)).join('.')+'  '+change.id;
+  }),'',plan.sql].join('\n');
  }
  subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('rocketbrain-schema-compare',{provideTextDocumentContent(uri){const pieces=uri.path.split('/').filter(Boolean);if(pieces[1]==='migration.sql')return migrationText(pieces[0]);if(pieces[1]==='application.md')return applicationText(pieces[0]);if(pieces[1]==='stored')return storedSource(pieces[0],pieces[2],pieces[3]);if(pieces[1]==='definition')return definitionSource(pieces[0],pieces[2],pieces[3]);return reviewText(pieces[0]);}}));
  async function saveSnapshotCommand(includeStoredObjects=false){
@@ -223,7 +226,8 @@ function registerSchemaComparison(context,vscode,{capture,prepare,apply:applyPre
  command('rocketbrain.schema.applyMigration',async()=>{trusted();const choices=[...plans.values()].filter(p=>applications.has(p.id)).map(p=>({label:p.database+' · '+p.steps.length+' selected step(s)',description:p.createdAt,plan:p}));if(!choices.length)throw new Error('Create a selected migration review first.');const selected=await vscode.window.showQuickPick(choices,{title:'Apply Reviewed Schema Migration'});if(!selected)return;const document=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-compare:/'+selected.plan.id+'/migration.sql'));await vscode.window.showTextDocument(document,{preview:false});const accepted=await vscode.window.showWarningMessage('Apply this reviewed SQL? Each schema statement can commit implicitly. Earlier successful steps remain when a later one fails; automatic retry and rollback are unavailable.',{modal:true},'Apply Reviewed Schema');if(accepted!=='Apply Reviewed Schema')return;trusted();const report=await vscode.window.withProgress({title:'Applying reviewed schema changes',location:vscode.ProgressLocation.Notification,cancellable:true},(_progress,cancellation)=>api.apply(selected.plan.id,{allowImplicitCommit:true,cancellation}));const outcome=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-compare:/'+report.id+'/application.md'));await vscode.window.showTextDocument(outcome,{preview:false});return report;});
  async function reviewRebuildTarget(comparisonId,current,desired,tables,selectedChanges){
   const conversion=require('./schema-conversion-vscode');
-  const columnMappings=await conversion.chooseColumnMappings(vscode,current,desired,tables);
+  const includesView=selectedChanges?.some(change=>change.kind==='change-view');
+  const columnMappings=includesView?{}:await conversion.chooseColumnMappings(vscode,current,desired,tables);
   if(columnMappings===null)return;
   let selectedColumns;
   if(selectedChanges){
@@ -273,6 +277,9 @@ function registerSchemaComparison(context,vscode,{capture,prepare,apply:applyPre
   const comparison=rebuildComparison(selected.id),{current,desired,report}=comparison;
   const byId=new Map(report.changes.map(change=>[change.id,change]));
   const choicesForChanges=report.changes.filter(change=>isSelectableRebuildChange(change,current,desired)).map(change=>{
+   if(change.kind==='change-view')return {label:current.database+'.'+change.table,
+    description:rebuildChangeLabels[change.kind],changeId:change.id,
+    detail:'Also select a change to its base table. Column value mapping is unavailable with view changes.'};
    const dependencies=(change.dependencies||[]).map(id=>byId.get(id)).filter(Boolean);
    const required=dependencies.slice(0,3).map(item=>item.table+'.'+item.object).join(', ');
    return {label:change.table+'.'+change.object,description:rebuildChangeLabels[change.kind],changeId:change.id,
