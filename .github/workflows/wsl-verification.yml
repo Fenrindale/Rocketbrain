@@ -2,20 +2,20 @@ name: WSL workspace runtime
 
 on:
   push:
-    branches: ['verify-wsl-*']
+    branches: ['verify-wsl-db-*']
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  wsl1:
+  wsl2:
     runs-on: windows-2025
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        scenario: [workbench, java-debug]
+        database: [mysql, mariadb]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,7 +28,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - uses: actions/setup-java@v4
-        if: matrix.scenario == 'java-debug'
         with:
           distribution: temurin
           java-version: '25'
@@ -37,22 +36,18 @@ jobs:
       - name: Build and check the candidate VSIX
         shell: pwsh
         run: |
-          node --test test/wsl-workspace.test.js
+          node --test test/wsl-workspace.test.js test/wsl-source-watch.test.js
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/package.js
-      - name: Verify packaged Windows-drive and Linux-owned projects against real WSL 1
+      - name: Verify packaged projects against real WSL 2
         shell: pwsh
         env:
-          ROCKETBRAIN_WSL_SCENARIO: ${{ matrix.scenario }}
-        run: |
-          if ($env:ROCKETBRAIN_WSL_SCENARIO -ceq 'java-debug') {
-            ./scripts/test-wsl-runtime.ps1 -VerifyJavaDebug
-          } else {
-            ./scripts/test-wsl-runtime.ps1 -VerifyWorkbench
-          }
+          ROCKETBRAIN_WSL_DB_ENGINE: ${{ matrix.database }}
+          ROCKETBRAIN_WSL_TEST_SOURCE_WATCH: '1'
+        run: ./scripts/test-wsl-runtime.ps1 -WslVersion 2 -VerifyJavaDebug -Database $env:ROCKETBRAIN_WSL_DB_ENGINE
       - uses: actions/upload-artifact@v4
         with:
-          name: rocketbrain-wsl-${{ matrix.scenario }}
+          name: rocketbrain-wsl2-${{ matrix.database }}
           path: ${{ runner.temp }}/rocketbrain-wsl-runtime.json
           if-no-files-found: error
           retention-days: 7

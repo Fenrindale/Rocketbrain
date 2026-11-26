@@ -30,7 +30,28 @@ async function awaitCancellationMarker(file) {
   throw Error('Gradle did not reach the cancellation fixture.');
 }
 
-async function verifyWslDebugger(debug, vscode, folder, source, document) {
+async function verifyForwardedDatabase(api, vscode) {
+  const file = process.env.ROCKETBRAIN_WSL_DB_CONFIG;
+  if (!file) return;
+  const config = JSON.parse(await fs.readFile(file, 'utf8'));
+  assert.deepEqual([config.host, config.port, config.database], ['127.0.0.1', 3306, 'rocketbrain_wsl']);
+  await until(async () => { await api.connectMysql(config); return true; }, 25000);
+  try {
+    const doc = await vscode.workspace.openTextDocument({ language:'sql', content:'SELECT score, VERSION() FROM probe;' });
+    await vscode.window.showTextDocument(doc);
+    await vscode.commands.executeCommand('rocketbrain.runQuery');
+    const result = api.results().at(-1);
+    assert.equal(result.state, 'done');
+    assert.equal(result.result.rows.length, 1);
+    const [score, serverVersion] = result.result.rows[0];
+    assert.equal(Number(score), 42);
+    assert.match(serverVersion, /^[0-9]+\.[0-9]+\.[0-9]+/u);
+    console.log('Windows VS Code queried its owned WSL database:', serverVersion);
+    return { score: 42, serverVersion, reachedFromWindowsVsCode: true };
+  } finally { await api.disconnectMysql(); }
+}
+
+async function verifyWslDebugger(debug, vscode, folder, source, document, database) {
   const jar = vscode.Uri.joinPath(folder.uri, 'target', 'spring-workbench-1.0.0-debug.jar');
   const result = vscode.Uri.joinPath(folder.uri, 'wsl-debug-result.txt');
   const originalJar = await fs.readFile(jar.fsPath);
@@ -81,9 +102,11 @@ async function verifyWslDebugger(debug, vscode, folder, source, document) {
     assert.equal(stepStack[0].line, line + 2);
     vscode.debug.removeBreakpoints([breakpoint]);
     await session.customRequest('continue', { threadId: stepped.threadId });
-    await until(async () => await fs.readFile(result.fsPath, 'utf8') === 'wsl-spring-linux-verified:42:Linux', 20000);
+    const marker = 'wsl-spring-linux-verified:42:Linux:' + (database?.serverVersion ?? '');
+    await until(async () => await fs.readFile(result.fsPath, 'utf8') === marker, 20000);
     return { loopbackManagedDebugger: true, exactLinuxSourceBreakpoint: true, localValue: 42, stepped: true,
-      actualSpringProcessResumed: true, changedJarRejected: true, replayRejected: true };
+      actualSpringProcessResumed: true, changedJarRejected: true, replayRejected: true,
+      ...(database && { matchedSpringJdbcAndWindowsQuery: database }) };
   } finally {
     vscode.debug.removeBreakpoints([breakpoint]);
     tracker.dispose();
@@ -91,7 +114,7 @@ async function verifyWslDebugger(debug, vscode, folder, source, document) {
   }
 }
 
-async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, javaDebugOnly = false) {
+async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, debuggerOptions) {
   const linux = process.env.ROCKETBRAIN_WSL_TEST_LINUX_PROJECT;
   const windows = process.env.ROCKETBRAIN_WSL_TEST_UNC_WORKSPACE;
   assert.match(linux, /^\/tmp\/rocketbrain-wsl-[a-z0-9]{8}\/Case Project$/iu);
@@ -125,13 +148,17 @@ async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, j
   assert.ok(bytes.includes(newMarker));
   const linuxObservation = await linuxCommand(distribution, '/usr/bin/sha256sum', '--', linux + '/' + sourceFile);
   assert.equal(linuxObservation.split(/\s/u, 1)[0], createHash('sha256').update(bytes).digest('hex'));
-  const watch = process.env.ROCKETBRAIN_WSL_TEST_SOURCE_WATCH === '1' ? await verifyWslSourceWatch(wsl, vscode, {
+  const gitDiff = await linuxCommand(distribution, '/usr/bin/git', '-C', linux, 'diff', '--no-ext-diff', '--', sourceFile);
+  assert.ok(gitDiff.split(/\r?\n/u).some(line => line.startsWith('+') && line.includes(newMarker)));
+  assert.ok(gitDiff.split(/\r?\n/u).some(line => line.startsWith('-') && line.includes(oldMarker)));
+
+  assert.equal(process.env.ROCKETBRAIN_WSL_TEST_SOURCE_WATCH, '1');
+  const watch = await verifyWslSourceWatch(wsl, vscode, {
     document, peerUri: vscode.Uri.joinPath(folder.uri, 'pom.xml'),
     appendFromLinux: marker => linuxCommand(distribution, '/usr/bin/python3', '-c',
       'import sys; open(sys.argv[1], "a", encoding="utf-8").write("\\n" + sys.argv[2] + "\\n")',
       linux + '/' + sourceFile, marker)
-  }) : undefined;
-
+  });
   const pom = vscode.Uri.joinPath(folder.uri, 'pom.xml').fsPath;
   const original = await fs.readFile(pom);
   const stale = await wsl.review({ ...options, system: 'maven', goal: 'package' });
@@ -144,12 +171,12 @@ async function verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, j
   const compiled = 'build/classes/java/main/fixture/WslSpringConfiguration.class';
   await build(options, mapping.windows, 'maven', 'package', jar, /BUILD SUCCESS/u);
   const basic = { openedInWindowsVscode: true, exactDistroAndPath: true, caseMismatchRejected: true,
-    crossDistroRejected: true, editorSavedAndLinuxDigestMatched: true, rejectedChangedDescriptor: true, mavenGoal: 'package',
-    ...(watch && { sourceWatch: watch.receipt }) };
-  if (javaDebugOnly) {
-    const debugSource = watch?.document || document;
-    await vscode.window.showTextDocument(debugSource, { preview: false });
-    return { ...basic, javaDebug: await verifyWslDebugger(wsl.javaDebug, vscode, folder, source, debugSource) };
+    crossDistroRejected: true, editorSavedAndLinuxDigestMatched: true, linuxGitObservedEditorChange: true,
+    sourceWatch: watch.receipt, rejectedChangedDescriptor: true, mavenGoal: 'package' };
+  if (debuggerOptions) {
+    const database = await verifyForwardedDatabase(debuggerOptions.api, vscode);
+    await vscode.window.showTextDocument(watch.document, { preview: false });
+    return { ...basic, javaDebug: await verifyWslDebugger(wsl.javaDebug, vscode, folder, source, watch.document, database) };
   }
   await build(options, mapping.windows, 'gradle', 'classes', compiled, /BUILD SUCCESSFUL/u);
   for (const produced of [jar, compiled]) await linuxCommand(distribution, '/usr/bin/test', '-s', linux + '/' + produced);
@@ -181,7 +208,7 @@ async function runWslChecks(api, vscode, checks) {
   }
 
   if (process.env.ROCKETBRAIN_WSL_TEST_JAVA_DEBUG === '1') {
-    checks.wsl = { javaDebugOnly: true, linuxOwned: await verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, true) };
+    checks.wsl = { javaDebugOnly: true, linuxOwned: await verifyLinuxWorkspace(wsl, vscode, distribution, folders, build, { api }) };
     return;
   }
   let folder;
