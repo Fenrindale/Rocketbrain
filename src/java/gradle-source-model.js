@@ -18,7 +18,14 @@ const same = (left, right) => !path.relative(left, right);
 function physical(value, roots, directory = true) {
   const resolved = M.workspacePath(value, roots, { directory });
   if (!same(value, resolved)) throw M.fail('Use physical Gradle composite paths without links.');
-  return resolved;
+  if (process.platform !== 'win32') return resolved;
+  // VS Code URIs can use a lowercase drive, while Gradle reports the native spelling.
+  const canonical = fs.realpathSync.native(resolved);
+  if (!roots.some(root => {
+    const parent = fs.realpathSync.native(root);
+    return canonical === parent || canonical.startsWith(parent.endsWith(path.sep) ? parent : parent + path.sep);
+  })) throw M.fail('The physical Gradle path must remain inside the reviewed workspace.');
+  return canonical;
 }
 
 function selectedComponent(target, root) {
@@ -124,7 +131,7 @@ function bindModel(records, context) {
     const root = physical(row.buildRoot, [project.root]);
     if (row.kind === 'B') {
       const parent = row.parent && physical(row.parent, [project.root]);
-      if (builds.has(root) || (parent ? !builds.has(parent) : !same(root, project.root))) {
+      if (builds.has(root) || (parent ? !builds.has(parent) : root !== project.root)) {
         throw M.fail('Gradle reported ambiguous, external or disconnected included builds.');
       }
       builds.set(root, { root, parent, settingsFile: descriptor(root, settingsFiles, true) });
@@ -133,8 +140,8 @@ function bindModel(records, context) {
     const item = builds.get(root);
     const folder = physical(row.component, [root]);
     if (!item || !taskPath.test(row.treePath) || !taskPath.test(row.projectPath) ||
-        selectors.has(row.treePath) || folders.has(folder) || (row.projectPath === ':') !== same(root, folder) ||
-        (row.treePath === ':') !== same(project.root, folder)) {
+        selectors.has(row.treePath) || folders.has(folder) || (row.projectPath === ':') !== (root === folder) ||
+        (row.treePath === ':') !== (project.root === folder)) {
       throw M.fail('Gradle reported ambiguous project membership or an unsupported build-tree selector.');
     }
     selectors.add(row.treePath);
@@ -142,8 +149,8 @@ function bindModel(records, context) {
     projects.push({ buildRoot: root, projectRoot: folder, projectPath: row.projectPath, treePath: row.treePath,
       settingsFile: item.settingsFile, buildFile: descriptor(folder, buildFiles, false) });
   }
-  const selected = projects.find(item => same(item.projectRoot, component));
-  if (!selected || !selected.buildFile || same(selected.buildRoot, project.root)) {
+  const selected = projects.find(item => item.projectRoot === component);
+  if (!selected || !selected.buildFile || selected.buildRoot === project.root) {
     throw M.fail('The selected Java source does not belong to one reviewed included Gradle build.');
   }
   const membershipSha256 = M.hash({
@@ -171,7 +178,7 @@ async function observeGradleTarget(target, prepared, folders, dirty, cancellatio
 
 function verifyGradleObservation(target, observation, folders, tools, dirty) {
   const proof = proofFor(target, observation.compositeRoot, folders, tools, dirty);
-  if (proof.key !== observation.key || !same(proof.component, observation.selected.projectRoot)) {
+  if (proof.key !== observation.key || proof.component !== observation.selected.projectRoot) {
     throw M.fail('The reviewed Gradle composite model changed. Observe the current composite again.');
   }
   return proof;
