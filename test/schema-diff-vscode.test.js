@@ -30,6 +30,53 @@ test('disposing rebuild UI aborts and awaits its own running recovery operation'
  const h=host(async()=>current,{prepareRebuild:async request=>{const plan=makePlan(request.current,request.desired,{tables:request.tables});return{plan,reviewId:plan.id,expiresAt:Date.now()+120000,connectionEpoch:7};},applyRebuild:request=>new Promise(resolve=>{entered();request.cancellation.addEventListener('abort',()=>{aborted=true;resolve({id:request.reviewId,state:'needs-recovery',steps:[]});},{once:true});})});
  const comparison=await h.api.compare(target),plan=await h.api.planRebuild(comparison.id,['people']),work=h.api.applyRebuild(plan.id,{allowDestructive:true,allowImplicitCommit:true});await started;await h.api.dispose();assert.equal(aborted,true);assert.equal((await work).state,'needs-recovery');await assert.rejects(h.api.listRecoveries(),/closed/);
 });
+
+test('preflight refusal has a report without a recoverable operation ID', async () => {
+ const current=fixture(),target=addColumn(structuredClone(current));
+ const h=host(async()=>current,{
+  prepareRebuild:async request=>{
+   const plan=makePlan(request.current,request.desired,{tables:request.tables});
+   return {plan,reviewId:plan.id,expiresAt:Date.now()+120000,connectionEpoch:7};
+  },
+  applyRebuild:async request=>({id:request.reviewId,state:'preflight-refused',recoveryRequired:false,error:{message:'Lookup metadata changed.'}})
+ });
+ try{
+  const comparison=await h.api.compare(target);
+  const plan=await h.api.planRebuild(comparison.id,['people']);
+  const flags={allowDestructive:true,allowImplicitCommit:true};
+  const report=await h.api.applyRebuild(plan.id,flags);
+  assert.equal(report.operationId,undefined);
+  const text=h.api.applicationText(report.id);
+  assert.match(text,/Lookup metadata changed/u);
+  assert.match(text,/Stopped before sending any schema or recovery journal writes/u);
+  assert.doesNotMatch(text,/quarantine|Operation:/u);
+  await assert.rejects(h.api.applyRebuild(plan.id,flags),/Prepare a reviewed rebuild/u);
+ }finally{await h.api.dispose();}
+});
+
+test('table designer removes the recovery action after a terminal preflight refusal', async () => {
+ const {registerTableDesigner}=require('../src/db/schema-designer-vscode');
+ const posted=[],disposable={dispose(){}},draft={name:'people'};
+ const panel={...disposable,onDidDispose:()=>disposable,webview:{onDidReceiveMessage:()=>disposable,postMessage:message=>posted.push(message)}};
+ const vscode={ViewColumn:{One:1},window:{createWebviewPanel:()=>panel,showWarningMessage:async(_message,_options,action)=>action},
+  workspace:{isTrusted:true,registerTextDocumentContentProvider:()=>disposable},commands:{registerCommand:()=>disposable}};
+ let recoveryReads=0;
+ const api=registerTableDesigner({subscriptions:[]},vscode,{database:{
+  openTableDesigner:async()=>({modelId:'design',mode:'edit',draft}),
+  previewTableDesign:async()=>({kind:'rebuild',plan:{id:'plan'},reviewId:'review',connectionEpoch:1}),
+  applyTableDesign:async()=>({state:'preflight-refused',recoveryRequired:false,error:{message:'Lookup metadata changed.'}}),
+  listSchemaRecoveries:async()=>{recoveryReads++;return {connectionEpoch:1,operations:[]};}
+ }});
+ try{
+  await api.openDesigner({table:'people'});
+  await api.reviewDesigner('design',draft);
+  await api.handleDesigner('design',{type:'apply',modelId:'design',revision:1,draft});
+  assert.equal(posted.at(-1).canRecover,false);
+  assert.match(posted.at(-1).status,/Stopped before schema or journal writes/u);
+  await assert.rejects(api.recoverDesigner('design',{}),/no retained rebuild/u);
+  assert.equal(recoveryReads,0);
+ }finally{await api.dispose();}
+});
 test('schema reviews keep private typed SQL and refresh metadata before producing a readonly plan',async()=>{
  const current=fixture(),desired=addColumn(structuredClone(current));let reads=0;const {api,providers}=host(async()=>{reads++;return current;});
  try{

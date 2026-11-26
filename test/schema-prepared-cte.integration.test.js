@@ -51,7 +51,8 @@ test('owned Spring prepared WITH UPDATE uses physical lookup dependencies and a 
         const refused = await control.db.applySchemaRebuild({
           reviewId: staleReview.reviewId, autoRecover: false, ...fixture.flags
         });
-        assert.equal(refused.state, 'needs-recovery');
+        assert.equal(refused.state, 'preflight-refused');
+        assert.equal(refused.recoveryRequired, false);
         assert.match(refused.error?.message || '', /unique lookup key/u);
         const artifacts = staleReview.plan.steps.flatMap(step => [step.backup, step.shadow, step.quarantine]);
         const [rows] = await control.actor.execute('SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME IN (?,?,?)',
