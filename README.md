@@ -313,6 +313,10 @@ MySQL/MariaDB 연결 편집기의 **Write protection**에서 연결 전체를 �
 
 **Database Connections**에서 MySQL/MariaDB 프로필을 만들고 연결을 검증합니다. 여러 저장 프로필 중 하나가 활성 연결입니다. SQL 콘솔에서 문장·선택 구간을 실행하고, 결과 그리드의 수정·추가·삭제를 검토한 뒤 트랜잭션을 적용하거나 되돌립니다.
 
+같은 작업공간의 SQL 파일을 서로 다른 연결에서 실행하려면 먼저 각 프로필의 **Open Dedicated Profile SQL Console**을 열고, 각 파일에서 **Bind SQL File to Database Profile**로 연결과 세션 모드를 확인합니다. **Run Selected SQL**의 결과에는 그 파일이 사용한 프로필과 세션이 표시됩니다. 쓰기 모드에서 연결한 파일은 해당 전용 세션의 트랜잭션을 공유합니다.
+
+파일 경로와 프로필 연결 정보는 작업공간에 남습니다. 세션을 닫거나 VS Code를 다시 열면 같은 경로의 SQL 파일에 라이브 세션을 다시 지정해야 실행할 수 있습니다. **Forget SQL File Database Profile**을 승인하면 파일에서 활성 연결을 다시 사용할 수 있습니다. 전용 연결 파일에서 활성 카탈로그 기반 분석, 검토 스크립트, 실행 계획 도구를 사용하려면 먼저 활성 연결용 SQL 편집기를 엽니다.
+
 **Duplicate Database Profile**은 기존 연결 설정을 새 이름으로 복사해 편집기를 엽니다. 복사본에는 새 프로필 ID가 부여되며 비밀번호가 필요한 연결은 별도로 입력합니다. 공유 파일을 가져올 때 같은 그룹에 이름이 겹치면 이름을 바꿔 가져오거나 해당 항목을 건너뜁니다.
 
 연결의 **Session lifecycle**에서 물리 연결마다 적용할 `SET SESSION` 초기 SQL을 지정합니다. 시간대·선택 SQL 엄격 모드·`sql_safe_updates`·`group_concat_max_len`을 지원합니다. Keep-alive는 유휴 세션의 상태를 읽습니다. Idle timeout은 실행 중인 문장과 트랜잭션이 없는 자동 커밋 세션을 종료합니다. **Reconnect Console Session**으로 새 연결을 열면 초기값을 다시 적용합니다.

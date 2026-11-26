@@ -1,12 +1,13 @@
 'use strict';
 
 const { observeCollationRegistry, inspectCollations } = require('./sql-collation-checks');
-const { isProfileConsole } = require('./profile-console-files');
+const { isProfileConsole: isVirtualProfileConsole } = require('./profile-console-files');
 const { isFederatedDocument } = require('./federated-select');
 
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
 function registerSqlCollations(vscode, { database, virtualActive = () => false, onDidChangeAnalysis } = {}) {
+  const isProfileConsole = database?.isProfileSql ?? isVirtualProfileConsole;
   const collection = vscode.languages.createDiagnosticCollection('rocketbrain-sql-collations');
   const subscriptions = [collection];
   let disposed = false, generation = 0, pending = 0, snapshot;

@@ -4,9 +4,10 @@ const { formatSql }=require('./sql-format');
 const { templates,resolveTemplate }=require('./sql-templates');
 const { sqlQuickFixes,missingObjectIntent }=require('./sql-quick-fixes');
 const { sqlJoinFixes }=require('./sql-join-fixes');
-const { isProfileConsole }=require('./profile-console-files');
+const { isProfileConsole: isVirtualProfileConsole }=require('./profile-console-files');
 
 function registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner}) {
+  const isProfileConsole = database.isProfileSql ?? isVirtualProfileConsole;
   let disposed=false;
   function open(document) {
     if (disposed||!document||document.languageId!=='sql'||document.isClosed) throw Error('Open a SQL document.');

@@ -1173,6 +1173,18 @@
         "enablement": "isWorkspaceTrusted"
       },
       {
+        "command": "rocketbrain.connections.bindSqlFile",
+        "title": "Bind SQL File to Database Profile",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && editorLangId == sql && resourceScheme == file"
+      },
+      {
+        "command": "rocketbrain.connections.forgetSqlFile",
+        "title": "Forget SQL File Database Profile",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && editorLangId == sql && resourceScheme == file && rocketbrain.profileConsole"
+      },
+      {
         "command": "rocketbrain.connections.revealSession",
         "title": "Reveal Profile SQL Console",
         "category": "Rocketbrain",

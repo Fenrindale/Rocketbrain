@@ -2,12 +2,13 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {fileURLToPath}=require('node:url');
 const { inspectDmlScope } = require('./sql-dml-scope');
-const { isProfileConsole } = require('./profile-console-files');
+const { isProfileConsole: isVirtualProfileConsole } = require('./profile-console-files');
 const { createOverlayStore, overlayScope, buildOverlay } = require('./virtual-schema-overlays');
 const { callCompletions, callSignature } = require('./sql-call-completion');
 const overlaySourceScheme='rocketbrain-virtual-schema-source';
 
-function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChangeDatabase,output,joinCatalog,joinLogicalRelationships,objectDefinition,objectColumnOrigin,liveCatalogIdentity}={}) {
+function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChangeDatabase,output,joinCatalog,joinLogicalRelationships,objectDefinition,objectColumnOrigin,liveCatalogIdentity,
+  isProfileConsole=isVirtualProfileConsole,onDidChangeSqlFileProfile}={}) {
   const collection=vscode.languages.createDiagnosticCollection('rocketbrain-sql');
   const events=new vscode.EventEmitter(),subscriptions=[collection,events];
   let metadata=catalogSnapshot?.()||null,epoch=0,request=0,disposed=false;
@@ -364,6 +365,10 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     for(const uri of inventory.files.slice(0,200)){
       projectTrusted(token);assertProjectFrame(frame,token);
       const language=sourceLanguage(uri),java=language==='java';
+      if(!java&&isProfileConsole({uri})){
+        unknownFiles.push({uri:uri.toString(),reason:'This SQL file has a dedicated database profile.'});
+        continue;
+      }
       if(!java&&configuredScope({uri})){
         unknownFiles.push({uri:uri.toString(),reason:'A local DDL resolution scope supplies this SQL file’s catalog.'});
         continue;
@@ -832,8 +837,12 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     await vscode.window.showTextDocument(document,{preview:true});
     return structuredClone(report.coverage);
   });
-  command('rocketbrain.sql.analyze',async()=>{const document=vscode.window.activeTextEditor?.document;if(!document||document.languageId!=='sql')throw new Error('Open a SQL document first.');if(!virtualActive(document)&&!metadata?.cachedMetadata)await refreshMetadata();const report=analyzeDocument(document);output?.appendLine('SQL source analysis: '+report.state+'; '+report.statements.length+' statements. No user query was executed.');return report;});
+  command('rocketbrain.sql.analyze',async()=>{const document=vscode.window.activeTextEditor?.document;if(!document||document.languageId!=='sql')throw new Error('Open a SQL document first.');if(!isProfileConsole(document)&&!virtualActive(document)&&!metadata?.cachedMetadata)await refreshMetadata();const report=analyzeDocument(document);output?.appendLine('SQL source analysis: '+report.state+'; '+report.statements.length+' statements. No user query was executed.');return report;});
   if(vscode.workspace.onDidChangeWorkspaceFolders)subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{projectGeneration++;projectPlans.clear();lastProjectReport=null;}));
+  if(onDidChangeSqlFileProfile)subscriptions.push(onDidChangeSqlFileProfile(document=>{
+    projectGeneration++;projectPlans.clear();lastProjectReport=null;
+    analyzeDocument(document);
+  }));
   subscriptions.push(vscode.workspace.onDidChangeConfiguration(event=>{if(event.affectsConfiguration('rocketbrain.sql.project')){projectGeneration++;projectPlans.clear();lastProjectReport=null;}}));
   return {analyzeDocument,refreshMetadata,useDdlPreview,clearDdlPreview,virtualActive,analysisOnly,scriptContextAt,virtualSchemas,resolveColumnOrigin,prepareRename,renameDocument,findCatalogReferences,captureCatalogFileUsages,catalogTargetAt,planCatalogRename,validateCatalogRename,catalogRenameEdit,projectSnapshot:()=>lastProjectReport?structuredClone(lastProjectReport):null,invalidate,onDidChange:events.event,snapshot:()=>metadata?{database:metadata.database,dialect:metadata.dialect,loadedAt:metadata.loadedAt}:null,dispose(){disposed=true;scopeCache.clear();ddlPreviews.clear();preparedRenames.clear();projectPlans.clear();invalidate();for(const sub of subscriptions)sub.dispose();}};
 }

@@ -18,14 +18,16 @@ const { runCatalogOperation } = require('./db/catalog-refresh');
 const demoHistoryKey = require('node:crypto').createHash('sha256').update('rocketbrain:sqlite-demo').digest('hex');
 
 async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree, isVirtualSqlPreview = () => false, analysisOnlySql = () => false) {
-  const { isProfileConsole, registerProfileConsoleFiles } = require('./db/profile-console-files');
+  const { isProfileConsole: isVirtualProfileConsole, registerProfileConsoleFiles } = require('./db/profile-console-files');
   const profileFiles = registerProfileConsoleFiles(vscode, context);
+  const fileProfiles = require('./db/sql-file-profiles').createSqlFileProfiles(context.workspaceState);
+  const isProfileConsole = document => isVirtualProfileConsole(document) || Boolean(fileProfiles.get(document?.uri));
   const profileSessions = new Map(), profileBindings = new Map();
   const activityLog = require('./db/activity-log-vscode').registerSqlActivity(context, vscode);
   const output = vscode.window.createOutputChannel('Rocketbrain');
   const sqlDrafts = require('./db/console-drafts').registerConsoleDrafts(context, vscode, { profileFiles, output,
     canTrack: document => document.languageId === 'sql' && !document.isClosed && !isVirtualSqlPreview(document) &&
-      (isProfileConsole(document) && profileBindings.has(document.uri.toString()) ||
+      (isVirtualProfileConsole(document) && profileBindings.has(document.uri.toString()) ||
         document.uri.scheme === 'untitled' && bindings.has(document.uri.toString())) });
   const state = { db: new DatabaseService(), schema: [], metadata:null, profile:null, tableLayoutConnection:undefined, label: 'Offline demo', mysql: false, running: new Set(), connecting: new Set(), switching: false, disposed: false, candidates: new Set(), epoch: 0 };
   const metadataCache = createMetadataCache(context.workspaceState, { isTrusted: () => vscode.workspace.isTrusted && !state.disposed });
@@ -46,8 +48,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const schemaRebuilds=new Map(),streamManagers=new Map(),streamReviews=new Map(),streamTransactions=new Map();
   const connectionEvents = new vscode.EventEmitter();
   const profileSessionEvents = new vscode.EventEmitter();
+  const sqlFileProfileEvents = new vscode.EventEmitter();
   const completedUserSql = new vscode.EventEmitter();
-  context.subscriptions.push(completedUserSql);
+  context.subscriptions.push(completedUserSql, sqlFileProfileEvents);
   let sequence = 0;
   let tableEditor, transferLease;
   const relatedSources = new Map();
@@ -65,18 +68,25 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   const currentDocument = () => vscode.window.activeTextEditor?.document;
   const bindingMap = document => isProfileConsole(document) ? profileBindings : bindings;
   const existingBinding = (document = currentDocument()) => bindingMap(document).get(document?.uri.toString());
-  const consoleDatabase = id => profileSessions.get(id)?.db || state.db;
+  const consoleDatabase = id => {
+    const record = profileSessions.get(id);
+    if (!record && typeof id === 'string' && id.startsWith('profile-console-')) throw Error('The dedicated database session is closed.');
+    return record?.db || state.db;
+  };
   const consoleLabel = id => profileSessions.get(id)?.label || state.label;
   const allBindings = () => [...bindings.values(), ...profileBindings.values()];
   const openEditorUris = () => new Set(vscode.window.tabGroups.all.flatMap(group =>
     group.tabs.map(tab => tab.input?.uri?.toString()).filter(Boolean)));
-  async function focusQueryEditor({ uri, viewColumn }) {
+  async function focusQueryEditor({ uri, viewColumn, profileSessionId }) {
     if (state.disposed || !vscode.workspace.isTrusted) throw Error('Open a trusted workspace to return to the query editor.');
     const groups = vscode.window.tabGroups.all;
     const locations = groups.filter(group => group.tabs.some(tab => tab.input?.uri?.toString() === uri));
     const document = vscode.workspace.textDocuments.find(candidate => candidate.uri.toString() === uri);
     if (!locations.length || !document || document.isClosed || document.languageId !== 'sql' || isVirtualSqlPreview(document)) {
       throw Error('The source SQL editor is no longer open.');
+    }
+    if (profileSessionId && (existingBinding(document)?.id !== profileSessionId || !profileSessions.has(profileSessionId))) {
+      throw Error('The source SQL editor no longer uses this result’s database profile session.');
     }
     const group = locations.find(location => location.viewColumn === viewColumn) ?? locations[0];
     await vscode.window.showTextDocument(document, { viewColumn: group.viewColumn, preserveFocus: false });
@@ -135,7 +145,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const shared = session && linkedEditors(binding.id).length > 1;
     const mode = sqlDrafts.isRecovered(document) ? 'offline SQL draft' : streamTransactions.size ? 'import waiting for Commit or Roll Back' : session ? session.needsReconnect ? (session.lifecycle?.disconnectedByIdleTimeout ? 'idle timeout · reconnect required' : 'disconnected · reconnect required') : `${session.readOnly ? 'read only' : session.autocommit ? 'writes · auto commit' : 'writes · manual commit'}${session.inTransaction ? ' · transaction active' : ''}${session.transactionIsolation ? ' · ' + session.transactionIsolation.toLowerCase() : ''}` : dedicated ? 'profile session closed' : state.mysql ? 'new console · read only' : 'SQLite demo';
     const cached = !dedicated && state.offlineMetadata?.provenance;
-    const label = sqlDrafts.isRecovered(document) ? 'Recovered draft' : dedicated && !binding ? 'Dedicated profile' : consoleLabel(binding?.id);
+    const label = sqlDrafts.isRecovered(document) ? 'Recovered draft' : dedicated && !binding ?
+      fileProfiles.get(document?.uri)?.label || 'Dedicated profile' : consoleLabel(binding?.id);
     status.text = cached ? '$(database) Rocketbrain · ' + cached.database + ' · cached metadata' :
       `${state.running.size ? '$(sync~spin)' : '$(database)'} Rocketbrain · ${dedicated && binding ? label : binding?.id || label}${shared ? ' · shared' : ''} · ${mode}`;
     status.command=streamTransactions.size?'rocketbrain.import.stream':cached?'rocketbrain.db.openCachedMetadata':'rocketbrain.sessionStatus';
@@ -384,6 +395,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     if(exclusiveDatabaseWork())throw new Error('Finish the schema operation or pending import transaction before using a console.');
     if (!document || document.languageId !== 'sql') throw new Error('Open a SQL editor first.');
     if (sqlDrafts.isRecovered(document)) throw Error('Open the active database console to run SQL from an offline draft.');
+    assertFileRouteIdle(document);
     if (isProfileConsole(document)) throw Error('This operation uses the active database. Use Run Selected SQL in a profile console.');
     if (state.disposed || state.switching) throw new Error('The database is changing or the workspace has closed.');
     if (state.mysql && !vscode.workspace.isTrusted) throw new Error('Trust this workspace before using a database.');
@@ -419,14 +431,19 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   }
   async function bindInteractive(document) {
     if (sqlDrafts.isRecovered(document)) throw Error('This is an offline SQL draft. Copy the reviewed text to a console connected to the intended database.');
+    assertFileRouteIdle(document);
     if (!isProfileConsole(document)) return bind(document);
     if (exclusiveDatabaseWork()) throw Error('Finish the schema operation or pending import transaction before using a console.');
     const binding = existingBinding(document);
-    if (!binding || document.isClosed || document.languageId !== 'sql') throw Error('Open a new dedicated console from its database profile.');
+    if (!binding || document.isClosed || document.languageId !== 'sql') {
+      if (fileProfiles.get(document?.uri)) throw Error('The saved file’s profile session is closed. Use Bind SQL File to Database Profile to choose a live session.');
+      throw Error('Open a new dedicated console from its database profile.');
+    }
     binding.documentClosed = false;
     return binding;
   }
   function assertBinding(document, binding) {
+    assertFileRouteIdle(document);
     const current = isProfileConsole(document) ? profileSessions.has(binding.id) : binding.epoch === state.epoch;
     if (state.disposed || state.switching || !current || existingBinding(document) !== binding) throw new Error('The connection changed. Try this console action again.');
   }
@@ -476,7 +493,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const label = profile.name + ' · ' + config.database;
     const db = new MysqlService(config, { reportActivity: activityLog.createReporter(), reportSession: updateStatus });
     const epoch = ++sequence, id = 'profile-console-' + epoch;
-    const record = { db, epoch, label, profile: { id: profile.id, name: profile.name, database: config.database } };
+    const endpoint = profile.transport?.kind || `${profile.host || config.host}:${profile.port || config.port || 3306}`;
+    const record = { db, epoch, label, endpoint, routeKey: tableLayoutConnectionKey(config, profile),
+      profile: { id: profile.id, name: profile.name, database: config.database } };
     state.connecting.add(id);
     state.candidates.add(db);
     try {
@@ -501,6 +520,96 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
         state.disposed || state.switching) throw Error('The selected profile session is no longer available. Refresh Database Connections.');
     return record;
   }
+  function assertFileRouteIdle(document) {
+    if (fileProfiles.busy(document?.uri)) throw Error('Finish changing the SQL file’s database profile first.');
+  }
+  function requireSqlFile(document) {
+    if (!vscode.workspace.isTrusted || state.disposed || state.switching || !document || document.isClosed ||
+        document.languageId !== 'sql' || document.uri.scheme !== 'file' || !/\.sql$/i.test(document.uri.path) ||
+        !vscode.workspace.getWorkspaceFolder(document.uri) || analysisOnlySql(document)) {
+      throw Error('Open a saved SQL file in the trusted workspace before changing its profile.');
+    }
+    assertFileRouteIdle(document);
+  }
+  function liveFileDestination(selection) {
+    const record = requireProfileSession(selection);
+    const session = record.db.getSessionState(selection.sessionId);
+    if (!record.routeKey || !session.connected || session.needsReconnect || session.outcomeUnknown ||
+        state.running.has(selection.sessionId) || state.connecting.has(selection.sessionId)) {
+      throw Error('Choose a connected dedicated profile session with a known transaction state.');
+    }
+    return { record, session };
+  }
+  async function changeSqlFileProfile(document, selection, confirm) {
+    requireSqlFile(document);
+    const uri = document.uri, key = uri.toString(), version = document.version;
+    const before = fileProfiles.get(uri), binding = existingBinding(document);
+    if (!selection && !before) throw Error('This SQL file has no dedicated database profile.');
+    const destination = selection && liveFileDestination(selection);
+    const route = destination && { id: destination.record.profile.id, key: destination.record.routeKey, label: destination.record.label };
+    const approve = await confirm?.({ path: vscode.workspace.asRelativePath(uri), before: before?.label,
+      after: route?.label, endpoint: destination?.record.endpoint, routeChanged: before && route && before.key !== route.key,
+      readOnly: destination?.session.readOnly, inTransaction: destination?.session.inTransaction });
+    if (approve !== true) return { state: 'retained' };
+    requireSqlFile(document);
+    const latest = selection && liveFileDestination(selection);
+    const sameSession = ({ connectionId, readOnly, autocommit, inTransaction }) =>
+      [connectionId, readOnly, autocommit, inTransaction].join('/');
+    if (document.version !== version || document.uri.toString() !== key ||
+        fileProfiles.get(uri) !== before || existingBinding(document) !== binding ||
+        (destination && (latest.record !== destination.record || sameSession(latest.session) !== sameSession(destination.session)))) {
+      throw Error('The SQL file or selected database session changed. Review the profile again.');
+    }
+    if (binding && (state.running.has(binding.id) || state.connecting.has(binding.id))) {
+      throw Error('Finish the current SQL operation before changing this file’s profile.');
+    }
+    const unsharedActive = binding && bindings.get(key) === binding && linkedEditors(binding.id).length === 1 && state.mysql;
+    if (unsharedActive) {
+      const session = state.db.getSessionState(binding.id);
+      if (session.inTransaction || session.outcomeUnknown) throw Error('Resolve this file’s active transaction before changing its profile.');
+      // Reserve the old session during persistence. Detaching the sole ordinary editor releases it.
+      state.running.add(binding.id);
+    }
+    try {
+      await fileProfiles.set(uri, route);
+      if (binding === bindings.get(key)) bindings.delete(key);
+      if (binding === profileBindings.get(key)) profileBindings.delete(key);
+      if (unsharedActive) await state.db.closeSession(binding.id);
+      if (!destination) return { state: 'forgotten', uri: key };
+      const current = liveFileDestination(selection);
+      const { record } = current;
+      if (record !== destination.record || document.isClosed || sameSession(current.session) !== sameSession(destination.session)) {
+        throw Error('The profile association was saved. Reopen the SQL file and choose its live session again.');
+      }
+      profileBindings.set(key, { id: selection.sessionId, uri, epoch: record.epoch });
+      return { state: 'bound', uri: key, profileId: route.id, sessionId: selection.sessionId };
+    } finally {
+      if (unsharedActive) state.running.delete(binding.id);
+      if (fileProfiles.get(uri) !== before) sqlFileProfileEvents.fire(document);
+      updateStatus();
+    }
+  }
+  command('rocketbrain.connections.bindSqlFile', async () => {
+    const document = currentDocument();
+    requireSqlFile(document);
+    const choices = profileSessionList().filter(row => row.connected && !row.needsReconnect && !row.outcomeUnknown)
+      .map(row => ({ label: profileSessions.get(row.id).label, description: row.id,
+        detail: row.readOnly ? 'Read only' : row.inTransaction ? 'Writes · transaction active' : 'Writes enabled',
+        target: { sessionId: row.id, profileId: row.profileId } }));
+    if (!choices.length) throw Error('Open a dedicated console for the intended database profile first.');
+    const selected = await vscode.window.showQuickPick(choices, { title: 'Choose the Database Session for This SQL File' });
+    if (!selected) return;
+    return changeSqlFileProfile(document, selected.target, async ({ path, before, after, endpoint, routeChanged, readOnly, inTransaction }) =>
+      await vscode.window.showWarningMessage('Bind this SQL file to the selected database session?', { modal: true,
+        detail: `${path}\n${before ? 'Previous association: ' + before + '\n' : ''}Destination: ${after} · ${endpoint}\n` +
+          (routeChanged ? 'The selected connection differs from the remembered destination.\n' : '') +
+          (readOnly ? 'The selected session is read only.' : inTransaction ?
+            'This file will use the selected session’s open write transaction.' : 'Writes are enabled in the selected session.') }, 'Bind Database Profile') === 'Bind Database Profile');
+  });
+  command('rocketbrain.connections.forgetSqlFile', () => changeSqlFileProfile(currentDocument(), undefined, async ({ path, before }) =>
+    await vscode.window.showWarningMessage('Remove this SQL file’s database association?', { modal: true,
+      detail: `${path}\nDatabase: ${before}\nFuture queries can use the active database. The dedicated session stays open.` },
+    'Remove Association') === 'Remove Association'));
   async function revealProfileSession(selection) {
     const record = requireProfileSession(selection);
     const editors = linkedEditors(selection.sessionId), open = openEditorUris();
@@ -587,7 +696,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       for (const [key, binding] of profileBindings) {
         if (binding.id !== id) continue;
         profileBindings.delete(key);
-        if (binding.documentClosed) profileFiles.remove(binding.uri);
+        if (binding.documentClosed && isVirtualProfileConsole({ uri: binding.uri })) profileFiles.remove(binding.uri);
       }
       return target.db.dispose();
     }
@@ -747,7 +856,9 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       }
       const editor = vscode.window.activeTextEditor;
       await results.show();
-      if (editor) await vscode.window.showTextDocument(editor.document, { viewColumn: editor.viewColumn, preserveFocus: false });
+      if (editor && (!dedicated || editor.document === document && vscode.window.activeTextEditor === editor)) {
+        await vscode.window.showTextDocument(editor.document, { viewColumn: editor.viewColumn, preserveFocus: false });
+      }
       if (saved && (!vscode.workspace.isTrusted || document.isClosed || document.getText() !== sql)) throw new Error('The saved SQL changed or the workspace is unavailable.');
       beforeRun?.();
       if (allowUnboundedDml || dedicated) {
@@ -758,7 +869,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       }
       id = results.begin(sql, source, { readOnly: session?.readOnly ?? true, sessionId: binding.id,
         ...(document?.languageId === 'sql' && { queryEditor: { uri: document.uri.toString(),
-          viewColumn: editor?.document === document ? editor.viewColumn : undefined } }) });
+          viewColumn: editor?.document === document ? editor.viewColumn : undefined,
+          ...(dedicated && { profileSessionId: binding.id }) } }) });
       const result = await db.query(sql, { sessionId: binding.id, maxRows: 500, timeoutMs: 5000, allowUnboundedDml });
       if (historyTarget && session?.readOnly && document && !document.isClosed && document.version === documentVersion) {
         let sqlSource;
@@ -989,7 +1101,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     vscode.workspace.onDidCloseTextDocument(document => {
       const binding = existingBinding(document), dedicated = isProfileConsole(document);
       if (!binding) {
-        if (dedicated) profileFiles.remove(document.uri);
+        if (isVirtualProfileConsole(document)) profileFiles.remove(document.uri);
         return;
       }
       if (state.mysql || dedicated) {
@@ -1038,6 +1150,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     dispose:disposeDatabase,disconnectMysql:useDemo,activityLog,activeConnectionProfile:()=>state.profile?structuredClone(state.profile):null,
     openProfileConsole,sqlDrafts,
     profileSessionList, revealProfileSession, inspectProfileSessionCatalog, closeProfileSession,
+    isProfileSql: document => isProfileConsole(document) || fileProfiles.busy(document?.uri),
+    changeSqlFileProfile, onDidChangeSqlFileProfile: sqlFileProfileEvents.event,
     onDidChangeProfileSessions: profileSessionEvents.event,
     hasProfileConsole: id => [...profileSessions.values()].some(item => item.profile.id === id),
     schema: () => structuredClone(state.schema),
@@ -1296,6 +1410,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       return withSession(binding.id,async()=>({...await state.db.previewScript(sql,{sessionId:binding.id,parameters,maxRows,timeoutMs,totalTimeoutMs,presetContext}),connectionEpoch:state.epoch,documentUri:document.uri.toString()}));
     },
     async runSqlScript(request) {
+      if(fileProfiles.get(request.documentUri)||fileProfiles.busy(request.documentUri))throw Error('Use the active database SQL editor to run this reviewed script.');
       if(!state.mysql||request.connectionEpoch!==state.epoch)throw new Error('The database connection changed. Preview the script again.');
       const binding=bindings.get(request.documentUri);
       if(!binding||binding.id!==request.sessionId||binding.epoch!==state.epoch)throw new Error('The SQL console changed. Preview the script again.');

@@ -146,7 +146,8 @@ async function activate(context) {
   context.subscriptions.push(analysis);
   sqlAnalysis=require('./db/sql-vscode').registerSQLAnalysis(context,vscode,{catalog:database.databaseCatalog,catalogSnapshot:database.catalogSnapshot,onDidChangeDatabase:database.onDidChangeDatabase,
     joinCatalog:database.joinCompletionCatalog,joinLogicalRelationships:database.joinLogicalRelationships,
-    objectDefinition:objectSources.definition,objectColumnOrigin:objectSources.columnOrigin,liveCatalogIdentity:database.liveCatalogIdentity});
+    objectDefinition:objectSources.definition,objectColumnOrigin:objectSources.columnOrigin,liveCatalogIdentity:database.liveCatalogIdentity,
+    isProfileConsole:database.isProfileSql,onDidChangeSqlFileProfile:database.onDidChangeSqlFileProfile});
   context.subscriptions.push(sqlAnalysis);
   const sqlCollations = require('./db/sql-collation-vscode').registerSqlCollations(vscode, {
     database, virtualActive: sqlAnalysis.virtualActive, onDidChangeAnalysis: sqlAnalysis.onDidChange
