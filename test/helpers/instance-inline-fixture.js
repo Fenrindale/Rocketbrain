@@ -79,7 +79,7 @@ async function springJdbcClasspath(classpathFile, engine) {
   return entries;
 }
 
-async function runJavaFixture({ javaHome, file, binaryDirectory, className, classpath = [], config, engine, jdbcPrefix = 'RB_INLINE' }) {
+async function runJavaFixture({ javaHome, file, files = [file], binaryDirectory, className, classpath = [], config, engine, jdbcPrefix = 'RB_INLINE' }) {
   const tool = name => path.join(javaHome, 'bin', name + (process.platform === 'win32' ? '.exe' : ''));
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) =>
     !/^(?:CLASSPATH|JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|JDK_JAVA_OPTIONS|JDK_JAVAC_OPTIONS)$/iu.test(name)));
@@ -94,7 +94,7 @@ async function runJavaFixture({ javaHome, file, binaryDirectory, className, clas
     env[jdbcPrefix+'_JDBC_PASSWORD'] = config.password;
   }
   const compile = await execute(tool('javac'), ['-proc:none', '-encoding', 'UTF-8',
-    ...(classpath.length ? ['-classpath',classpath.join(path.delimiter)] : []),'-d',binaryDirectory,file], {env,timeoutMs:30000});
+    ...(classpath.length ? ['-classpath',classpath.join(path.delimiter)] : []),'-d',binaryDirectory,...files], {env,timeoutMs:30000});
   assert.equal(compile.code, 0, compile.output);
   const run = await execute(tool('java'), ['-classpath',[binaryDirectory,...classpath].join(path.delimiter),className], {env,timeoutMs:30000});
   assert.equal(run.code, 0, run.output);

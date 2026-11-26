@@ -211,12 +211,15 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   }
   let creation;
   if(createJavaFile!==undefined){
-   if(kind!=='refactor.extract.interface'||!anchor||resources.length||!edits.get(key(anchor.document.uri.fsPath))?.edits.length||
+   const innerMove=kind==='refactor.move.innerClass';
+   if(!['refactor.extract.interface','refactor.move.innerClass'].includes(kind)||!anchor||resources.length||!edits.get(key(anchor.document.uri.fsPath))?.edits.length||
+       innerMove&&(typeof extraValidate!=='function'||typeof preApply!=='function')||
        typeof createJavaFile?.text!=='string'||!createJavaFile.text.trim()||createJavaFile.text.includes('\0')||
-       Buffer.byteLength(createJavaFile.text)>512*1024)throw Error('A new Java file requires one reviewed Extract Interface operation.');
+       Buffer.byteLength(createJavaFile.text)>512*1024)throw Error(innerMove?'A new Java file requires one guarded inner-class move.':'A new Java file requires one reviewed Extract Interface operation.');
    const {uri,parentRealPath}=vacantJavaDestination(createJavaFile.uri);
+   if(innerMove&&key(path.dirname(anchor.document.uri.fsPath))!==key(path.dirname(uri.fsPath)))throw Error('The moved Java inner class must remain in the owner package.');
    const ownerFolder=vscode.workspace.getWorkspaceFolder(anchor.document.uri),targetFolder=vscode.workspace.getWorkspaceFolder(uri);
-   if(key(ownerFolder.uri.fsPath)!==key(targetFolder.uri.fsPath))throw Error('The new interface must be in the owner workspace.');
+   if(key(ownerFolder.uri.fsPath)!==key(targetFolder.uri.fsPath))throw Error(innerMove?'The moved class must be in the owner workspace.':'The new interface must be in the owner workspace.');
    creation={uri:uri.toString(),before:'',after:createJavaFile.text,edits:[],created:true,resourceOperation:'create'};
    resources.push({kind:'create',uri:creation.uri,parentRealPath});
   }

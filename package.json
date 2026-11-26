@@ -987,6 +987,12 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.java.moveInnerClass",
+        "title": "Move Java Inner Class to New File",
+        "category": "Rocketbrain",
+        "enablement": "editorLangId == java && isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.java.extractInterface",
         "title": "Extract Java Interface",
         "category": "Rocketbrain",

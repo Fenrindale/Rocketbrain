@@ -434,7 +434,7 @@ public final class SignatureInspector {
                 !(args.length == 8 && args[4].equals("typeStructure")) &&
                 !(args.length == 10 && args[4].equals("methodExtract")) &&
                 !(args.length == 7 && args[4].equals("cleanup")) &&
-                !(args.length == 7 && Set.of("typeRename","typeRenameBinary","packageRename").contains(args[4])) &&
+                !(args.length == 7 && Set.of("typeRename","typeRenameBinary","packageRename","innerMove").contains(args[4])) &&
                 !packageServiceBindings && !constructorParameter &&
                 !(args.length == 9 && Set.of("typeImport", "staticImport").contains(args[4])) &&
                 !(args.length == 5 && args[4].equals("check")) &&
@@ -476,6 +476,7 @@ public final class SignatureInspector {
                     else if (args[4].equals("attributedDependencies")) {
                         report.put("attributedDependencies",new AttributedDependencies(trees,byUri.keySet()).inspect(units));
                     }
+                    else if (args[4].equals("innerMove")) report.put("innerMove",InnerMoveInspector.inspect(task,units,args[5],args[6]));
                     else if (args[4].equals("typeRename")) report.put("typeRename",TypeRenameInspector.inspect(task,units,args[5],args[6]));
                     else if (args[4].equals("packageRename")) report.put("packageRename",new PackageRenameInspector(task,args[5],args[6]).inspect(units));
                     else if (args[4].equals("typeRenameBinary")) report.put("typeRename",TypeRenameInspector.inspect(task,units,args[5],args[6],true));

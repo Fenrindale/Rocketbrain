@@ -272,6 +272,7 @@ function registerJavaFeatures(context, vscode) {
       command:ACTIONS[kind].jdt,context:params,options:{tabSize:4,insertSpaces:true},commandArguments:[]
     },cancellation);
   };
+  api.innerClassMoveEdit=(params,cancellation)=>refactoringRequest('java/move',params,cancellation);
   api.interfaceRefactoring={
     async members(params,cancellation){
       await api.start();

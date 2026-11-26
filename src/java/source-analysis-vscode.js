@@ -10,6 +10,7 @@ const { classDiagram,mermaidDiagram,dataFlow,callFlow,RELATION_MODES } = require
 const { diagramHtml } = require('./source-diagram-view');
 const { structuralQuery,parseCaptureConstraints,reviewedStructuralMatches,structuralEdits } = require('./structural-search');
 const { createInterfaceExtraction } = require('./extract-interface-vscode');
+const { createInnerClassMove,COMMAND:innerClassMoveCommand } = require('./inner-class-move-vscode');
 const { createMemberHierarchy } = require('./member-hierarchy-vscode');
 const { createJavaConversion } = require('./java-conversion-vscode');
 const { createConstantExtraction } = require('./extract-constant-vscode');
@@ -28,7 +29,7 @@ const COMMANDS = Object.freeze({
   pullUp:'rocketbrain.java.pullUpMembers', pushDown:'rocketbrain.java.pushDownMembers',
   convert:'rocketbrain.java.convertStructure', extractConstant:'rocketbrain.java.extractConstant',
   extractVariable:'rocketbrain.java.extractVariable', extractField:'rocketbrain.java.extractField',cleanup:cleanupCommand,
-  expectedCompletion:expectedCompletionCommand
+  expectedCompletion:expectedCompletionCommand, innerClassMove:innerClassMoveCommand
 });
 const EXCLUDE = '**/{.git,.gradle,.metadata,node_modules,build,target,out,bin,dist}/**';
 const MAX_UNITS = 240;
@@ -600,6 +601,9 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
   const extraction = createInterfaceExtraction(vscode,{
     java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
   });
+  const innerClassMove = createInnerClassMove(vscode,{
+    java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
+  });
   const hierarchy = createMemberHierarchy(vscode,{
     java,assertReady,projects,findProject,classSources,classpaths,compile,snapshot,assertUnchangedSourceSnapshots,operation
   });
@@ -651,6 +655,10 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
       try { assertReady(); return await run(kind.startsWith('extract') && kind !== 'extractInterface' ? anchor : undefined); }
       catch (error) { if (!disposed) await vscode.window.showErrorMessage('Rocketbrain Java: ' + error.message); return null; }
     }));
+  commands.push(vscode.commands.registerCommand(COMMANDS.innerClassMove,async()=>{
+    try { assertReady(); return await innerClassMove.run(); }
+    catch(error) { if(!disposed)void vscode.window.showErrorMessage('Rocketbrain Java: '+error.message);return null; }
+  }));
   commands.push(vscode.commands.registerCommand(COMMANDS.cleanup,async()=>{
     try { assertReady(); return await cleanup.run(); }
     catch(error) { if(!disposed)void vscode.window.showErrorMessage('Rocketbrain Java: '+error.message);return null; }
@@ -670,6 +678,7 @@ function registerJavaSourceAnalysis(context,vscode,{java}) {
     prepareStructuralReplacement:(report,ids,options) => managed(() => prepareStructuralReplacement(report,ids,options)),
     inspectInterface:options => managed(() => extraction.inspect(options)),
     prepareInterfaceExtraction:(report,options) => managed(() => extraction.prepare(report,options)),
+    prepareInnerClassMove:options => managed(() => innerClassMove.prepare(options)),
     inspectMemberHierarchy:options => managed(() => hierarchy.inspect(options)),
     prepareMemberHierarchyMove:(report,options) => managed(() => hierarchy.prepare(report,options)),
     prepareConversion:options => managed(() => conversion.prepare(options)),
