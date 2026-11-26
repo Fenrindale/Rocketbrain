@@ -170,7 +170,9 @@ async function runSqlReturningChecks(api,vscode,checks) {
         const [[direct]]=await fixture.actor.query('SHOW CREATE TABLE '+quote(fixture.name));
         assert.equal(ddl.getText(),direct['Create Table']);
         const hovers=await vscode.commands.executeCommand('vscode.executeHoverProvider',doc.uri,position);
-        assert.ok(hovers.some(item=>item.contents.some(value=>(typeof value==='string'?value:value.value).includes('INSERT RETURNING result column'))));
+        const hoverText=hovers.flatMap(item=>item.contents.map(value=>
+          (typeof value==='string'?value:value.value).replace(/&nbsp;|\u00a0/g,' ')));
+        assert.ok(hoverText.some(value=>value.includes('INSERT RETURNING result column')),JSON.stringify(hoverText));
       }else assert.equal(suggestion,undefined);
       const mixed=await open(fixture.modeScript);
       const shadow=api.sqlAnalysis.analyzeDocument(mixed).statements[1];
