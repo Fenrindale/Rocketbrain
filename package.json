@@ -296,6 +296,7 @@
       { "command": "rocketbrain.java.moveMember", "title": "Move Java Static Member", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.moveInstanceMethod", "title": "Move Java Instance Method", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.movePackage", "title": "Move Java Package", "category": "Rocketbrain" },
+      { "command": "rocketbrain.java.renamePackage", "title": "Rename Java Package", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == java" },
       { "command": "rocketbrain.java.reviewTypeRename", "title": "Review Public Java Type Rename", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.changeSignature", "title": "Change Java Signature", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.safeDelete", "title": "Safe Delete Java Declaration", "category": "Rocketbrain" },

@@ -10,14 +10,14 @@ function offset(text,position){if(!Number.isInteger(position?.line)||!Number.isI
 function editedText(text,edits){const spans=edits.map(edit=>{if(typeof edit.newText!=='string')throw Error('Invalid refactoring replacement.');return {start:offset(text,edit.range?.start),end:offset(text,edit.range?.end),text:edit.newText};}).sort((a,b)=>b.start-a.start||b.end-a.end);let previous=text.length+1,result=text;for(const span of spans){if(span.end<span.start||span.end>previous)throw Error('Overlapping refactoring edits were rejected.');result=result.slice(0,span.start)+span.text+result.slice(span.end);previous=span.start;}return result;}
 
 function registerJavaRefactoring(context,vscode,{request}={}) {
- const plans=new Map(),checkedPlans=new Map(),validators=new Map(),subscriptions=[],operations=new Set();let closed=false,prepareConstant;
+ const plans=new Map(),checkedPlans=new Map(),validators=new Map(),subscriptions=[],operations=new Set(),applyingPackageRenames=new Set();let closed=false,prepareConstant;
  const trusted=()=>{if(closed)throw Error('Java refactoring is closed.');if(!vscode.workspace.isTrusted)throw Error('Trust the workspace before refactoring Java sources.');};
  const cancelled=token=>{if(token?.isCancellationRequested)throw Error('Java refactoring was cancelled.');};
  async function send(method,params,cancellation){let timer;try{return await Promise.race([request(method,params,cancellation),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Java refactoring request timed out. Try again after project import completes.')),30000);})]);}finally{clearTimeout(timer);}}
- function sourceUri(value,{destination=false,guard=false,resource=false,kotlinFormatting=false,kotlinRename=false,kotlinMixedRename=false}={}){
+ function sourceUri(value,{destination=false,guard=false,resource=false,directory=false,kotlinFormatting=false,kotlinRename=false,kotlinMixedRename=false}={}){
   const uri=typeof value==='string'?vscode.Uri.parse(value):value;
   const kotlinSource=kotlinFormatting||kotlinRename;
-  if(uri?.scheme!=='file'||uri.authority||uri.query||uri.fragment||(!guard&&!resource&&
+  if(uri?.scheme!=='file'||uri.authority||uri.query||uri.fragment||(!guard&&!resource&&!directory&&
    !(kotlinMixedRename&&/\.(?:kt|java)$/u.test(uri.fsPath))&&!uri.fsPath.endsWith(kotlinSource?'.kt':'.java')))throw Error(kotlinSource?'Kotlin edits must target reviewed local Kotlin sources.':'Refactoring edits must target local Java source files.');
   const folder=vscode.workspace.getWorkspaceFolder(uri);if(!folder)throw Error('Refactoring files must remain inside an open workspace.');
   const root=fs.realpathSync(folder.uri.fsPath),candidate=destination?path.dirname(uri.fsPath):uri.fsPath;
@@ -26,9 +26,25 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   if(relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))throw Error('Refactoring files must remain inside an open workspace.');
   let current=path.resolve(folder.uri.fsPath);
   for(const segment of relative.split(path.sep).filter(Boolean)){current=path.join(current,segment);if(fs.lstatSync(current).isSymbolicLink())throw Error('Refactoring through symbolic links or junctions is not supported.');}
-  if(!destination&&!fs.statSync(uri.fsPath).isFile())throw Error('Only individual source files can be refactored.');
+  if(!destination&&!(directory?fs.statSync(uri.fsPath).isDirectory():fs.statSync(uri.fsPath).isFile()))throw Error(directory?'Choose an existing Java package directory.':'Only individual source files can be refactored.');
   if(destination&&!fs.statSync(path.dirname(uri.fsPath)).isDirectory())throw Error('Choose an existing destination package directory.');
   return uri;
+ }
+ function packageRenameUris(oldUri,newUri){
+  const old=sourceUri(oldUri,{directory:true}),next=sourceUri(newUri,{directory:true,destination:true});
+  const parent=path.dirname(old.fsPath),oldFolder=vscode.workspace.getWorkspaceFolder(old),nextFolder=vscode.workspace.getWorkspaceFolder(next);
+  if(key(parent)!==key(path.dirname(next.fsPath))||key(oldFolder.uri.fsPath)!==key(nextFolder.uri.fsPath)||
+     key(old.fsPath)===key(oldFolder.uri.fsPath)||key(old.fsPath)===key(next.fsPath))throw Error('Rename only one sibling Java package directory in the source workspace.');
+  return {old,next};
+ }
+ function checkPackageFiles(old,next,editedKeys){
+  const {files}=require('./java-package-rename').siblingTree(old.fsPath,next.fsPath);
+  if(files.some(file=>!editedKeys.has(key(file))))throw Error('Every moved Java source must have its reviewed package declaration edit.');
+ }
+ const packagePair=(old,next)=>key(old.fsPath)+'\0'+key(next.fsPath);
+ function isApplyingPackageRename(files){
+  return files?.length===1&&files[0]?.oldUri?.scheme==='file'&&files[0]?.newUri?.scheme==='file'&&
+   applyingPackageRenames.has(packagePair(files[0].oldUri,files[0].newUri));
  }
  function vacantJavaDestination(value,expectedParent){
   const uri=sourceUri(value,{destination:true}),parent=path.dirname(uri.fsPath);
@@ -60,7 +76,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   return {dispose(){if(prepareConstant===prepare)prepareConstant=undefined;}};
  }
  function removePlan(id){plans.delete(id);checkedPlans.delete(id);validators.delete(id);}
- async function previewWorkspaceEdit(workspaceEdit,{title='Java refactoring',kind='refactor',cancellation,anchorDocument,allowedResourceOperations=[],allowedResourceRenames=[],allowedServiceEdits=[],allowedBeanClassEdits=[],createJavaFile,guards=[],warnings=[],validate:extraValidate,preApply,formattingEndOfLine}={}){
+ async function previewWorkspaceEdit(workspaceEdit,{title='Java refactoring',kind='refactor',cancellation,anchorDocument,allowedResourceOperations=[],allowedResourceRenames=[],allowedServiceEdits=[],allowedBeanClassEdits=[],allowedDirectoryRename,createJavaFile,guards=[],warnings=[],validate:extraValidate,preApply,formattingEndOfLine}={}){
   trusted();cancelled(cancellation);if(!workspaceEdit||typeof workspaceEdit!=='object'||Array.isArray(workspaceEdit))throw Error('The Java engine did not return a WorkspaceEdit.');if(Object.keys(workspaceEdit.changeAnnotations||{}).length)throw Error('Annotated refactoring conflicts require a separate review workflow.');
   const kotlinFormatting=kind==='source.format.kotlin';
   const kotlinRename=kind==='refactor.rename.kotlin';
@@ -94,6 +110,15 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
      hash(fs.readFileSync(uri.fsPath))!==entry.beforeSha256){throw Error('Invalid, duplicate or stale Spring XML bean class permission.');}
    beanPermissions.set(id,{...entry,uri:uri.toString()});
   }
+  let packagePermission;
+  if(allowedDirectoryRename!==undefined){
+   if(kind!=='refactor.rename.java.package'||!anchor||anchorDocument.languageId!=='java'||anchorDocument.isDirty||
+      allowedResourceOperations.length!==1||allowedResourceOperations[0]!=='rename'||resourcePermissions.size||servicePermissions.size||
+      beanPermissions.size||createJavaFile||typeof extraValidate!=='function'||typeof preApply!=='function')throw Error('A directory rename requires one guarded Java package review.');
+   const {old,next}=packageRenameUris(allowedDirectoryRename.oldUri,allowedDirectoryRename.newUri);
+   if(key(path.dirname(anchorDocument.uri.fsPath))!==key(old.fsPath))throw Error('Open a saved Java source directly in the package being renamed.');
+   packagePermission={oldUri:old.toString(),newUri:next.toString()};
+  }
   const edits=new Map(),versions=new Map(),resources=[],resourceKeys=new Set();let resourceSeen=false;
   function addText(value,changes,version){if(!Array.isArray(changes))throw Error('Invalid Java refactoring text edits.');if(changes.some(change=>change.annotationId))throw Error('Annotated refactoring conflicts require a separate review workflow.');const candidate=typeof value==='string'?vscode.Uri.parse(value):value,id=candidate&&key(candidate.fsPath),permission=servicePermissions.get(id)||beanPermissions.get(id),uri=sourceUri(value,{resource:!!permission&&permission.uri===candidate.toString(),kotlinFormatting,kotlinRename,kotlinMixedRename}),saved=edits.get(id);edits.set(id,{uri,edits:[...(saved?.edits||[]),...structuredClone(changes)]});if(version!==undefined&&version!==null){if(versions.has(id)&&versions.get(id)!==version)throw Error('Conflicting Java document versions.');versions.set(id,version);}}
   for(const [uri,changes]of Object.entries(workspaceEdit.changes||{}))addText(uri,changes);
@@ -101,6 +126,15 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    if(change.textDocument&&Array.isArray(change.edits)){if(resourceSeen)throw Error('Text edits following file operations require a separate review workflow.');addText(change.textDocument.uri,change.edits,change.textDocument.version);continue;}
    resourceSeen=true;if(!allowedResourceOperations.includes(change.kind)||!['rename','delete'].includes(change.kind))throw Error('File creation, deletion and movement need a separate review workflow.');
    if(Object.values(change.options||{}).some(Boolean))throw Error('Overwriting, recursive deletion and ignored file conflicts are not allowed.');
+   if(packagePermission){
+    if(resources.length||change.kind!=='rename'||change.oldUri!==packagePermission.oldUri||change.newUri!==packagePermission.newUri||
+       !edits.get(key(anchorDocument.uri.fsPath))?.edits.length)throw Error('Only the approved package directory and its exact text changes can be reviewed.');
+    const {old,next}=packageRenameUris(change.oldUri,change.newUri),parent=path.dirname(next.fsPath);
+    if(fs.readdirSync(parent).some(name=>name.toLowerCase()===path.basename(next.fsPath).toLowerCase()))throw Error('The package rename destination already exists or collides by case.');
+    checkPackageFiles(old,next,new Set([...edits].filter(([,entry])=>entry.edits.length).map(([file])=>file)));
+    resources.push({kind:'rename',uri:old.toString(),newUri:next.toString(),directory:true,parentRealPath:fs.realpathSync(parent)});
+    continue;
+   }
    const candidate=typeof (change.oldUri||change.uri)==='string'?vscode.Uri.parse(change.oldUri||change.uri):null;
    const id=candidate&&key(candidate.fsPath),permission=resourcePermissions.get(id),service=servicePermissions.get(id);
    if((permission||service)&&(change.kind!=='rename'||change.newUri!==(permission||service).newUri||service&&candidate.toString()!==service.uri))throw Error('A reviewed resource or service descriptor may only move to its exact approved destination.');
@@ -114,6 +148,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    }
    resources.push(operation);if(!edits.has(oldKey))edits.set(oldKey,{uri:old,edits:[]});
   }
+  if(packagePermission&&resources.length!==1)throw Error('The reviewed Java package rename operation is missing.');
   if([...resourcePermissions.values()].some(permission=>!resources.some(operation=>operation.uri===permission.oldUri&&operation.newUri===permission.newUri&&operation.resourceSha256===permission.sha256)))throw Error('Every reviewed resource rename must appear exactly once.');
   for(const [id,service]of servicePermissions){
    if(service.newUri&&!resources.some(operation=>operation.uri===service.uri&&operation.newUri===service.newUri&&operation.serviceDescriptor)||
@@ -190,6 +225,12 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
     vacantJavaDestination(operation.uri,operation.parentRealPath);
     continue;
    }
+   if(operation.directory){
+    const {old,next}=packageRenameUris(operation.uri,operation.newUri),parent=path.dirname(next.fsPath);
+    if(key(fs.realpathSync(parent))!==key(operation.parentRealPath)||fs.readdirSync(parent).some(name=>name.toLowerCase()===path.basename(next.fsPath).toLowerCase()))throw Error('The package rename destination changed after review. Preview again.');
+    checkPackageFiles(old,next,new Set(plan.documents.filter(file=>file.edits.length).map(file=>key(vscode.Uri.parse(file.uri).fsPath))));
+    continue;
+   }
    const resource=!!operation.resourceSha256||!!operation.serviceDescriptor,uri=sourceUri(operation.uri,{resource});
    if(operation.resourceSha256&&hash(fs.readFileSync(uri.fsPath))!==operation.resourceSha256)throw Error('A reviewed resource byte hash changed.');
    if(operation.kind==='rename'){
@@ -259,14 +300,22 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
     if(operation.kind==='create'){
      const contents=Buffer.from(plan.documents.find(file=>file.created&&file.uri===operation.uri).after);
      edit.createFile(sourceUri(operation.uri,{destination:true}),{overwrite:false,ignoreIfExists:false,contents});
+    }else if(operation.directory){
+     const {old,next}=packageRenameUris(operation.uri,operation.newUri);
+     edit.renameFile(old,next,{overwrite:false,ignoreIfExists:false});
     }else if(operation.kind==='rename'){
      const resource=!!operation.resourceSha256||!!operation.serviceDescriptor;
      edit.renameFile(sourceUri(operation.uri,{resource}),sourceUri(operation.newUri,{destination:true,resource}),{overwrite:false,ignoreIfExists:false});
     }else edit.deleteFile(sourceUri(operation.uri),{recursive:false,ignoreIfNotExists:false});
    }
    runFinalGuard(id,cancellation);
+   const directory=plan.resourceOperations.find(operation=>operation.directory);
+   const pair=directory&&packagePair(vscode.Uri.parse(directory.uri),vscode.Uri.parse(directory.newUri));
+   if(pair&&applyingPackageRenames.has(pair))throw Error('This package rename is already applying.');
+   if(pair)applyingPackageRenames.add(pair);
    removePlan(id);
-   applied=await vscode.workspace.applyEdit(edit);
+   try{applied=await vscode.workspace.applyEdit(edit);}
+   finally{if(pair)applyingPackageRenames.delete(pair);}
   }
   return {state:applied?'applied':'rejected',title:plan.title,files:plan.documents.map(file=>file.uri),warnings:[...plan.warnings],
    resourceOperations:structuredClone(plan.resourceOperations),savedToDisk:false,
@@ -286,7 +335,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    const file=vscode.Uri.parse(value.uri).fsPath;
    if(value.kind==='create')return 'Create '+file;
    if(value.kind==='delete')return 'Delete '+file;
-   return 'Move '+path.basename(file)+' → '+vscode.Uri.parse(value.newUri).fsPath+
+   return (value.directory?'Rename package directory ':'Move ')+path.basename(file)+' → '+vscode.Uri.parse(value.newUri).fsPath+
     (value.binary?' (opaque binary, '+value.bytes+' bytes, SHA-256 '+value.resourceSha256+')':'');
   });
   const action=plan.kind==='source.format.java'||plan.kind==='source.format.kotlin'?'Apply Formatting':'Apply Refactoring';
@@ -313,6 +362,6 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   }catch(error){if(!closed)void vscode.window.showErrorMessage('Rocketbrain Java: '+error.message);}
  }));
  function tracked(fn){return (...args)=>{const work=fn(...args);operations.add(work);void work.finally(()=>operations.delete(work)).catch(()=>{});return work;};}
- const api={list:tracked(list),resolveAction:tracked(resolveAction),preview:tracked(preview),previewWorkspaceEdit:tracked(previewWorkspaceEdit),review:tracked(review),apply:tracked(apply),validate:tracked(validate),registerConstantPreparation,async dispose(){closed=true;prepareConstant=undefined;plans.clear();checkedPlans.clear();validators.clear();await Promise.allSettled([...operations]);for(const sub of subscriptions)sub.dispose();}};return api;
+ const api={list:tracked(list),resolveAction:tracked(resolveAction),preview:tracked(preview),previewWorkspaceEdit:tracked(previewWorkspaceEdit),review:tracked(review),apply:tracked(apply),validate:tracked(validate),registerConstantPreparation,isApplyingPackageRename,async dispose(){closed=true;prepareConstant=undefined;plans.clear();checkedPlans.clear();validators.clear();await Promise.allSettled([...operations]);for(const sub of subscriptions)sub.dispose();}};return api;
 }
 module.exports={registerJavaRefactoring,editedText};
