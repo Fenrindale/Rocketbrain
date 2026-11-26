@@ -57,7 +57,9 @@ async function runTraceChecks(api, vscode, checks, virtual) {
     vscode.debug.addBreakpoints(breakpoints);
     assert.equal(await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(source), {
       type: 'rocketbrain-java', request: 'launch', name, mainClass: fixture.mainClass, projectName: main.projectName,
-      args: [trace.fsPath], console: 'internalConsole', env
+      args: [trace.fsPath], console: 'internalConsole', env,
+      // The virtual task fixture uses the full observed Spring classpath on Windows.
+      ...(virtual && { shortenCommandLine: 'argfile' })
     }), true);
     const first = await until(() => events.find(event => event.event === 'stopped'), 30000);
     const session = sessions.get(first.sessionId);
