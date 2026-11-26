@@ -53,7 +53,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.python.typeServerHome", "rocketbrain.python.typeNodePath", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions", "rocketbrain.kubernetes.kubectlPath", "rocketbrain.kubernetes.helmPath"],
+      "restrictedConfigurations": ["rocketbrain.jupyter.pythonPath", "rocketbrain.python.path", "rocketbrain.python.typeServerHome", "rocketbrain.python.typeNodePath", "rocketbrain.vue.nodePath", "rocketbrain.vue.enableDefinitions", "rocketbrain.react.nodePath", "rocketbrain.react.enableProps", "rocketbrain.kubernetes.kubectlPath", "rocketbrain.kubernetes.helmPath"],
       "description": "The offline SQL demo works in Restricted Mode. Java project import and network database sessions require a trusted workspace."
     },
     "virtualWorkspaces": false
@@ -186,6 +186,7 @@
       { "command": "rocketbrain.python.startTypes", "title": "Start Python Type Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.python.stopTypes", "title": "Stop Python Type Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.vue.checkProject", "title": "Check Vue Project", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.react.checkProps", "title": "Check React Props", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == typescriptreact" },
       { "command": "rocketbrain.vue.startDevServer", "title": "Start Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.vue.stopDevServer", "title": "Stop Vue Dev Server", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.jupyter.create", "title": "New Python Notebook", "category": "Rocketbrain" },
@@ -2293,6 +2294,14 @@
         "rocketbrain.vue.enableDefinitions": {
           "type": "boolean", "default": false, "scope": "resource",
           "description": "Load the installed Vue compiler and TypeScript in an independent Node process when finding Vue template definitions in this trusted workspace."
+        },
+        "rocketbrain.react.nodePath": {
+          "type": "string", "default": "", "scope": "machine-overridable",
+          "description": "Absolute Node.js executable for the project-local React TypeScript analysis. An empty value uses PATH."
+        },
+        "rocketbrain.react.enableProps": {
+          "type": "boolean", "default": false, "scope": "resource",
+          "description": "Use project-local TypeScript for React prop completion and navigation in trusted TSX projects."
         },
         "rocketbrain.sql.analysis.resolutionScopes": {
           "type": "array",

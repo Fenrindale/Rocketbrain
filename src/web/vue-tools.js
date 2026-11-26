@@ -65,7 +65,7 @@ async function inspectVueProject(workspace, file) {
   throw Error('No local Vue project with a package.json Vue dependency was found.');
 }
 
-async function selectNode(explicit) {
+async function selectNode(explicit, setting='rocketbrain.vue.nodePath') {
   const name = process.platform === 'win32' ? 'node.exe' : 'node';
   const paths = explicit ? [explicit] : (process.env.PATH ?? '').split(path.delimiter)
     .filter(path.isAbsolute).map(folder => path.join(folder, name));
@@ -75,7 +75,7 @@ async function selectNode(explicit) {
       if (executable) return executable;
     }
   }
-  throw Error('Set rocketbrain.vue.nodePath to the absolute path of a standalone Node.js executable.');
+  throw Error('Set '+setting+' to the absolute path of a standalone Node.js executable.');
 }
 
 function childEnvironment() {
@@ -171,21 +171,21 @@ async function checkVueProject(project, node, { signal } = {}) {
   }
 }
 
-function workerCode() {
+function workerCode(worker) {
   return `process.once('message', input => {
-    (${vueWorker.toString()})(input).then(value => {
+    (${worker.toString()})(input).then(value => {
       process.send({ value }, () => { if (input.action !== 'serve' && process.connected) process.disconnect(); });
     }, () => { process.exitCode = 1; if (process.connected) process.disconnect(); });
   });`;
 }
 
-async function runWorker(project, node, input, signal) {
-  if (signal?.aborted) throw Error('Vue operation cancelled.');
-  const child = launch(node, ['-e', workerCode()], project.root, ['ignore', 'ignore', 'ignore', 'ipc']);
+async function runWorker(project, node, input, signal, {worker=vueWorker,label='Vue',timeoutMs}={}) {
+  if (signal?.aborted) throw Error(label+' operation cancelled.');
+  const child = launch(node, ['-e', workerCode(worker)], project.root, ['ignore', 'ignore', 'ignore', 'ipc']);
   const closed = new Promise(resolve => child.once('close', resolve));
   const serve = input.action === 'serve';
   const ready = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => finish(Error('Vue tooling did not respond in time.')), serve ? 25000 : 3500);
+    const timer = setTimeout(() => finish(Error(label+' tooling did not respond in time.')), timeoutMs ?? (serve ? 25000 : 3500));
     let settled = false;
     function finish(error, result) {
       if (settled) return;
@@ -196,13 +196,13 @@ async function runWorker(project, node, input, signal) {
       if (error) { child.kill(); reject(error); }
       else resolve(result);
     }
-    const abort = () => finish(Error('Vue operation cancelled.'));
+    const abort = () => finish(Error(label+' operation cancelled.'));
     const respond = message => finish(null, message?.value);
     signal?.addEventListener('abort', abort, { once: true });
-    child.once('error', () => finish(Error('Could not launch the project-local Vue tools.')));
-    child.once('close', () => finish(Error('The project-local Vue tools exited before responding.')));
+    child.once('error', () => finish(Error('Could not launch the project-local '+label+' tools.')));
+    child.once('close', () => finish(Error('The project-local '+label+' tools exited before responding.')));
     child.once('message', respond);
-    child.send({ ...input, root: project.root }, error => { if (error) finish(Error('Could not initialize the Vue tools.')); });
+    child.send({ ...input, root: project.root }, error => { if (error) finish(Error('Could not initialize the '+label+' tools.')); });
     if (signal?.aborted) abort();
   });
   return { ready, closed, stop: async () => {
@@ -235,4 +235,4 @@ async function startVueServer(project, node, { signal } = {}) {
   return { url: 'http://127.0.0.1:' + ready.port + ready.base, stop, closed };
 }
 
-module.exports = { inspectVueProject, selectNode, checkVueProject, parseVueDiagnostics, vueDefinition, startVueServer, inside };
+module.exports = { inspectVueProject, selectNode, checkVueProject, parseVueDiagnostics, vueDefinition, startVueServer, inside, runWorker };
