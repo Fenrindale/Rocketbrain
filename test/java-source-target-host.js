@@ -76,7 +76,8 @@ async function runJavaSourceTargetChecks(api, vscode, checks, { executeFromSourc
         await assert.rejects(service.runBuild(review.id), /Approve.*explicitly/u);
         await assert.rejects(fs.access(executionReceipt), { code: 'ENOENT' });
         assert.equal((await service.runBuild(review.id, { allowProjectExecution: true })).state, 'succeeded');
-        assert.ok((await fs.stat(executionReceipt)).size > 0);
+        // Maven can record an empty created-files list when JDT has already compiled the unit.
+        assert.equal((await fs.stat(executionReceipt)).isFile(), true);
         assert.equal((await fs.readFile(file)).readUInt32BE(0), 0xcafebabe);
         await assert.rejects(service.runBuild(review.id, { allowProjectExecution: true }), /already used/u);
         builds.push({ selector, task, compiledClass: output, executionReceipt: receipt });
