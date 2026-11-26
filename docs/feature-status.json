@@ -1,5 +1,5 @@
 {
-  "version": "0.172.0",
+  "version": "0.174.0",
   "asOf": "2026-11-27",
   "total": 216,
   "fullProductParityVerified": false,
@@ -5924,23 +5924,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "동일 서버에서 선택한 컬럼·인덱스·외래 키 변경과 기존 종속 뷰의 본문 변경을 검토한다. 임시 테이블과 뷰로 새 정의 및 하위 의존성을 확인하고, 선택하지 않은 컬럼의 값을 보존하며 원래 정의를 복구한다.",
+      "scope": "같은 스키마에서 컬럼·인덱스·외래 키와 기존 뷰의 변경을 선택한다. 컬럼의 이름을 매핑하고 이전 이름을 읽는 뷰의 새 참조를 검토하면서 기존 값을 유지한다. 선택한 테이블과 뷰를 함께 적용하고 원래 정의를 복구한다.",
       "remaining": [
         "별도 서버에 걸친 원자적 DDL과 임의 동적 SQL·사용자 정의 종속성은 남아 있다."
       ],
       "verification": {
-        "state": "v0.172-vendor-runtime-coverage",
+        "state": "v0.174-vendor-runtime-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring JDBC와 MySQL·MariaDB에서 선택한 테이블 타입과 뷰 조건을 함께 변경하고 하위 뷰의 결과를 확인했다. 선택하지 않은 값을 보존했고 새 세션에서 원래 뷰 정의와 조회 결과를 복구했다.",
+        "testedScope": "실제 Spring JDBC와 MySQL·MariaDB에서 컬럼 이름 및 뷰 참조를 함께 변경했다. 필요한 뷰가 선택에서 빠지면 적용 전에 거부했으며, 포함하지 않은 컬럼의 값과 영향 없는 뷰를 유지했다. 새 세션에서 원래 컬럼과 뷰를 복구했다.",
         "publicEvidence": [
-          "src/db/schema-rebuild-view.js",
+          "src/db/schema-mapped-view-references.js",
           "src/db/schema-recovery.js",
-          "src/db/schema-dependency-graph.js",
+          "src/db/schema-diff-vscode.js",
           "test/schema-selected-view.integration.test.js"
         ],
         "originalProductParityVerified": false
@@ -6328,8 +6328,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "6295fb8ae4f40a7959531343f45da9000c2dba920e9db44cc394c1090d4089e1",
-    "sourceManifestSha256": "b03660171e5b92a63cd804d3e517dd8bd86719bf274e732c31e7b429d73f6bba",
+    "vsixSha256": "8a310965507a6db05fd31319e01d59d00499c62a4f532bdcebfdaa0430d1b2e3",
+    "sourceManifestSha256": "ce4e4219bbfa5f3523bdfccd204c688b25171dda7f9badb568821524c2e0d487",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6345,12 +6345,12 @@
   "offline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "head": "006273d706d80e611699379e271cef144b1891de",
-    "run": 45892601595,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45892601595",
-    "tests": 2282,
+    "head": "ff97ed85e0ee339d0c937e047998562a57dd8106",
+    "run": 45894666479,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45894666479",
+    "tests": 2290,
     "suites": 0,
-    "pass": 2029,
+    "pass": 2037,
     "fail": 0,
     "cancelled": 0,
     "skipped": 253,

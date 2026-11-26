@@ -207,6 +207,7 @@ test('the selected rebuild command reviews a dependent view with its base table'
  h.vscode.window.showWarningMessage=async(_message,_options,action)=>acknowledge?action:undefined;
  h.vscode.window.showQuickPick=async(items,{title})=>{
   if(title==='Review Selected Schema Rebuild'||title==='Apply Reviewed Schema Rebuild')return items[0];
+  if(title==='Map a renamed column in people')return items.find(item=>item.label==='Do not map columns');
   assert.equal(title,'Select Individual Rebuild Changes');
   const view=items.find(item=>item.label==='one.recent_people');
   assert.equal(view.description,'Change view definition');
@@ -242,6 +243,76 @@ test('the selected rebuild command reviews a dependent view with its base table'
   acknowledge=true;
   assert.equal((await apply()).state,'applied');
   assert.equal(applied,1);
+ }finally{await h.api.dispose();}
+});
+
+test('the selected rebuild command forwards exact column mapping and all dependent view definitions',async()=>{
+ const {normalizeSnapshot}=require('../src/db/schema-diff');
+ const {projectSelectedRebuild}=require('../src/db/schema-rebuild-selection');
+ const {renderView}=require('../src/db/schema-dependency-graph');
+ const live=addColumn(fixture(),'legacy');
+ const header=name=>'CREATE ALGORITHM=UNDEFINED DEFINER=`fixture`@`localhost` SQL SECURITY DEFINER VIEW `'+name+'` AS ';
+ const body=(name,condition)=>'select `one`.`people`.`'+name+'` AS `label` from `one`.`people` where (`one`.`people`.`'+name+'` '+condition+')';
+ const views=[{name:'recent_people',condition:"<> 'legacy'"},{name:'visible_people',condition:'is not null'}];
+ const viewColumn={...live.tables[0].columns[1],name:'label',ordinal:1};
+ for(const {name,condition} of views){
+  live.tables.push({...live.tables[0],name,kind:'view',engine:null,charset:null,collation:null,rowFormat:null,
+   createSql:header(name)+body('legacy',condition),columns:[viewColumn],indexes:[]});
+ }
+ const current=normalizeSnapshot(live,{verifyFingerprint:false}),target=structuredClone(current);
+ target.tables[0].columns=target.tables[0].columns.filter(column=>column.name!=='legacy');
+ for(const {name,condition} of views)target.tables.find(table=>table.name===name).createSql=header(name)+body('new_note',condition);
+ const desired=addColumn(target,'new_note');
+ const requested=[],errors=[],opened=[];
+ let allIds,omittedId,includeAllViews=false;
+ const h=host(async()=>current,{prepareRebuild:async request=>{
+  requested.push(request.changeIds);
+  assert.deepEqual(request.tables,['people']);
+  assert.deepEqual(request.columnMappings,{people:[{from:'legacy',to:'new_note'}]});
+  assert.deepEqual(request.current,current);
+  assert.deepEqual(request.desired,desired);
+  if(!request.changeIds.includes(omittedId))throw Object.assign(Error('Select each dependent view that references a mapped source column.'),
+   {code:'ROCKETBRAIN_REBUILD_COLUMN_MAPPING'});
+  const projection=projectSelectedRebuild(request.current,request.desired,request.changeIds);
+  const plan=makePlan(request.current,projection.desired,{tables:request.tables,columnMappings:request.columnMappings});
+  plan.requiresDependencyChangeApproval=true;
+  for(const {before,after} of projection.selectedViews){
+   plan.sql+='\n'+renderView(after,plan.database)+';\n-- RECOVERY '+renderView(before,plan.database)+';';
+  }
+  return {plan,reviewId:plan.id,expiresAt:Date.now()+120000,connectionEpoch:3};
+ }});
+ h.vscode.Uri={parse:value=>({path:new URL(value).pathname})};
+ h.vscode.workspace.openTextDocument=async uri=>({uri});
+ h.vscode.window.showTextDocument=async document=>opened.push(document.uri);
+ h.vscode.window.showInformationMessage=async()=>{};
+ h.vscode.window.showErrorMessage=async message=>errors.push(message);
+ h.vscode.window.showQuickPick=async(items,{title})=>{
+  if(title==='Review Selected Schema Rebuild')return items[0];
+  if(title==='Map a renamed column in people')return items.find(item=>item.label==='legacy');
+  if(title==='Destination for people.legacy')return items.find(item=>item.label==='new_note');
+  assert.equal(title,'Select Individual Rebuild Changes');
+  assert.match(items.find(item=>item.label==='one.visible_people').detail,/every view that references a column you map/);
+  return includeAllViews?items:items.filter(item=>item.changeId!==omittedId);
+ };
+ try{
+  const comparison=await h.api.compare(desired);
+  allIds=comparison.changes.map(change=>change.id).sort();
+  assert.equal(allIds.length,4);
+  omittedId=comparison.changes.find(change=>change.kind==='change-view'&&change.object==='visible_people').id;
+  const review=h.commands.get('rocketbrain.schema.reviewSelectedRebuild');
+  await review();
+  assert.match(errors[0],/Select each dependent view that references a mapped source column/);
+  assert.equal(opened.length,0);
+  includeAllViews=true;
+  const plan=await review();
+  assert.deepEqual(requested,[allIds.filter(id=>id!==omittedId),allIds]);
+  assert.deepEqual(plan.selectedChanges.map(change=>change.id),allIds);
+  assert.equal(opened.length,1);
+  const sql=h.providers.get('rocketbrain-schema-compare').provideTextDocumentContent(opened[0]);
+  for(const {name,condition} of views){
+   assert.ok(sql.includes('VIEW `one`.`'+name+'` AS '+body('new_note',condition)));
+   assert.ok(sql.includes('VIEW `one`.`'+name+'` AS '+body('legacy',condition)));
+  }
  }finally{await h.api.dispose();}
 });
 

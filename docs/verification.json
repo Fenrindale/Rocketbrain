@@ -1,27 +1,27 @@
 {
-  "version": "0.172.0",
-  "verifiedAt": "2026-11-26T20:42:54.530Z",
+  "version": "0.174.0",
+  "verifiedAt": "2026-11-26T21:01:51.718Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.172.0.vsix",
-    "sha256": "6295fb8ae4f40a7959531343f45da9000c2dba920e9db44cc394c1090d4089e1",
-    "bytes": 4748213,
+    "name": "rocketbrain-0.174.0.vsix",
+    "sha256": "8a310965507a6db05fd31319e01d59d00499c62a4f532bdcebfdaa0430d1b2e3",
+    "bytes": 4750520,
     "files": 39
   },
   "source": {
-    "frozenPublicInputs": 3167,
-    "inputVectorSha256": "b03660171e5b92a63cd804d3e517dd8bd86719bf274e732c31e7b429d73f6bba",
+    "frozenPublicInputs": 3169,
+    "inputVectorSha256": "ce4e4219bbfa5f3523bdfccd204c688b25171dda7f9badb568821524c2e0d487",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "head": "006273d706d80e611699379e271cef144b1891de",
-    "run": 45892601595,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45892601595",
-    "tests": 2282,
+    "head": "ff97ed85e0ee339d0c937e047998562a57dd8106",
+    "run": 45894666479,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45894666479",
+    "tests": 2290,
     "suites": 0,
-    "pass": 2029,
+    "pass": 2037,
     "fail": 0,
     "cancelled": 0,
     "skipped": 253,
@@ -42,10 +42,10 @@
     }
   ],
   "vendorRuntime": {
-    "selectedSchemaViews": {
-      "scope": "Spring JDBC and real MySQL/MariaDB, exact table and existing same-schema dependent view selection, a retained nested view, staged-out rows preserved, stale/tampered refusal and fresh-session recovery.",
-      "packageSource": "006273d706d80e611699379e271cef144b1891de",
-      "logSha256": "16656f58f3adfc29dcf98029cdff2d3f1fc3267df5996b1df1ff51b163c5cfb6",
+    "mappedSchemaViews": {
+      "scope": "Spring JDBC and real MySQL/MariaDB, explicit same-table mapped column rename, selected and unselected dependent views, retained values, stale/tampered refusal and fresh-session recovery.",
+      "packageSource": "ff97ed85e0ee339d0c937e047998562a57dd8106",
+      "logSha256": "dc85659edaa29ca482ae87dc5a2de08225c74d5175810322142beb2f03af0486",
       "results": [
         {
           "engine": "mysql",
@@ -71,9 +71,12 @@
           "tamperedSelectedViewRefused": true,
           "selectedReviewImmutable": true,
           "atomicAcrossTables": false,
-          "testsPassed": 7,
+          "valuesMappedThroughExplicitColumnRename": true,
+          "omittedMappedViewRefused": true,
+          "unaffectedDirectViewUnchanged": true,
+          "testsPassed": 8,
           "freshSessionRestored": true,
-          "receiptSha256": "69eb58453e936bd1d4f3b867c9c8b08be0071cd5045bebd21dbe9b5dcfc7eb53"
+          "receiptSha256": "647f52cc5da7b3c39e44342a9e21ed40c7849202b1e2ccaed74cbd4eff66c18f"
         },
         {
           "engine": "mariadb",
@@ -99,24 +102,27 @@
           "tamperedSelectedViewRefused": true,
           "selectedReviewImmutable": true,
           "atomicAcrossTables": false,
-          "testsPassed": 7,
+          "valuesMappedThroughExplicitColumnRename": true,
+          "omittedMappedViewRefused": true,
+          "unaffectedDirectViewUnchanged": true,
+          "testsPassed": 8,
           "freshSessionRestored": true,
-          "receiptSha256": "a10fb4a9d74bfbba21759c54eae9a932e85c9b47d639140ceebef637abad7987"
+          "receiptSha256": "f1fd0dd0b4b2beb67a9e4645433e57e099db4c97f239666bd851e553f3add0d2"
         }
       ]
     }
   },
   "newlyVerified": {
     "DG-083": {
-      "scope": "실제 Spring JDBC와 MySQL·MariaDB에서 선택한 테이블 타입과 뷰 조건을 함께 변경하고 하위 뷰의 결과를 확인했다. 선택하지 않은 값을 보존했고 새 세션에서 원래 뷰 정의와 조회 결과를 복구했다.",
+      "scope": "실제 Spring JDBC와 MySQL·MariaDB에서 컬럼 이름 및 뷰 참조를 함께 변경했다. 필요한 뷰가 선택에서 빠지면 적용 전에 거부했으며, 포함하지 않은 컬럼의 값과 영향 없는 뷰를 유지했다. 새 세션에서 원래 컬럼과 뷰를 복구했다.",
       "runtimeGroups": [
-        "selectedSchemaViews"
+        "mappedSchemaViews"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 736,
+    "sourceCorrespondences": 737,
     "sourceConfidence": "inferred",
     "archiveEntries": 39,
     "archiveConfidence": "observed"
@@ -214,7 +220,7 @@
   },
   "limits": [
     "216개 기능의 기존 가중치를 유지했다.",
-    "선택 뷰는 같은 스키마의 기존 객체이며, 참조 관계·출력 이름·소유자·보안 설정을 유지한다. 직접 부여된 객체별 권한도 검토한다.",
+    "매핑한 컬럼과 뷰는 같은 스키마에서 검토한다. 기존 이름을 읽는 뷰에는 새 이름을 참조하는 정의가 필요하다. 뷰의 출력 이름·소유자·보안 설정은 유지한다.",
     "별도 MySQL·MariaDB 서버 사이의 원자적 DDL과 원본 제품 전체 창 배치는 현재 서버 및 VS Code 호스트의 구조 제약을 받는다."
   ],
   "next": [
