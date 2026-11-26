@@ -11,6 +11,7 @@ const { startKmpJvmDebug } = require('./kmp-jvm-debug');
 const { jsDebugSelection,snapshotJsInputs } = require('./kmp-js-build');
 const { nodeExecutable } = require('./kmp-js-inspector');
 const { registerKotlinJsDebug } = require('./kmp-js-debug-vscode');
+const { registerKotlinNativeDebug } = require('./kmp-native-debug-vscode');
 const { DEBUG_TYPE,KMP_DEBUG_MARKER:debugMarker,processAttachTarget } = require('./debug');
 const { KOTLIN_LINE_BUILDS } = require('./debug-runtime');
 const { definitionForKmp } = require('./kmp-sources');
@@ -41,6 +42,7 @@ function registerKmpWorkbench(vscode,java) {
   const previewImages=new WeakMap();
   const pendingDebug=new Map(), output=vscode.window.createOutputChannel('Rocketbrain Kotlin JVM Debug');
   const jsDebug=registerKotlinJsDebug(vscode), reviewedJs=new Map();
+  const nativeDebug=registerKotlinNativeDebug(vscode);
   subscriptions.push(output);
   let disposed=false, closing, active, previewPanel, visiblePreview, ownedDebug;
 
@@ -348,6 +350,7 @@ function registerKmpWorkbench(vscode,java) {
     record?.controller.abort();
     await finishDebug(ownedDebug);
     await jsDebug.stop();
+    await nativeDebug.stop();
     await runner.stop();
     if (record?.work) await record.work.catch(()=>{});
     return {state:'stopped'};
@@ -479,12 +482,12 @@ function registerKmpWorkbench(vscode,java) {
   register(COMMANDS.stop,stop);
 
   return {inspect,compile:options=>execute(options,'compile'),test:options=>execute(options,'test'),run:options=>execute(options,'run'),
-    debugJvm,prepareJsDebug,debugJs,definition,composeCandidates,preview,showComposePreview,refreshCompose,stop,dispose() {
+    debugJvm,prepareJsDebug,debugJs,debugNative:nativeDebug.start,definition,composeCandidates,preview,showComposePreview,refreshCompose,stop,dispose() {
       if (closing) return closing;
       disposed=true;
       closing=(async () => {
         try {await stop();await runner.dispose();}
-        finally {await jsDebug.dispose();previewPanel?.dispose();for (const item of subscriptions) item.dispose();}
+        finally {await Promise.all([jsDebug.dispose(),nativeDebug.dispose()]);previewPanel?.dispose();for (const item of subscriptions) item.dispose();}
       })();
       return closing;
     }};

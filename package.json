@@ -39,6 +39,7 @@
     "onDebug:rocketbrain-python",
     "onDebug:rocketbrain-scala",
     "onDebug:rocketbrain-kotlin-js",
+    "onDebug:rocketbrain-kotlin-native",
     "workspaceContains:**/pom.xml",
     "workspaceContains:**/build.gradle",
     "workspaceContains:**/build.gradle.kts",
@@ -256,6 +257,7 @@
       { "command": "rocketbrain.kotlin.multiplatform.run", "title": "Run Kotlin Multiplatform Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.debugJvm", "title": "Debug Kotlin Multiplatform JVM Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.debugJs", "title": "Debug Kotlin Multiplatform JS Node Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.multiplatform.debugNative", "title": "Debug Kotlin/Native Executable", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.definition", "title": "Open Kotlin Expect or Actual Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.kotlin.multiplatform.stop", "title": "Stop Kotlin Multiplatform Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.previewCompose", "title": "Preview Kotlin Compose", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == kotlin" },
@@ -2078,6 +2080,11 @@
         "languages": ["kotlin"]
       },
       {
+        "type": "rocketbrain-kotlin-native",
+        "label": "Rocketbrain Kotlin/Native (Linux x64)",
+        "languages": ["kotlin"]
+      },
+      {
         "type": "rocketbrain-scala",
         "label": "Rocketbrain Scala (sbt)",
         "languages": ["scala"]
@@ -3104,6 +3111,12 @@
           "default": "",
           "scope": "machine",
           "description": "Optional standalone Node.js directory prepended to the Kotlin Gradle task environment when a project uses a system Node.js."
+        },
+        "rocketbrain.kotlin.nativeGdbPath": {
+          "type": "string",
+          "default": "/usr/bin/gdb",
+          "scope": "machine",
+          "description": "Absolute path to the system GDB used for reviewed Kotlin/Native Linux x64 launches."
         },
         "rocketbrain.spring.initializr.endpoint": {
           "type": "string",
