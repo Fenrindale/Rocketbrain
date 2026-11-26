@@ -10,7 +10,8 @@ const hooks = Object.freeze({
   workspaceKeyboardProfile: ['keyboard-profile-host', 'runKeyboardProfileActivationChecks'],
   javaJpmsServicePackageMove: ['java-jpms-service-package-move-host', 'runServicePackageMoveChecks'],
   constructorSafeDelete: ['java-constructor-safe-delete-host', 'runJavaConstructorSafeDeleteChecks'],
-  javaWorkspaceIndex: ['java-workspace-index-host', 'runJavaWorkspaceIndexChecks']
+  javaWorkspaceIndex: ['java-workspace-index-host', 'runJavaWorkspaceIndexChecks'],
+  springBootServletTrace: ['spring-boot-servlet-trace-host', 'runSpringBootServletTraceChecks']
 });
 
 function selectGroups(value) {
