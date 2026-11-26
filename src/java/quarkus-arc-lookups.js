@@ -63,6 +63,7 @@ function normalizeArcLookups(raw){
 }
 
 function sourceTypeDescriptor(type,parsed){
+  if(type.raw==='void')return 'V';
   const match=/^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)((?:\[\]){0,8})$/u.exec(type.raw);
   if(!match)return;
   const [,name,array]=match, dimensions='['.repeat(array.length/2);
@@ -82,7 +83,7 @@ function sourceTypeDescriptor(type,parsed){
   return resolved?dimensions+'L'+resolved.replaceAll('.','/')+';':undefined;
 }
 
-function arcProducerSource(file,target){
+function arcDeclaration(file,target,requiredAnnotation){
   if(typeof file?.text!=='string'||Buffer.byteLength(file.text)>262144||!target||!qualified(target.owner)||
       typeof target.member!=='string'||!memberName.test(target.member)||!['method','field'].includes(target.kind))return;
   const lexical=lexJava(file.text);
@@ -98,7 +99,8 @@ function arcProducerSource(file,target){
   });
   if(owners.length!==1)return;
   const declarations=(target.kind==='method'?owners[0].methods:owners[0].fields).filter(member=>{
-    if(member.constructor===true||member.name!==target.member||!member.annotations.some(annotation=>annotation.name===PRODUCES))return false;
+    if(member.constructor===true||member.name!==target.member||
+        requiredAnnotation&&!member.annotations.some(annotation=>annotation.name===requiredAnnotation))return false;
     const symbols={...parsed,types};
     const type=sourceTypeDescriptor(member.type,symbols);
     if(!type)return false;
@@ -114,4 +116,7 @@ function arcProducerSource(file,target){
   return {name,start,end,sameSourceRevisionVerified:false};
 }
 
-module.exports={normalizeArcLookups,arcProducerSource};
+const arcProducerSource=(file,target)=>arcDeclaration(file,target,PRODUCES);
+const arcObservedMethodSource=(file,target,annotation)=>arcDeclaration(file,{...target,kind:'method'},annotation);
+
+module.exports={normalizeArcLookups,arcProducerSource,arcObservedMethodSource};
