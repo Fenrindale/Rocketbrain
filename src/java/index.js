@@ -261,7 +261,7 @@ function registerJavaFeatures(context, vscode) {
   api.typeRename=require('./java-type-rename-vscode').registerJavaTypeRename(vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime,synchronizeFiles:synchronizeRefactoringFiles});
   api.memberMove=require('./member-move').registerJavaMemberMove(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime,synchronizeFiles:synchronizeRefactoringFiles});
   api.changeSignature=require('./change-signature').registerJavaChangeSignature(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,getJavaHome:()=>api.getState().javaHome});
-  api.safeDelete=require('./safe-delete').registerJavaSafeDelete(context,vscode,{request:refactoringRequest,refactoring:api.refactoring});
+  api.safeDelete=require('./safe-delete').registerJavaSafeDelete(context,vscode,{request:refactoringRequest,refactoring:api.refactoring,runtime:refactoringRuntime});
   subscriptions.push(api.move,api.memberMove,api.changeSignature,api.safeDelete);
   api.workbench=require('./workbench').registerJavaWorkbench(context,vscode,api,output);
   subscriptions.push(api.workbench);

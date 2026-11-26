@@ -400,6 +400,7 @@ public final class SignatureInspector {
                 !(args.length == 7 && args[4].equals("dataflow")) &&
                 !(args.length == 9 && args[4].equals("callFlow")) &&
                 !(args.length == 6 && args[4].equals("conversion")) &&
+                !(args.length == 6 && args[4].equals("binaryBeanLifecycle")) &&
                 !(args.length == 9 && args[4].equals("constant")) &&
                 !(args.length == 9 && args[4].equals("extraction")) &&
                 !(args.length == 10 && args[4].equals("methodInline")) &&
@@ -455,6 +456,10 @@ public final class SignatureInspector {
                     else if (args[4].equals("advisoryCalls")) {
                         report.put("advisoryCalls",new AdvisoryCalls(trees,elements,types,files,classpath,
                             Arrays.asList(args).subList(5,args.length)).inspect(units));
+                    }
+                    else if (args[4].equals("binaryBeanLifecycle")) {
+                        report.put("binaryBeanLifecycle", new BinaryBeanLifecycle(trees, elements, files, classpath)
+                            .inspect(units, args[5]));
                     }
                     else if (args[4].equals("hierarchy")) report.put("hierarchy",new HierarchyInspector(task).inspect(units,byUri));
                     else if (args[4].equals("dataflow")) report.put("dataFlow",dataFlow(units,trees,byUri,args[5],Integer.parseInt(args[6])));
