@@ -110,7 +110,13 @@ function createMicronautNative({ log = () => {} } = {}) {
       {cwd:project.root,log,signal:operation.controller.signal},framework);
       operation.process=running;
       void running.done.then(()=>operation.controller.abort());
-      const proof=await waitForOwnedListener({pid:running.child.pid,port,cancellation:operation.controller.signal,timeoutMs:30000});
+      const proof=await waitForOwnedListener({pid:running.child.pid,port,cancellation:operation.controller.signal,timeoutMs:30000})
+        .catch(async error=>{
+          if (!running.ended || cancelled(cancellation)) throw error;
+          const exit=await running.done;
+          const status=Number.isInteger(exit.code) ? ' (exit '+exit.code+')' : '';
+          throw fail('The Micronaut native executable exited before opening its listener'+status+'. Open the Micronaut output for details.');
+        });
       if (!proof.verified || proof.pid!==running.child.pid || proof.address!=='127.0.0.1' || running.ended) {
         throw fail('The Micronaut native HTTP listener is not owned by this executable.');
       }

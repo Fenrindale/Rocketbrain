@@ -44,6 +44,9 @@ public class DatabaseProbe {
             if (!result.next()) throw new SQLException("No fixture aggregate returned");
             return System.getProperty("org.graalvm.nativeimage.imagecode", "jvm") + "|" + result.getInt(1)
                     + "|" + result.getInt(2) + "|" + result.getString(3);
+        } catch (SQLException | RuntimeException failure) {
+            failure.printStackTrace(System.err);
+            throw failure;
         }
     }
 }
