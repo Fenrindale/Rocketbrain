@@ -91,7 +91,10 @@ async function runGradleCompositeTaskChecks(api, vscode, checks) {
   const workbench = api.java.workbench;
   await importedSpring(api, root);
   const evidence = await verify(root, {
-    discover: options => workbench.discoverTasks(options),
+    async discover(options) {
+      if (options.allowProjectExecution) await importedSpring(api, root);
+      return workbench.discoverTasks(options);
+    },
     run: options => workbench.runTask(options),
     checkTree(exact) {
       const project = workbench.getTreeChildren().find(item => item.id === exact.projectId);
