@@ -87,6 +87,17 @@ const managerLabels={returned:'Returned an authentication result',rejected:'Rais
 const providerLabels={skipped:'Skipped · supports returned false',abstained:'Abstained · returned null',returned:'Returned an authentication result',
   rejected:'Raised an authentication rejection',error:'Raised an application or authentication service error',
   'support-error':'Supports check raised an exception',unobserved:'Provider result unavailable'};
+const parentOutcomes={...managerLabels,empty:'Returned null','provider-not-found':'Raised provider not found'};
+const parentDispositions={propagated:'Propagated by the calling manager',unused:'The calling manager retained another outcome',
+  'ignored-not-found':'Ignored by the calling manager',unobserved:'Propagation unavailable'};
+function parentDecision(manager){
+  if(!manager.delegated)return '';
+  const details=manager.parentCall, type=safe(manager.parentType||'Parent type unavailable');
+  if(!details)return '<p>Delegated to '+type+' · Parent internals unavailable</p>';
+  const resolved=details.childIndex?' · Invocation '+details.childIndex:' · Parent internals unavailable';
+  return '<p>Delegated to '+type+(details.managerId?' · '+safe(details.managerId):'')+resolved+'<br>'+
+    safe(parentOutcomes[details.outcome])+' · '+safe(parentDispositions[details.disposition])+'</p>';
+}
 function renderAuthenticationDecisions(report){
   const nonce=randomBytes(16).toString('base64');
   const samples=report.traces.filter(trace=>trace.authenticationManagers?.length || trace.authenticationCoverage==='partial');
@@ -99,10 +110,11 @@ function renderAuthenticationDecisions(report){
   const sections=samples.map((trace,index)=>{
     const managers=trace.authenticationManagers.map(manager=>{
       const providers=manager.providers.map(provider=>'<tr><td>'+provider.index+'</td><td>'+safe(provider.providerType)+'</td><td>'+
-        safe(providerLabels[provider.outcome])+(manager.selectedProvider===provider.index?' · Returned by manager':'')+'</td></tr>').join('');
+        safe(providerLabels[provider.outcome])+(manager.selectedProvider===provider.index?' · Returned by manager':'')+
+        (manager.failureProvider===provider.index?' · Failure retained by manager':'')+'</td></tr>').join('');
       return '<section><h2>'+safe(manager.managerId)+' · '+safe(manager.managerType)+' · Invocation '+manager.index+'</h2><p>'+
-        safe(managerLabels[manager.outcome])+(manager.delegated?' · Delegated to '+safe(manager.parentType||'an unspecified parent'):'')+
-        '</p>'+(providers?'<table><thead><tr><th>Step</th><th>Provider</th><th>Outcome</th></tr></thead><tbody>'+providers+'</tbody></table>':
+        safe(managerLabels[manager.outcome])+'</p>'+parentDecision(manager)+
+        (providers?'<table><thead><tr><th>Step</th><th>Provider</th><th>Outcome</th></tr></thead><tbody>'+providers+'</tbody></table>':
           '<p>No provider steps captured.</p>')+'</section>';
     }).join('');
     return '<details'+(index===0?' open':'')+'><summary>Request '+trace.id+' · '+safe(trace.method)+' · '+

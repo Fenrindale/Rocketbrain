@@ -128,11 +128,13 @@ Quarkus 설정 탐색은 중첩 `ConfigMapping` 인터페이스와 다른 소스
 
 **Debug Jakarta WAR on Tomcat**은 Rocketbrain Java 디버거로 관리 중인 로컬 Tomcat JVM에 연결합니다. 배포에는 선택한 WAR의 별도 임시 복사본과 루프백 포트를 사용합니다. 이 흐름은 로컬 Tomcat 11의 Jakarta Servlet·JSP WAR를 지원합니다.
 
-### Micronaut Maven
+### Micronaut Maven과 Gradle
 
-Micronaut 5 Maven 플랫폼 부모를 선언한 JAR 모듈을 **Java Projects**로 가져옵니다. **Inspect Micronaut Application**에서 타입이 지정된 설정 키, 환경별 설정 파일, HTTP 경로와 생성자 연결의 소스를 엽니다. `application*.properties`에서 키 완성과 선언 이동을 사용하고, 단일 문서 YAML의 스칼라 키에서 선언으로 이동합니다.
+Micronaut 5 Maven JAR 모듈이나 `io.micronaut.application`과 `application.mainClass`를 명시한 Gradle 앱을 **Java Projects**로 가져옵니다. **Inspect Micronaut Application**에서 타입이 지정된 설정 키, 환경별 설정 파일, HTTP 경로와 생성자 연결의 소스를 엽니다. `application*.properties`에서 키 완성과 선언 이동을 사용하고, 단일 문서 YAML의 스칼라 키에서 선언으로 이동합니다.
 
-**Run Micronaut Tests**는 Maven 테스트를 실행합니다. **Build and Run Micronaut**는 선택한 환경으로 실행 가능 JAR를 패키징하고 루프백 주소를 표시합니다. **Stop Micronaut Application**으로 실행 중인 JVM을 종료합니다. 소스 변경을 반영하려면 다시 빌드하고 실행합니다.
+**Run Micronaut Tests**는 가져온 프로젝트의 테스트 작업을 실행합니다. **Build Micronaut Application**은 Maven JAR 또는 Gradle 표준 `installDist` 배포 폴더를 만듭니다. **Build and Run Micronaut**는 선택한 환경으로 독립 JVM을 시작하고 루프백 주소를 표시합니다. Gradle에서는 생성된 표준 런처에서 클래스패스 순서를 읽고 실제 라이브러리를 임시 위치에 복사해 실행합니다. **Stop Micronaut Application**으로 JVM을 종료합니다. 소스 변경은 다시 빌드하고 실행해 반영합니다. [Micronaut Gradle 배포](https://micronaut-projects.github.io/micronaut-gradle-plugin/latest/#_packaging_the_application)
+
+Gradle 앱은 표준 이름의 클래스패스 배포판을 사용하며 JVM에는 선택한 환경과 로컬 서버 설정을 적용합니다. Micronaut 플랫폼 5.2.8, Gradle 플러그인 5.0.2 및 Gradle 9.7.1로 검증했습니다. Windows에서 Gradle 사용자 홈 경로에 비ASCII 문자가 있으면 위의 Gradle 9.7 이상 설정을 적용합니다.
 
 ### Scala · sbt
 
@@ -156,7 +158,7 @@ Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를
 
 ### Kotlin JVM 편집
 
-[MIT 라이선스의 standalone ktlsp 1.4.0-rc1](https://codeberg.org/winlogon/ktlsp/releases/tag/v1.4.0-rc1)을 압축 해제한 `server` 디렉터리를 `rocketbrain.kotlinEditor.serverHome`에 지정합니다. 독립 JDK 21 이상과 Gradle 프로젝트를 사용합니다. 로컬 `.kt` 파일을 열면 값과 멤버 자동 완성, 타입 표시, 선언 이동 및 컴파일 진단을 사용할 수 있습니다. **Stop Kotlin Language Support**로 세션을 종료하고 **Show Kotlin Language Server Output**에서 서버 출력을 확인합니다.
+[MIT 라이선스의 standalone ktlsp 1.4.0-rc1](https://codeberg.org/winlogon/ktlsp/releases/tag/v1.4.0-rc1)을 압축 해제한 `server` 디렉터리를 `rocketbrain.kotlinEditor.serverHome`에 지정합니다. 독립 JDK 21 이상을 사용합니다. Gradle 프로젝트는 로컬 Kotlin 파일을 열어 시작합니다. Maven은 독립 Apache Maven 경로를 `rocketbrain.java.mavenHome`에 지정한 뒤, 단일 Maven 모듈의 `.kt` 파일에서 **Start Kotlin Language Support**를 실행합니다. 선택한 POM에서 Maven 의존성을 읽어 언어 서버에 연결합니다. Maven 리액터의 앱 모듈에 형제 모듈 의존성이 있으면 앱의 `.kt` 파일에서 **Start Kotlin Maven Reactor**를 선택합니다. 표시된 의존 모듈을 승인하면 해당 JAR을 편집 세션 전용 Maven 저장소에 빌드하고, 앱 모듈의 자동완성과 타입 진단에 사용합니다. 의존 소스나 POM이 바뀌면 다시 준비할 수 있습니다. 로컬 `.kt` 파일을 열면 값과 멤버 자동 완성, 타입 표시, 선언 이동 및 컴파일 진단을 사용할 수 있습니다. **Stop Kotlin Language Support**로 세션을 종료하고 **Show Kotlin Language Server Output**에서 서버 출력을 확인합니다.
 
 검증한 릴리스 ZIP의 SHA-256은 `27d33f2879d12076174741488721896098e8494f5d906f99ef1c85d6159d42b7`입니다. Windows에서는 Unicode 프로젝트 경로의 진단을 위해 임시 호환 JAR를 생성합니다. 실행 전 서버와 컴파일러 JAR의 SHA-256을 확인합니다.
 

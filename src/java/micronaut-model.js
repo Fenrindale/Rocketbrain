@@ -3,15 +3,18 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { parseJavaFile,literal,rangeAt } = require('../spring/java');
+const { parseJavaFile,lexJava,matching,literal,rangeAt } = require('../spring/java');
 const { parseProperties,parseYaml } = require('../spring/configuration');
-const { pomFacts } = require('./dependency-builds');
-const { inside,fail,cancelled,LIMITS } = require('./workbench-model');
+const { pomFacts,gradleStatements } = require('./dependency-builds');
+const { inside,fail,cancelled,LIMITS,buildFingerprint } = require('./workbench-model');
 
 const KEY=/^[a-z][a-z0-9_-]*(?:\.[a-z0-9][a-z0-9_-]*)*$/;
 const PART=/^[a-z][a-z0-9-]{0,39}$/;
 const CONFIG_FILE=/^application(?:-([a-z][a-z0-9-]{0,39}))?\.(properties|ya?ml)$/;
 const JAR_NAME=/^[A-Za-z0-9][A-Za-z0-9._-]{0,160}$/;
+const RELEASE=/^5\.\d+\.\d+$/u;
+const MAIN_CLASS=/^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*){0,19}$/u;
+const GRADLE_PLUGIN='io.micronaut.application';
 const PACKAGE_CONFIG='io.micronaut.context.annotation.';
 const HTTP='io.micronaut.http.annotation.';
 const VERBS=['Get','Post','Put','Delete','Patch','Head','Options','Trace'];
@@ -23,7 +26,7 @@ const normalize=text => text.replace(/\r\n/g,'\n');
 function readPhysical(project,file,limit=512*1024) {
   const real=fs.realpathSync(file), stat=fs.lstatSync(file);
   if (path.relative(file,real) || !inside(project.root,real) || !stat.isFile() || stat.isSymbolicLink() || stat.size>limit) {
-    throw fail('Micronaut analysis uses bounded physical files inside the selected Maven project.');
+    throw fail('Micronaut analysis uses bounded physical files inside the selected project.');
   }
   const bytes=fs.readFileSync(real);
   if (bytes.length>limit) throw fail('A Micronaut source file exceeds its analysis limit.');
@@ -35,10 +38,72 @@ function micronautMavenProject(project) {
   const model=pomFacts(readPhysical(project,path.join(project.root,'pom.xml'),LIMITS.fileBytes));
   const parent=model.parent;
   if (model.packaging!=='jar' || parent?.group!=='io.micronaut.platform' || parent.artifact!=='micronaut-parent' ||
-      !/^5\.\d+\.\d+$/.test(parent.version)) throw fail('Use a JAR module with a literal Micronaut 5 Maven platform parent.');
+      !RELEASE.test(parent.version)) throw fail('Use a JAR module with a literal Micronaut 5 Maven platform parent.');
   const name=model.finalName || (model.gav.artifact && model.gav.version && model.gav.artifact+'-'+model.gav.version);
   if (!JAR_NAME.test(name || '')) throw fail('Use a literal Maven artifact name and version or finalName.');
   return {platformVersion:parent.version,jarName:name+'.jar'};
+}
+
+function gradleScript(project,names,required){
+  const files=names.map(name=>path.join(project.root,name)).filter(file=>fs.existsSync(file));
+  if(files.length>1||required&&!files.length)throw fail('Choose one saved Micronaut Gradle build or settings script.');
+  if(!files.length)return [];
+  const {text}=readPhysical(project,files[0]);
+  const {tokens,issues}=lexJava(text);
+  if(issues.length)throw fail('Use literal Micronaut Gradle application and plugin declarations.');
+  return gradleStatements(text,tokens,text.length).map(tokens=>({tokens,text}));
+}
+
+function block(script,name){
+  const hits=script.filter(({tokens})=>tokens[0]?.text===name&&tokens[1]?.text==='{');
+  if(hits.length!==1)throw fail('Choose a Micronaut Gradle project with one top-level '+name+' block.');
+  const {tokens,text}=hits[0], end=matching(tokens,1);
+  if(end!==tokens.length-1)throw fail('Use a bounded '+name+' block in the saved Micronaut Gradle script.');
+  return gradleStatements(text,tokens.slice(2,end),tokens[end].start);
+}
+
+function stringArgument(statement,at){
+  const grouped=statement[at]?.text==='(';
+  const token=statement[at+(grouped?1:0)];
+  if(!['char','string'].includes(token?.kind)||token.value===null||
+      grouped&&statement[at+2]?.text!==')')return undefined;
+  return {value:token.value,next:at+(grouped?3:1)};
+}
+
+function micronautGradleProject(project){
+  const script=gradleScript(project,['build.gradle','build.gradle.kts'],true);
+  const matches=block(script,'plugins').filter(tokens=>tokens[0]?.text==='id'&&stringArgument(tokens,1)?.value===GRADLE_PLUGIN);
+  const plugin=matches[0], marker=plugin&&stringArgument(plugin,1);
+  const version=marker&&plugin[marker.next]?.text==='version'&&stringArgument(plugin,marker.next+1);
+  if(matches.length!==1||!version||version.next!==plugin.length||!RELEASE.test(version.value)){
+    throw fail('Declare one applied Micronaut 5 application Gradle plugin with a literal version.');
+  }
+  const app=block(script,'application');
+  const declarations=app.filter(tokens=>tokens[0]?.text==='mainClass');
+  const setting=declarations[0], expression=setting?.slice(1,4).map(token=>token.text).join('');
+  const main=setting&&(setting[1]?.text==='='?stringArgument(setting,2):
+    expression==='.set('?stringArgument(setting,3):undefined);
+  if(declarations.length!==1||!main||main.next!==setting.length||!MAIN_CLASS.test(main.value)){
+    throw fail('Declare one literal mainClass in the Micronaut Gradle application block.');
+  }
+  const settings=gradleScript(project,['settings.gradle','settings.gradle.kts'],false)
+    .map(entry=>entry.tokens).filter(tokens=>tokens[0]?.text==='rootProject');
+  const root= settings[0];
+  const rootName=root?.slice(0,4).map(token=>token.text).join('')==='rootProject.name='?stringArgument(root,4):undefined;
+  const name=rootName?.value??path.basename(project.root);
+  if(settings.length>1||settings.length&&(!rootName||rootName.next!==root.length)||!JAR_NAME.test(name)){
+    throw fail('Use one literal Gradle root name for the standard Micronaut distribution.');
+  }
+  const properties=path.join(project.root,'gradle.properties');
+  const versions=fs.existsSync(properties)?readPhysical(project,properties).text.split('\n')
+    .filter(line=>/^\s*micronautVersion\b/u.test(line)).map(line=>/^\s*micronautVersion\s*=\s*(5\.\d+\.\d+)\s*$/u.exec(line)?.[1]):[];
+  if(versions.length>1||versions.some(value=>!value))throw fail('Use one literal Micronaut 5 platform version when it is declared in gradle.properties.');
+  return {tool:'gradle',plugin:GRADLE_PLUGIN,pluginVersion:version.value,platformVersion:versions[0],
+    mainClass:main.value,distribution:name,buildFingerprint:buildFingerprint(project.root)};
+}
+
+function micronautProject(project){
+  return project?.tool==='gradle'?micronautGradleProject(project):{tool:'maven',...micronautMavenProject(project)};
 }
 
 function resourceProfile(name) {return CONFIG_FILE.exec(name)?.[1] || '';}
@@ -126,7 +191,7 @@ function modelMicronaut(javaSources,configurationSources) {
 }
 
 function inspectMicronautProject(project,cancellation) {
-  const build=micronautMavenProject(project), java=[], configuration=[];
+  const build=micronautProject(project), java=[], configuration=[];
   const sourceRoot=path.join(project.root,'src/main/java'), resources=path.join(project.root,'src/main/resources');
   let examined=0,bytes=0;
   function add(target,file) {
@@ -157,4 +222,4 @@ function inspectMicronautProject(project,cancellation) {
   return {...build,...modelMicronaut(java,configuration),projectUri:project.uri,resources};
 }
 
-module.exports = { modelMicronaut,inspectMicronautProject,micronautMavenProject,CONFIG_FILE,PART };
+module.exports = { modelMicronaut,inspectMicronautProject,micronautMavenProject,micronautProject,CONFIG_FILE,PART };

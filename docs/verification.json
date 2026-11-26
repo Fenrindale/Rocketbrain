@@ -1,28 +1,28 @@
 {
-  "version": "0.132.0",
-  "verifiedAt": "2026-11-26T08:02:11.638Z",
+  "version": "0.134.0",
+  "verifiedAt": "2026-11-26T09:03:52.234Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.132.0.vsix",
-    "sha256": "458a35fc0e6010ffd8945ec81757a9ba0e244dd589d39e5ff9d51e747323e429",
-    "bytes": 4346251,
-    "files": 26
+    "name": "rocketbrain-0.134.0.vsix",
+    "sha256": "f1171f6260f6c2134e1f06cc1ecd75dc5be4e8f6d1134006fa775eb074901caf",
+    "bytes": 4373477,
+    "files": 29
   },
   "source": {
-    "frozenPublicInputs": 2731,
-    "inputVectorSha256": "e789a31b42cd4d23f9f0dbe1fdf12d5f536816a6b5183a69763bfd9d52f024d5",
+    "frozenPublicInputs": 2781,
+    "inputVectorSha256": "4d78a09a8b6bf30b333f5bdb3d6db32ee1d565dc2e2b1884fe47c7b4dd9f9d15",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45777261462",
-    "tests": 2068,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45786718712",
+    "tests": 2085,
     "suites": 0,
-    "pass": 1859,
+    "pass": 1874,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 209,
+    "skipped": 211,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -32,42 +32,38 @@
         "version": "8.4.13",
         "product": "MySQL Community Server - GPL"
       },
-      "groupCount": 9,
+      "groupCount": 8,
       "groups": [
         {
-          "group": "scala2Debug",
+          "group": "schemaPreparedJoin",
           "checks": 1
         },
         {
-          "group": "scala3Debug",
+          "group": "schemaPreparedCte",
           "checks": 1
         },
         {
-          "group": "groovyStaticMembers",
+          "group": "kotlinObjectFields",
           "checks": 1
         },
         {
-          "group": "javaParameterNames",
+          "group": "kotlinMavenEditor",
           "checks": 1
         },
         {
-          "group": "springMemberInjection",
+          "group": "kotlinMavenReactor",
           "checks": 1
         },
         {
-          "group": "springReactiveAuthentication",
+          "group": "springParentAuth",
           "checks": 1
         },
         {
-          "group": "quarkusArc",
+          "group": "springReactiveRegression",
           "checks": 1
         },
         {
-          "group": "dockerRegistry",
-          "checks": 1
-        },
-        {
-          "group": "dockerCompose",
+          "group": "micronautGradle",
           "checks": 1
         }
       ],
@@ -82,42 +78,38 @@
         "version": "11.4.8-MariaDB",
         "product": "mariadb.org binary distribution"
       },
-      "groupCount": 9,
+      "groupCount": 8,
       "groups": [
         {
-          "group": "scala2Debug",
+          "group": "schemaPreparedJoin",
           "checks": 1
         },
         {
-          "group": "scala3Debug",
+          "group": "schemaPreparedCte",
           "checks": 1
         },
         {
-          "group": "groovyStaticMembers",
+          "group": "kotlinObjectFields",
           "checks": 1
         },
         {
-          "group": "javaParameterNames",
+          "group": "kotlinMavenEditor",
           "checks": 1
         },
         {
-          "group": "springMemberInjection",
+          "group": "kotlinMavenReactor",
           "checks": 1
         },
         {
-          "group": "springReactiveAuthentication",
+          "group": "springParentAuth",
           "checks": 1
         },
         {
-          "group": "quarkusArc",
+          "group": "springReactiveRegression",
           "checks": 1
         },
         {
-          "group": "dockerRegistry",
-          "checks": 1
-        },
-        {
-          "group": "dockerCompose",
+          "group": "micronautGradle",
           "checks": 1
         }
       ],
@@ -128,165 +120,218 @@
     }
   ],
   "newlyVerified": {
-    "IDEA-029": {
-      "scope": "실제 다중 모듈 Maven·Spring에서 선언 세 개, 본문 참조 세 개, Javadoc 두 개와 호출 네 개를 확인했다. 두 DB에서 변경 전후 조회 결과가 같았다.",
+    "IDEA-044": {
+      "scope": "실제 Maven 3.9.11·Kotlin 2.2.21에서 Spring JDBC 제네릭 메서드와 형제 모듈 타입을 완성했다. 미저장 타입 오류를 확인·해제했고 두 DB에서 실제 앱 결과를 검증했다. 기존 Gradle 재검증도 통과했다.",
       "runtimeGroups": [
-        "javaParameterNames"
-      ]
-    },
-    "IDEA-046": {
-      "scope": "실제 Scala 2.13.18과 3.9.0에서 7행에 멈춰 지역 변수 3을 확인했고 재개 후 프로그램이 종료됐다.",
-      "runtimeGroups": [
-        "scala2Debug",
-        "scala3Debug"
-      ]
-    },
-    "IDEA-047": {
-      "scope": "실제 Maven·Gradle에서 공개 오버로드 두 개와 선언 위치를 확인했다. 분석 중 클래스 초기화 및 AST 매크로가 실행되지 않았고, 승인 후 두 DB의 결과는 42였다.",
-      "runtimeGroups": [
-        "groovyStaticMembers"
-      ]
-    },
-    "IDEA-053": {
-      "scope": "실제 Spring 7.0.10의 두 DB에서 필드·메서드 기록 12건과 생성자 세 건을 확인했다. 설치본에서 필드·메서드 소스 위치를 열고 공급자가 재실행되지 않는 것을 확인했다.",
-      "runtimeGroups": [
-        "springMemberInjection"
+        "kotlinMavenEditor",
+        "kotlinMavenReactor"
       ]
     },
     "IDEA-064": {
-      "scope": "실제 Spring Security 7.1.2의 두 DB에서 중첩 위임 구독 16건과 네 가지 결과를 확인했다. 자격 증명을 읽거나 공급자를 재실행하지 않았다.",
+      "scope": "실제 Spring Security 7.1.2의 두 DB에서 동시 요청, 두 단계 Servlet 위임, 네 가지 결과, 무시된 후보 없음과 보존한 지역 실패를 확인했다. WebFlux 인증 추적도 회귀 검증했다.",
       "runtimeGroups": [
-        "springReactiveAuthentication"
+        "springParentAuth",
+        "springReactiveRegression"
       ]
     },
-    "IDEA-066": {
-      "scope": "실제 Quarkus 3.40.1.2에서 두 DB를 연결하고 Arc 조회 여덟 건의 후보 및 메서드·필드 출처를 확인했다. 후속 조회는 생산자를 다시 부르지 않았다.",
+    "IDEA-067": {
+      "scope": "실제 Gradle 9.7.1 및 Micronaut 5에서 JUnit과 installDist·44개 라이브러리·소유 HTTP/JDBC 종료를 두 DB로 검증했다. 이전 Maven 경로도 실제로 재검증했다.",
       "runtimeGroups": [
-        "quarkusArc"
+        "micronautGradle"
       ]
     },
-    "IDEA-099": {
-      "scope": "실제 Docker Engine 28.0.4와 Distribution 3.0.0에서 TLS 읽기·푸시 권한과 읽기 전용 거부를 확인했다. 실제 Compose 2.38.2에서 세 파일의 적용 순서와 저장 후 모델을 대조했다. Windows 설치본에서 명령 및 미승인 요청 거부를 확인했다.",
+    "IDEA-080": {
+      "scope": "실제 Kotlin JVM과 JDI에서 Int, Boolean, 정밀 Long, 박싱 Int를 두 DB의 실행 중 변경했다. 다른 인스턴스와 사용자 접근자 호출은 그대로였고 오래된 프레임에서 변경을 거부했다.",
       "runtimeGroups": [
-        "dockerRegistry",
-        "dockerCompose",
-        "dockerRegistryReal",
-        "dockerComposeReal"
+        "kotlinObjectFields"
+      ]
+    },
+    "DG-083": {
+      "scope": "실제 MySQL 8.4.13과 MariaDB 12.3.4에서 검토·적용·재접속·복구 중 루틴이 실행되지 않았다. 소유 fixture를 별도로 호출했을 때 원하는 행만 바뀌었고, 실제 MariaDB 11.4.8은 SQL 오류 1064로 거부를 재확인했다.",
+      "runtimeGroups": [
+        "schemaPreparedJoin",
+        "schemaPreparedCte",
+        "preparedCteActualEngines"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 625,
+    "sourceCorrespondences": 630,
     "sourceConfidence": "inferred",
-    "archiveEntries": 26,
+    "archiveEntries": 29,
     "archiveConfidence": "observed"
   },
   "nativePayloadEquivalence": {
-    "files": 26,
-    "testedArchiveSha256": "96dd970be87716546700e36cdf072569c81127e832f00b7e155629673b2e9d56",
-    "testedInputVectorSha256": "1e0d0809cce150a03c83846c491301d5d80d3fd136d09dfa70c26f140f87dc3d",
+    "files": 29,
+    "testedArchiveSha256": "e7534d34c2e12971d7aff100ea60392652e0cfb9fe157ddf13ac2725eded0e57",
+    "testedInputVectorSha256": "d7b338a59dde548ab355be54adab0e049ad10af2ca08d45008d6e8a6ee4a3ed1",
     "onlySourceChanges": [
-      "test/scala-debug-host.js"
+      "test/helpers/kotlin-native-fixture-cleanup.js",
+      "test/kotlin-native-fixture-cleanup.test.js",
+      "test/kotlin-watch-expressions-host.js",
+      "test/workflows-v134-host.js"
     ]
   },
   "hostedRuntime": {
-    "dockerRegistryReal": {
-      "sourceCommit": "d523506a73a649bfc5bd2291f1c5796d9de80aa9",
-      "matchedFiles": [
-        "src/docker/registry-permissions.js",
-        "test/docker-registry-permissions.test.js",
-        "test/helpers/registry-permissions-fixture.js"
+    "preparedCteActualEngines": {
+      "sourceCommit": "b055def421f97aa17a57173625432b60d2860ea6",
+      "sha256": "90f9d26f6bc4883a3ac9dc7617e94c0734a2acea9326a43d14b13290cc7d01bf",
+      "scope": [
+        "One nonrecursive prepared lookup CTE with direct aliases, one optional equality filter and one physical update target.",
+        "The full non-null composite unique physical lookup key has integer lineage through the CTE. Only physical dependencies are included.",
+        "Apply requires fresh observed lookup metadata; procedures remain in place and apply/recovery never invoke them.",
+        "MariaDB 11.4 refuses the CTE path and continues to support the previous prepared ordinary UPDATE JOIN path."
       ],
-      "run": 45773179371,
-      "job": 139750451694,
-      "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45773179371",
-      "evidenceSha256": "3fafcb0f3dd20bd8c2a7b124fb58c92fcc87c039bcc79f9a7aec6ab1081a905f",
-      "archiveSha256": "a2493132410e717f35d82b5e290f0447b8f4e660aa1746be90d3ec845c67905f",
-      "receiptSha256": "33f7d5b7b6fe9516720645c40c8191c01917d2345ce97fda390f3105f1c28442",
-      "checks": {
-        "sourceCommit": "d523506a73a649bfc5bd2291f1c5796d9de80aa9",
-        "runtime": "Distribution 3.0.0",
-        "engine": "28.0.4",
-        "tlsPeerVerified": true,
-        "issuerSignatureVerified": true,
-        "readOnlyPull": true,
-        "writerGrant": true,
-        "noGrantDenied": true,
-        "anonymousDenied": true,
-        "incorrectCredentialsDenied": true,
-        "exactDigest": "sha256:09ade42fe3e69018a3360bb092265af902f9e7d6013146cf152c82ac3a944707",
-        "exactRepositoryScope": true,
-        "independentReaderUploadDenied": true,
-        "independentWriterUploadAndManifestSucceeded": true,
-        "applicationChecksAreReadOnly": true
-      }
-    },
-    "dockerComposeReal": {
-      "sourceCommit": "243a34bb0fdcdf227c6fe739638b539450c4bdf1",
-      "matchedFiles": [
-        "src/docker/compose-edit.js",
-        "src/docker/compose-edit-vscode.js",
-        "test/docker-compose-edit.test.js"
+      "matchedPaths": [
+        "src/db/schema-prepared-template.js",
+        "test/schema-prepared-cte.integration.test.js",
+        "test/schema-prepared-cte-host.js"
       ],
-      "run": 45774933394,
-      "job": 139756200833,
-      "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45774933394",
-      "evidenceSha256": "716e69fc3d48b32b307e27d20964fa2d2a822f62867e93a7d4c18a49890d12bf",
-      "archiveSha256": "8c1c5dcbba42022ff788f9746f4d0a21dd7d64fd57c0d04cb66383435bb481bb",
-      "receiptSha256": "8c1c451d52080086cc4a43d5d58756aa7cfd27e09085d54ae986b4d34bf8e409",
-      "checks": {
-        "sourceCommit": "243a34bb0fdcdf227c6fe739638b539450c4bdf1",
-        "compose": "2.38.2",
-        "orderedInputFiles": 3,
-        "reviewedSingleOverride": true,
-        "savedSourceFilesPreserved": true,
-        "sourceCommentPreserved": true,
-        "laterOverridesPreserved": true,
-        "appliedModelMatchesReview": true,
-        "modelMergeTagApplied": true,
-        "profileIncluded": true,
-        "environmentInterpolationDisabled": true,
-        "changedEnvironmentRedacted": true,
-        "resolvedImageChanged": true,
-        "exactPublishedPort": 8290,
-        "privateStagesRemoved": true,
-        "daemonObjectsUnchanged": true
+      "ownedSpring": [
+        {
+          "sourceCommit": "b055def421f97aa17a57173625432b60d2860ea6",
+          "version": "8.4.13",
+          "serverModes": {
+            "readOnly": 0,
+            "logBin": 0
+          },
+          "supported": true,
+          "explicitInputsOnly": true,
+          "outerJoinRefused": true,
+          "missingUniqueRefused": true,
+          "staleKeyApplyRefused": true,
+          "exactCompositeCteLineage": true,
+          "observedVersionBound": true,
+          "physicalLookupLocked": true,
+          "migrationAndRecoveryNeverExecutedCte": true,
+          "definitionRetained": true,
+          "boundFilterSelectedNoRows": true,
+          "laterOwnedProcedureEffect": [
+            37,
+            2
+          ],
+          "unchangedLookup": true,
+          "engine": "mysql",
+          "jdbc": {
+            "departments": 1,
+            "rolledBackNames": 0,
+            "people": 2
+          }
+        },
+        {
+          "sourceCommit": "b055def421f97aa17a57173625432b60d2860ea6",
+          "version": "12.3.4-MariaDB",
+          "serverModes": {
+            "readOnly": "OFF",
+            "logBin": 0
+          },
+          "supported": true,
+          "explicitInputsOnly": true,
+          "outerJoinRefused": true,
+          "missingUniqueRefused": true,
+          "staleKeyApplyRefused": true,
+          "exactCompositeCteLineage": true,
+          "observedVersionBound": true,
+          "physicalLookupLocked": true,
+          "migrationAndRecoveryNeverExecutedCte": true,
+          "definitionRetained": true,
+          "boundFilterSelectedNoRows": true,
+          "laterOwnedProcedureEffect": [
+            37,
+            2
+          ],
+          "unchangedLookup": true,
+          "engine": "mariadb",
+          "jdbc": {
+            "departments": 1,
+            "rolledBackNames": 0,
+            "people": 2
+          }
+        },
+        {
+          "sourceCommit": "b055def421f97aa17a57173625432b60d2860ea6",
+          "version": "11.4.8-MariaDB",
+          "serverModes": {
+            "readOnly": 0,
+            "logBin": 0
+          },
+          "supported": false,
+          "analysisRefused": true,
+          "rebuildPreviewRefused": true,
+          "vendorParserError": 1064,
+          "writesUnchanged": true,
+          "engine": "mariadb",
+          "jdbc": {
+            "departments": 1,
+            "people": 2,
+            "rolledBackNames": 0
+          }
+        }
+      ],
+      "maria114EarlierJoinRegression": {
+        "sourceCommit": "b055def421f97aa17a57173625432b60d2860ea6",
+        "engine": "mariadb",
+        "version": "11.4.8-MariaDB",
+        "jdbc": {
+          "departments": 1,
+          "people": 2,
+          "rolledBackNames": 0
+        },
+        "compositeUniqueLookup": true,
+        "crossSchemaSeparateDirectReadWrite": true,
+        "explicitInputsOnly": true,
+        "outerJoinRefused": true,
+        "droppedLookupKeyRefused": true,
+        "lookupIncludedInLocks": true,
+        "migrationAndRecoveryNeverExecutedJoin": true,
+        "procedureDefinitionRetained": true,
+        "actualLaterFixtureEffect": [
+          37,
+          2
+        ],
+        "actualLookupUnchanged": true
       }
     }
   },
   "progress": {
     "counts": {
-      "implemented": 177,
-      "partial": 25,
+      "implemented": 179,
+      "partial": 23,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 201.5,
-    "previousWeightedPoints": 201,
+    "weightedPoints": 202.5,
+    "previousWeightedPoints": 201.5,
     "targetWeightedPoints": 216,
-    "referencePercent": 93.3,
+    "referencePercent": 93.8,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-099",
+        "id": "IDEA-044",
+        "before": "partial",
+        "after": "implemented"
+      },
+      {
+        "id": "IDEA-064",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "기능표의 216개 항목과 기존 가중 계산을 유지한다.",
-    "IDEA-001과 DG-095는 VS Code 호스트 구조 제약을 받는다.",
-    "Docker 레지스트리는 선택한 표준 TLS·토큰 계정의 읽기 검증과 서명된 쓰기 권한 표시를 지원한다. 공급자 전용 ACL 변경은 지원 범위 밖이다.",
-    "Compose 변경은 승인한 파일의 편집기에 적용한다. 외부 include·extends 및 환경 변수 값은 분석에서 제외한다."
+    "216개 기능과 기존 점수 기준을 유지한다.",
+    "Kotlin JVM 편집의 지원 범위에는 정상 Gradle 및 Maven 앱과 컴파일·제공 형제 JAR이 포함된다. KMP의 복합 소스 집계는 별도 행의 범위다.",
+    "Kotlin 필드 편집은 중단 중 접근이 확인된 원시 값 및 기존 JVM 박싱 값만 변경한다.",
+    "직접 관측한 Spring 표준 인증 흐름을 표시한다. 임의 사용자 관리자 내부는 외부 호출 경계만 관측한다.",
+    "MariaDB 11.4의 동적 WITH UPDATE는 변경 전에 거부한다. 원자적 분산 DDL의 엔진 제약은 그대로 반영한다."
   ],
   "next": [
-    "Servlet 상위 인증 관리자 위임과 Kotlin 객체 필드 디버깅",
-    "실제 Maven Kotlin 프로젝트의 타입 완성 및 진단",
-    "검토한 동적 SQL UPDATE JOIN 기반 스키마 마이그레이션"
+    "Scala 2·3 sbt 프로젝트의 타입 완성과 이름 변경",
+    "Kotlin Multiplatform Compose Desktop 미리보기",
+    "설치된 Quarkus Gradle의 HTTP·디버거 확인"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

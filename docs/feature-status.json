@@ -1,5 +1,5 @@
 {
-  "version": "0.132.0",
+  "version": "0.134.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,35 +30,31 @@
     }
   },
   "summary": {
-    "implemented": 177,
-    "partial": 25,
+    "implemented": 179,
+    "partial": 23,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 93.3,
+    "percent": 93.8,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-029",
-    "IDEA-046",
-    "IDEA-047",
-    "IDEA-053",
+    "IDEA-044",
     "IDEA-064",
-    "IDEA-066",
-    "IDEA-099"
+    "IDEA-067",
+    "IDEA-080",
+    "DG-083"
   ],
   "expandedFeatures": [
-    "IDEA-029",
-    "IDEA-046",
-    "IDEA-047",
-    "IDEA-053",
+    "IDEA-044",
     "IDEA-064",
-    "IDEA-066",
-    "IDEA-099"
+    "IDEA-067",
+    "IDEA-080",
+    "DG-083"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -883,8 +879,8 @@
       "verification": {
         "state": "v0.132-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.132.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1334,25 +1330,25 @@
       "category": "JVM 언어·프로젝트",
       "feature": "Kotlin JVM 코드 지원",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "Kotlin JVM 언어 서버의 정확한 이름 변경을 두 파일에 적용하고 단일 작업으로 실행 취소하거나 다시 적용한다.",
-      "remaining": [
-        "Maven과 KMP의 추가 편집 통합이 남아 있다."
-      ],
+      "scope": "Gradle과 Maven Kotlin JVM 프로젝트에서 타입 완성·정의·미저장 진단을 제공한다. Maven 리액터의 선택 앱에 필요한 형제 JAR만 전용 저장소에 준비하고 그 타입을 편집기에 연결한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.102-installed-coverage",
+        "state": "v0.134-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.102.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "충돌과 미저장 변경, 다른 프로젝트 보존 및 네이티브 Undo/Redo를 검증했다.",
+        "testedScope": "실제 Maven 3.9.11·Kotlin 2.2.21에서 Spring JDBC 제네릭 메서드와 형제 모듈 타입을 완성했다. 미저장 타입 오류를 확인·해제했고 두 DB에서 실제 앱 결과를 검증했다. 기존 Gradle 재검증도 통과했다.",
         "publicEvidence": [
-          "test/kotlin-rename-host.js",
-          "test/workflows-v102-host.js"
+          "src/java/kotlin-editor-vscode.js",
+          "src/java/kotlin-maven-reactor.js",
+          "test/kotlin-maven-editor-host.js",
+          "test/kotlin-maven-reactor-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1403,8 +1399,8 @@
       "verification": {
         "state": "v0.132-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.132.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1434,8 +1430,8 @@
       "verification": {
         "state": "v0.132-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.132.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1608,8 +1604,8 @@
       "verification": {
         "state": "v0.132-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.132.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1917,26 +1913,24 @@
       "category": "Spring·영속성",
       "feature": "Spring Security 런타임 진단",
       "priority": "P1",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "Servlet ProviderManager와 WebFlux의 실제 인증 시도·공급자 순서와 발생 결과를 관측한다. 중첩 Reactive 위임에서 반환·빈 완료·거부·오류를 표시한다.",
-      "remaining": [
-        "Servlet의 상위 ProviderManager 위임과 임의 사용자 정의 관리자의 내부 결정은 추가 관측이 남는다."
-      ],
+      "scope": "Spring Security Servlet의 ProviderManager와 상위 관리자 위임, 기존 WebFlux 인증 관리자 및 중첩 위임의 호출 순서, 관측된 결과와 실패를 읽기 전용으로 표시한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.132-installed-coverage",
+        "state": "v0.134-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Spring Security 7.1.2의 두 DB에서 중첩 위임 구독 16건과 네 가지 결과를 확인했다. 자격 증명을 읽거나 공급자를 재실행하지 않았다.",
+        "testedScope": "실제 Spring Security 7.1.2의 두 DB에서 동시 요청, 두 단계 Servlet 위임, 네 가지 결과, 무시된 후보 없음과 보존한 지역 실패를 확인했다. WebFlux 인증 추적도 회귀 검증했다.",
         "publicEvidence": [
-          "runtime/jpa-observer/src/rocketbrain/observer/ReactiveSecurityTrace.java",
-          "src/spring/reactive-security-trace.js",
-          "test/spring-reactive-authentication-host.js"
+          "runtime/jpa-observer/src/rocketbrain/observer/AuthenticationProviderTrace.java",
+          "src/spring/security-trace-vscode.js",
+          "test/spring-parent-authentication-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1984,8 +1978,8 @@
       "verification": {
         "state": "v0.132-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.132.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -2007,23 +2001,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Micronaut Maven에서 설정 키의 편집기 완성·Java 선언 이동, HTTP 경로와 생성자 주입 탐색, 환경별 테스트·빌드·실행을 제공한다.",
+      "scope": "가져온 일반 Micronaut Maven 또는 Gradle 앱의 HTTP·설정 탐색, 승인한 테스트와 배포 빌드, 환경별 로컬 실행과 종료를 제공한다.",
       "remaining": [
-        "복합 및 동적 DI, Gradle, 핫 리로드와 AOT·네이티브 이미지가 남아 있다."
+        "복합 동적 DI, 핫 리로드, JVM 디버거 및 AOT·네이티브 이미지가 남는다."
       ],
       "verification": {
-        "state": "v0.53-installed-coverage",
+        "state": "v0.134-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.53.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Micronaut 5.2.8의 실제 HTTP 테스트 2개, 생성된 Bean 정의, properties와 YAML 선언 이동, dev·test 환경 응답과 소유 리스너 종료를 확인했다.",
+        "testedScope": "실제 Gradle 9.7.1 및 Micronaut 5에서 JUnit과 installDist·44개 라이브러리·소유 HTTP/JDBC 종료를 두 DB로 검증했다. 이전 Maven 경로도 실제로 재검증했다.",
         "publicEvidence": [
+          "src/java/micronaut-distribution.js",
           "src/java/micronaut-vscode.js",
-          "src/java/micronaut-runtime.js",
-          "test/micronaut-host.js"
+          "test/micronaut-gradle-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2389,22 +2383,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Kotlin Watch에서 스칼라와 배열·표준 리스트를 읽고, 별도 승인으로 멈춘 프레임의 JVM 원시 지역 변수를 변경한다.",
+      "scope": "중단한 Kotlin 프레임에서 정확한 객체 필드의 원시 값·박싱 값을 검사한다. 사용자가 검토한 변경을 대상 인스턴스와 이전 값이 일치할 때 적용한다.",
       "remaining": [
-        "Kotlin 객체, 필드·박스 값, 사용자 정의 컬렉션 및 임의 함수 평가는 남아 있다."
+        "일반 함수 평가, 사용자 정의 컬렉션과 임의 접근자 실행은 지원 범위 밖이다. JVM 박싱 새 인스턴스 생성과 일반 필드 타입을 확대할 수 있다."
       ],
       "verification": {
-        "state": "v0.119-installed-coverage",
+        "state": "v0.134-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.119.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "검토 승인에서 이전 값을 표시했다. 실제 중단점에서 값을 바꾸어 Watch로 읽고 복구했다. 승인 취소와 이미 재개한 프레임 요청을 거부했다.",
+        "testedScope": "실제 Kotlin JVM과 JDI에서 Int, Boolean, 정밀 Long, 박싱 Int를 두 DB의 실행 중 변경했다. 다른 인스턴스와 사용자 접근자 호출은 그대로였고 오래된 프레임에서 변경을 거부했다.",
         "publicEvidence": [
-          "src/java/debug-kotlin-local.js",
-          "runtime/java-debug/KotlinLocalAssignment.java",
+          "src/java/debug-kotlin-fields.js",
+          "runtime/java-debug/KotlinObjectFields.java",
+          "runtime/java-debug/KotlinFieldAccess.java",
           "test/kotlin-watch-expressions-host.js"
         ],
         "originalProductParityVerified": false
@@ -2945,8 +2940,8 @@
       "verification": {
         "state": "v0.132-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.132.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -5990,28 +5985,25 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "InnoDB 재구성·원본 보관·복구와 스키마 간 FK·뷰·프로시저·트리거 그래프를 연결한다. 분기·유한루프·CALL의 PREPARE 상태 및 지정 입력 사례를 실행 없이 분석한다. 42개 변환 전략에4326↔3857 재투영과 단일 열 SPATIAL 인덱스 보존·복구를 연결한다. 2~4서버 조정은 영구 결정·쓰기 보호·재연결 복구를 제공한다. 원자적 분산DDL 요구는 서버 제약을 설명하고 연결·변경 전에 거부한다.",
+      "scope": "이전 검토·복구 흐름에 복합 고유 키 기반의 준비된 단일 대상 UPDATE JOIN과 버전이 확인된 단일 비재귀 CTE UPDATE를 추가했다. 물리 조회 테이블 잠금과 원본 루틴 정의를 확인한다.",
       "remaining": [
-        "테이블10·10만행/32MiB·복사250행·저널4MiB, 관련50테이블/200FK/100트리거·뷰. 루틴20/호출깊이8/매개변수32·SQL후보16/64KiB·문장200/토큰2만/중첩8/분기20. 완전한 정의와 SELECT/SHOW VIEW/TRIGGER/PROCESS 등 직접 메타·변경 권한이 필요하며 제품은 권한을 부여하지 않는다.",
-        "명시 입력16사례·세션32·합1MiB, 경로32/루프32회/분석1024단계. 입력 사례는 일반 마이그레이션 증명이 아니다. 바인딩 요약은 지문이며 조립된 SQL·리터럴은 보일 수 있다. 후보는 정적 대상의 단일 SELECT/INSERT/UPDATE/DELETE이며 동적 CALL/CTE/UNION/일반 JOIN은 제외한다. 임의 코드·동적DDL·재귀·UDF·커서/핸들러·확정 못한 강제형변환·트리거 도달 동적SQL/결과집합은 지원하지 않는다.",
-        "공간은7개 표준2D 계열·128KiB/4096정점/1024도형/중첩8. 일반 변환 SRID0/4326, 재투영은4326↔3857 정점 프로필·명시 축·1µm 왕복 예산·별도 손실 승인·복사100행/1MiB. 임의SRS·datum grid·측지/위상수리·정점추가·날짜변경선·WKT출력·EMPTY/Z/M/EWKB/GeoJSON은 미지원.",
-        "SPATIAL은 InnoDB 단일 NOT NULL geometry/R-tree만. MySQL은 명시 열SRID, Maria는 평면 인덱스 의미다. prefix/복합 공간인덱스와 모호한 과거 MySQL GEOMCOLLECTION 열SRS 기록의 복구는 거부한다. 값·원본·메타데이터가 변경되면 덮어쓰지 않는다.",
-        "서버2~4/활성스키마1, 검토3개/2분·기록100·256KiB/120이벤트·실행30분. 결정 전 보상/이후 검증·해제 완료이며 자동DDL재시도·리더장애조치·공통읽기스냅샷은 미지원. 원자적 분산DDL은 네이티브 엔진 제약으로 미지원이며 사전거부한다. 기존 saga를 원자적XA로 표시하지 않는다."
+        "입증한 형식에 해당하지 않는 다중 쓰기·외부 조인·동적 CTE·재귀 및 일반 임의 SQL은 제외한다.",
+        "기존 공간 재투영·인덱스 조건과 서버 간 보상 조정의 제한이 적용된다. 원자적 분산 DDL은 엔진에서 제공하지 않아 지원하지 않는다."
       ],
       "verification": {
-        "state": "source-and-actual-Spring-and-native-VSIX",
+        "state": "v0.134-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 실제 두 Spring 앱·MySQL/MariaDB 전체 회귀684/681통과, Maria에서 MySQL 전용 검사3제외. 동일 최종 VSIX114/102통과. 분기·NULL/SQL모드·유한루프·CALL 준비 상태와 입력 사례 한정, 공간 인덱스·재투영의 실제 WKB/SRID·손실 승인·원본 복구·서버 간 조정, 원자적 모드의 변경 전 거부와 실제 XA/암묵커밋/부분DDL을 확인했다. 기존 Java/Spring/JPA/디버깅/테스트/SQL/그리드/스트리밍과 두 앱 초기2/1/0을 검증한다. 전체 원본 동등성과 임의 SQL의 일반 보장은 미검증.",
+        "testedScope": "실제 MySQL 8.4.13과 MariaDB 12.3.4에서 검토·적용·재접속·복구 중 루틴이 실행되지 않았다. 소유 fixture를 별도로 호출했을 때 원하는 행만 바뀌었고, 실제 MariaDB 11.4.8은 SQL 오류 1064로 거부를 재확인했다.",
         "publicEvidence": [
-          "src/db/schema-program-paths.js",
-          "src/db/schema-reprojection.js",
-          "src/db/schema-spatial-index.js",
-          "src/db/schema-coordinator.js"
+          "src/db/schema-prepared-template.js",
+          "test/schema-prepared-join-host.js",
+          "test/schema-prepared-cte-host.js",
+          "docs/schema-prepared-cte-updates.md"
         ],
         "originalProductParityVerified": false
       }
@@ -6398,22 +6390,27 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "458a35fc0e6010ffd8945ec81757a9ba0e244dd589d39e5ff9d51e747323e429",
-    "sourceManifestSha256": "e789a31b42cd4d23f9f0dbe1fdf12d5f536816a6b5183a69763bfd9d52f024d5",
+    "vsixSha256": "f1171f6260f6c2134e1f06cc1ecd75dc5be4e8f6d1134006fa775eb074901caf",
+    "sourceManifestSha256": "4d78a09a8b6bf30b333f5bdb3d6db32ee1d565dc2e2b1884fe47c7b4dd9f9d15",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
-        "featureGroups": 9
+        "featureGroups": 8
       },
       {
         "engine": "mariadb",
-        "featureGroups": 9
+        "featureGroups": 8
       }
     ]
   },
   "stateChanges": [
     {
-      "id": "IDEA-099",
+      "id": "IDEA-044",
+      "before": "partial",
+      "after": "implemented"
+    },
+    {
+      "id": "IDEA-064",
       "before": "partial",
       "after": "implemented"
     }
@@ -6421,13 +6418,13 @@
   "offline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45777261462",
-    "tests": 2068,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45786718712",
+    "tests": 2085,
     "suites": 0,
-    "pass": 1859,
+    "pass": 1874,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 209,
+    "skipped": 211,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

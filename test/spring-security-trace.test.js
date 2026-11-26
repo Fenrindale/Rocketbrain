@@ -144,3 +144,40 @@ test('authentication reports only bounded provider provenance and preserves part
   assert.match(renderAuthenticationDecisions(normalizeSecurityTrace(data)),/Waiting for a supported Servlet ProviderManager/);
   assert.match(renderAuthenticationDecisions(report),/authenticationProviderTrace/);
 });
+
+test('linked parents keep exact invocation edges, ignored not-found and retained local failure',()=>{
+  const input=structuredClone(report), trace=input.traces[0];
+  input.authenticationProviderTraceEnabled=true;
+  input.hooks.push('authentication-provider-manager');
+  const managerType='org.springframework.security.authentication.ProviderManager';
+  function frame(index,providerOutcome,parentIndex){
+    return {index,managerId:'manager-'+index,managerType,outcome:'rejected',selectedProvider:null,
+      delegated:parentIndex!==null,parentType:parentIndex===null?null:managerType,complete:true,
+      providers:[{index:1,providerType:'fixture.OwnProvider',outcome:providerOutcome}],
+      ...(parentIndex!==null&&{parentCall:{managerId:'manager-'+parentIndex,childIndex:parentIndex,
+        outcome:'provider-not-found',disposition:'ignored-not-found',message:'private-parent-message'}})};
+  }
+  trace.authenticationCoverage='observed';
+  trace.authenticationManagers=[{...frame(1,'rejected',2),failureProvider:1},frame(2,'abstained',3),frame(3,'abstained',null)];
+  const clean=normalizeSecurityTrace(input), html=renderAuthenticationDecisions(clean);
+  assert.equal(clean.traces[0].authenticationManagers[0].failureProvider,1);
+  assert.match(html,/manager-2 · Invocation 2/);
+  assert.match(html,/Raised provider not found · Ignored by the calling manager/);
+  assert.match(html,/Failure retained by manager/);
+  assert.doesNotMatch(html+JSON.stringify(clean),/private-parent-message/);
+  for(const adjust of [
+    value=>{value[0].parentCall.childIndex=1;},
+    value=>{value[0].parentCall.managerId='manager-3';},
+    value=>{value[0].parentCall.childIndex=3;value[0].parentCall.managerId='manager-3';},
+    value=>{value[0].parentCall.disposition='unused';},
+    value=>{value[0].parentCall.disposition='propagated';},
+    value=>{value[0].parentCall.childIndex=null;},
+    value=>{value[2].complete=false;},
+    value=>{value[0].failureProvider=2;},
+    value=>{value[0].selectedProvider=1;}
+  ]){
+    const bad=structuredClone(input);
+    adjust(bad.traces[0].authenticationManagers);
+    assert.throws(()=>normalizeSecurityTrace(bad),/Unsupported/);
+  }
+});

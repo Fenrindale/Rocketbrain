@@ -1,6 +1,6 @@
 'use strict';
 
-const { DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, EXCEPTION_BUILD } = require('./debug-runtime');
+const { DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, EXCEPTION_BUILD } = require('./debug-runtime');
 const setting = 'exceptionBreakpoints';
 const settingPath = 'rocketbrain.java.' + setting;
 const binaryClassName = /^(?:[\p{ID_Start}_$][\p{ID_Continue}_$]*\.)*[\p{ID_Start}_$][\p{ID_Continue}_$]*$/u;
@@ -47,7 +47,7 @@ function debugSettings(policy, { javaHome, mode, updated = false, decompiledSour
 }
 
 function checkEngine(policy, build) {
-  if (policy.exceptionTypes.length > 1 && ![DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, EXCEPTION_BUILD].includes(build)) {
+  if (policy.exceptionTypes.length > 1 && ![DEBUG_BUILD, COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, EXCEPTION_BUILD].includes(build)) {
     throw Error('Multiple Java exception types require the current Rocketbrain Java engine. Run Install and Configure Independent Java Engine to update the debugger.');
   }
 }

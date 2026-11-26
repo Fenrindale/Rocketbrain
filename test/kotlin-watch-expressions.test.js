@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { test } = require('node:test');
-const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, resolveDebugBundle } = require('../src/java/debug-runtime');
+const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, resolveDebugBundle } = require('../src/java/debug-runtime');
 const { assignment, assertKotlinLocalChanges } = require('./helpers/kotlin-local-write');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { DapClient, freePort } = require('./java-debug-dap');
@@ -14,6 +14,8 @@ const { StdioLsp, until } = require('./helpers/stdio-lsp');
 const { buildCoroutineFixture } = require('./helpers/coroutine-fixture');
 const { request, breakpointName, launchKotlinWatches, assertKotlinWatchValues, assertIndexedKotlinWatchValues, kotlinWatchJdbcResult } =
   require('./helpers/kotlin-watch-expressions');
+
+const { fieldRequest, assertKotlinFields, assertFieldsResumed } = require('./helpers/kotlin-object-fields');
 
 const runtimeFile = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
 const gradleHome = process.env.ROCKETBRAIN_COROUTINE_GRADLE_HOME;
@@ -26,7 +28,7 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
   const runtime = JSON.parse(await fs.readFile(runtimeFile, 'utf8'));
   const { javaHome, serverPath } = runtime;
   const bundle = resolveDebugBundle(runtime.settings['rocketbrain.java.debugBundlePath'], serverPath);
-  assert.ok([WATCH_BUILD,INDEXED_WATCH_BUILD,KOTLIN_LOCAL_WRITE_BUILD].includes(bundle?.build));
+  assert.ok([WATCH_BUILD,INDEXED_WATCH_BUILD,KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD].includes(bundle?.build));
   const parent = await fs.realpath(os.tmpdir()), directory = await fs.mkdtemp(path.join(parent, 'rb-kotlin-watch-'));
   let lsp;
   t.after(async () => {
@@ -53,8 +55,9 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
   let previousSessionFrame;
   for (const [engine, configFile] of dbFiles) {
     const jdwp = await freePort();
-    const running = await launchKotlinWatches(fixture, { engine, configFile, classpathFile }, jdwp);
-    let dap;
+    const fieldSignal = bundle.build === KOTLIN_FIELD_BUILD ? path.join(directory, engine + '.signal') : undefined;
+    const running = await launchKotlinWatches(fixture, { engine, configFile, classpathFile, fieldSignal }, jdwp);
+    let dap, failure;
     try {
       await running.ready();
       const port = await until(() => lsp.request('workspace/executeCommand', { command: 'vscode.java.startDebugSession', arguments: [] }, 10000), 65000);
@@ -77,13 +80,25 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
       }
       const [frame] = (await send('stackTrace', { threadId: stopped.threadId, startFrame: 0, levels: 1 })).stackFrames;
       assert.match(frame.name, /paused/u);
+      assert.ok(frame.source?.path, engine+' did not map the paused Kotlin source frame '+JSON.stringify(frame));
       assert.equal(path.relative(source, frame.source.path), '');
       const values = await assertKotlinWatchValues(send, frame.id);
       const indexed = bundle.build !== WATCH_BUILD ? await assertIndexedKotlinWatchValues(send, frame.id) : undefined;
-      const write = bundle.build === KOTLIN_LOCAL_WRITE_BUILD ? await assertKotlinLocalChanges(send,frame.id) : undefined;
+      const write = [KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD].includes(bundle.build) ? await assertKotlinLocalChanges(send,frame.id) : undefined;
+      const fields = fieldSignal ? await assertKotlinFields(send,frame.id,async () => {
+        await fs.writeFile(fieldSignal,'change',{flag:'wx'});
+        await running.waitFor('Rocketbrain Kotlin field changed by fixture');
+      }) : undefined;
       const resumed = await send('continue', { threadId: stopped.threadId });
       assert.ok(resumed);
-      const completion = kotlinWatchJdbcResult(await running.waitFor('Rocketbrain Kotlin JDBC|'), engine);
+      const output = await running.waitFor('Rocketbrain Kotlin JDBC|');
+      const completion = kotlinWatchJdbcResult(output, engine);
+      if (fields) {
+        fields.resumed = assertFieldsResumed(output);
+        await assert.rejects(send(fieldRequest,{action:'apply',frameId:frame.id,reviewId:fields.staleId}),/same Kotlin frame suspended/u);
+        delete fields.staleId;
+        fields.resumedWriteRefused = true;
+      }
       await assert.rejects(send('evaluate', { frameId: frame.id, expression: 'amount', context: 'watch' }), /current suspended frame/u);
       await assert.rejects(send(request, { frameId: frame.id, expression: 'amount' }), /current suspended frame/u);
       if(write){
@@ -92,17 +107,21 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
         write.resumedWriteRefused=true;
       }
       previousSessionFrame = frame.id;
-      reports.push({ ...completion, line: frame.line, values, indexed, write, staleFrameRefused: true,
+      reports.push({ ...completion, line: frame.line, values, indexed, write, fields, staleFrameRefused: true,
         otherDebugSessionFrameRefused: reports.length > 0, liveFrameSource: 'KotlinWatchInspection.kt' });
       await send('disconnect', { terminateDebuggee: false }).catch(error => {
         if (!dap.events.some(event => event.event === 'terminated')) throw error;
       });
+    } catch (error) {
+      failure = error;
+      throw error;
     } finally {
       if (dap && !dap.socket.destroyed) {
         await dap.request('disconnect', { terminateDebuggee: false }, 3000).catch(() => {});
         dap.socket.destroy();
       }
-      assert.equal(await running.stop(), 0);
+      const exit = await running.stop();
+      if (!failure) assert.equal(exit, 0, running.output());
     }
   }
   const receipt = process.env.ROCKETBRAIN_KOTLIN_EXPRESSION_RECEIPT;

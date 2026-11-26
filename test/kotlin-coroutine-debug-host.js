@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD } = require('../src/java/debug-runtime');
+const { COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD } = require('../src/java/debug-runtime');
 const { readCoroutineDescriptor, fetchCoroutineSnapshot } = require('../src/java/kotlin-coroutine-probe');
 const { importedSpring, jdbcReadback } = require('./java-source-analysis-host');
 const { until } = require('./helpers/stdio-lsp');
@@ -17,7 +17,7 @@ async function runKotlinCoroutineDebugChecks(api, vscode, checks) {
   const service = api.java.coroutines;
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const project = await importedSpring(api, workspace);
-  assert.ok([COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD].includes(api.java.getState().debugBuild));
+  assert.ok([COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD].includes(api.java.getState().debugBuild));
   for (const name of ['prepareDebug', 'watchFrame', 'detachDebugger']) {
     assert.ok((await vscode.commands.getCommands(true)).includes('rocketbrain.coroutines.' + name));
   }

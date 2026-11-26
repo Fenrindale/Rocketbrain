@@ -1,0 +1,30 @@
+plugins {
+    id 'io.micronaut.application' version '5.0.2'
+}
+group = 'fixture.micronaut'
+version = '1.0.0'
+repositories { mavenCentral() }
+java {
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+application { mainClass = 'micronautgradlefixture.Application' }
+micronaut {
+    runtime 'netty'
+    testRuntime 'junit5'
+    processing {
+        incremental true
+        annotations 'micronautgradlefixture.*'
+    }
+}
+dependencies {
+    implementation 'io.micronaut:micronaut-jackson-databind'
+    runtimeOnly 'ch.qos.logback:logback-classic'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
+    testImplementation 'io.micronaut:micronaut-http-client'
+}
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += '-parameters'
+}

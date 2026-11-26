@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
-const {makePlan,numeric,renderTable}=require('../src/db/schema-recovery');
+const {SchemaRecovery,makePlan,numeric,renderTable}=require('../src/db/schema-recovery');
 const {fixture,addColumn}=require('./helpers/schema-diff-fixture');
 const {normalizeSnapshot}=require('../src/db/schema-diff');
 test('rebuild plans render typed destructive table replacements and owned backup names',()=>{const current=fixture(),desired=addColumn(structuredClone(current));desired.tables[0].columns[0].type='bigint';desired.tables[0].columns[1].nullable=false;desired.tables[0].columns[1].defaultValue='hello';const target=normalizeSnapshot(desired,{verifyFingerprint:false}),plan=makePlan(current,target,{tables:['people']});assert.equal(plan.steps.length,1);assert.match(plan.steps[0].createSql,/BIGINT/);assert.match(plan.steps[0].createSql,/NOT NULL DEFAULT 'hello'/);assert.match(plan.steps[0].backup,/^__rb_backup_[a-f0-9]{20}_0$/);assert.equal(plan.requiresDestructiveApproval,true);assert.equal(plan.atomicAcrossTables,false);assert.deepEqual(plan.steps[0].common,['id']);});
@@ -8,3 +8,31 @@ test('retiring a table never generates DROP and keeps the complete original obje
 test('untrusted defaults/checks/types cannot inject DDL and cross-category casts are rejected',()=>{const current=fixture(),desired=addColumn(structuredClone(current));desired.tables[0].columns[1].defaultValue="x'; DROP TABLE people; --";const target=normalizeSnapshot(desired,{verifyFingerprint:false}),sql=renderTable(target.tables[0],current,'shadow','a'.repeat(32));assert.ok(sql.includes("DEFAULT 'x''; DROP TABLE people; --'"));target.tables[0].checks=[{name:'c',expression:'id > 0; DROP TABLE people'}];assert.throws(()=>renderTable(target.tables[0],current,'shadow','a'.repeat(32)),/CHECK/);const changed=fixture();changed.tables[0].columns[0].type='varchar(30)';assert.throws(()=>makePlan(current,normalizeSnapshot(changed,{verifyFingerprint:false}),{tables:['people']}),/Cross-category/);});
 test('exact numeric normalization preserves large numbers and rejects nonfinite coercion',()=>{assert.equal(numeric('18446744073709551615.000'),'18446744073709551615');assert.equal(numeric('-000.01000'),'-0.01');assert.equal(numeric('-0.000'),'0');assert.throws(()=>numeric('1e309'),/numeric/);});
 test('nondefault table storage and reserved recovery objects are refused during review',()=>{const current=fixture(),desired=fixture();desired.tables[0].columns[0].type='bigint';desired.tables[0].rowFormat='Compressed';desired.tables[0].createOptions='row_format=COMPRESSED';assert.throws(()=>makePlan(current,normalizeSnapshot(desired,{verifyFingerprint:false}),{tables:['people']}),/ordinary InnoDB/);const owned=fixture();owned.tables[0].name='__rb_schema_recovery_v13';const normalized=normalizeSnapshot(owned,{verifyFingerprint:false});assert.throws(()=>makePlan(normalized,normalized,{tables:['__rb_schema_recovery_v13']}),/Reserved recovery/);});
+
+test('rebuild fences recognize only the MariaDB OFF enum and numeric writable observations', async () => {
+  async function check(dialect, mode, logging, format = 'MIXED') {
+    const record = { plan: { currentServer: { dialect } } };
+    const recovery = {
+      transport: {
+        async _read(_session, sql) {
+          if (sql === 'SELECT @@foreign_key_checks') return [[1]];
+          if (sql === 'SELECT @@log_bin,@@binlog_format,@@read_only') return [[logging, format, mode]];
+          return [];
+        }
+      }
+    };
+    await SchemaRecovery.prototype._dependencyEnvironment.call(recovery, null, record);
+    return record.dependencyEnvironment;
+  }
+
+  assert.equal((await check('mariadb', 'OFF', 0)).readOnly, false);
+  assert.equal((await check('mysql', 0, 0)).logBin, false);
+  assert.equal((await check('mariadb', '0', '1', 'ROW')).logBin, true);
+  for (const [dialect, mode, logging] of [
+    ['mariadb', 'ON', 0], ['mariadb', 'NO_LOCK', 0], ['mariadb', 'NO_LOCK_NO_ADMIN', 0],
+    ['mariadb', null, 0], ['mariadb', 'UNKNOWN', 0], ['mysql', 'OFF', 0], ['mysql', 1, 0],
+    ['mariadb', 'OFF', 1], ['mariadb', 'OFF', null]
+  ]) {
+    await assert.rejects(check(dialect, mode, logging), /writable standalone\/primary server/u);
+  }
+});

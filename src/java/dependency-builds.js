@@ -311,4 +311,4 @@ function buildDescriptors(files) {
   };
 }
 
-module.exports = { buildDescriptors, pomFacts, gradleSettings, gradleDependencies, fileKey, below };
+module.exports = { buildDescriptors, pomFacts, gradleSettings, gradleDependencies, gradleStatements, fileKey, below };

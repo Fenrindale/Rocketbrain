@@ -10,6 +10,7 @@ const COROUTINE_BUILD = DEBUG_VERSION + '.rocketbrain5';
 const WATCH_BUILD = DEBUG_VERSION + '.rocketbrain6';
 const INDEXED_WATCH_BUILD = DEBUG_VERSION + '.rocketbrain7';
 const KOTLIN_LOCAL_WRITE_BUILD = DEBUG_VERSION + '.rocketbrain8';
+const KOTLIN_FIELD_BUILD = DEBUG_VERSION + '.rocketbrain9';
 const EXCEPTION_BUILD = DEBUG_VERSION + '.rocketbrain3';
 const LEGACY_BUILD = DEBUG_VERSION + '.rocketbrain2';
 const UPSTREAM_FILE = `com.microsoft.java.debug.plugin-${DEBUG_VERSION}.jar`;
@@ -25,12 +26,14 @@ const INDEXED_WATCH_FILE = `com.microsoft.java.debug.plugin-${INDEXED_WATCH_BUIL
 const INDEXED_WATCH_SHA256 = '7b1515444143e6d5fc3a8eb9aff89c86d4d5fea1068cb83c47da6e2c9f53ca15';
 const KOTLIN_LOCAL_WRITE_FILE = `com.microsoft.java.debug.plugin-${KOTLIN_LOCAL_WRITE_BUILD}.jar`;
 const KOTLIN_LOCAL_WRITE_SHA256 = '3665e64a55c9503c67317fbb49747fe2658bf623bf0b55974a19eb1ab3989127';
+const KOTLIN_FIELD_FILE = `com.microsoft.java.debug.plugin-${KOTLIN_FIELD_BUILD}.jar`;
+const KOTLIN_FIELD_SHA256 = '6f23f7d52affba7c0f5470b8a30193b41cea834ea9b4e907562797002222728b';
 const EXCEPTION_SHA256 = '48225381bae43e320041096e1996e4d519614a018d1eaac19341ac66686a26f8';
 const LEGACY_SHA256 = 'dd70e3cf8dc599c7a91b0c01efa86aa7bcf7677e3924ab4c4012e85895ab8605';
 
 function resolveDebugBundle(value, serverPath) {
   const defaults = serverPath && path.join(path.dirname(serverPath), 'java-debug');
-  const candidate = value || (defaults && [KOTLIN_LOCAL_WRITE_BUILD, INDEXED_WATCH_BUILD, WATCH_BUILD, COROUTINE_BUILD, DEBUG_BUILD, EXCEPTION_BUILD, LEGACY_BUILD].map(build => `com.microsoft.java.debug.plugin-${build}.jar`)
+  const candidate = value || (defaults && [KOTLIN_FIELD_BUILD, KOTLIN_LOCAL_WRITE_BUILD, INDEXED_WATCH_BUILD, WATCH_BUILD, COROUTINE_BUILD, DEBUG_BUILD, EXCEPTION_BUILD, LEGACY_BUILD].map(build => `com.microsoft.java.debug.plugin-${build}.jar`)
     .map(name => path.join(defaults, name)).find(file => fs.existsSync(file)));
   if (!candidate) return undefined;
   if (!path.isAbsolute(candidate)) throw new Error('rocketbrain.java.debugBundlePath must be an absolute JAR path.');
@@ -38,7 +41,7 @@ function resolveDebugBundle(value, serverPath) {
   const stat = fs.statSync(file);
   if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw new Error('Java debug bundle is not a regular JAR within the supported size.');
   const checksum = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-  const build = { [KOTLIN_LOCAL_WRITE_SHA256]: KOTLIN_LOCAL_WRITE_BUILD, [INDEXED_WATCH_SHA256]: INDEXED_WATCH_BUILD,
+  const build = { [KOTLIN_FIELD_SHA256]: KOTLIN_FIELD_BUILD, [KOTLIN_LOCAL_WRITE_SHA256]: KOTLIN_LOCAL_WRITE_BUILD, [INDEXED_WATCH_SHA256]: INDEXED_WATCH_BUILD,
     [WATCH_SHA256]: WATCH_BUILD, [COROUTINE_SHA256]: COROUTINE_BUILD, [DEBUG_SHA256]: DEBUG_BUILD,
     [EXCEPTION_SHA256]: EXCEPTION_BUILD, [LEGACY_SHA256]: LEGACY_BUILD }[checksum];
   if (!build) throw new Error('Java debug bundle must match a pinned Rocketbrain loopback-only build. Run the Java engine installer.');
@@ -72,4 +75,5 @@ module.exports = { DEBUG_VERSION, DEBUG_BUILD, DEBUG_FILE, DEBUG_SHA256, DEBUG_U
   COROUTINE_BUILD, COROUTINE_FILE, COROUTINE_SHA256, EXCEPTION_BUILD, resolveDebugBundle, resolveDebugBundles,
   WATCH_BUILD, WATCH_FILE, WATCH_SHA256, INDEXED_WATCH_BUILD, INDEXED_WATCH_FILE, INDEXED_WATCH_SHA256,
   KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_LOCAL_WRITE_FILE, KOTLIN_LOCAL_WRITE_SHA256,
+  KOTLIN_FIELD_BUILD, KOTLIN_FIELD_FILE, KOTLIN_FIELD_SHA256,
   independentJavaExecutable, argumentString };
