@@ -6,11 +6,13 @@ const path = require('node:path');
 const os = require('node:os');
 const { createHash, randomUUID } = require('node:crypto');
 const { SaxesParser } = require('saxes');
-const { micronautMavenProject } = require('./micronaut-model');
+const { micronautProject } = require('./micronaut-model');
 const { packagedJar } = require('./micronaut-runtime');
+const { distribution } = require('./micronaut-distribution');
 const { buildSpec } = require('./workbench-tasks');
 const { execute } = require('./testing/provision');
 const { fail, cancelled, hash, inside, LIMITS } = require('./workbench-model');
+const { lexJava } = require('../spring/java');
 
 const PREFIX = 'rb-micronaut-rebuild-';
 const REVIEW_LIFETIME_MS = 8 * 60 * 1000;
@@ -23,6 +25,9 @@ const SHA = bytes => createHash('sha256').update(bytes).digest('hex');
 const PHYSICAL_KEYS = ['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'];
 const NONSTANDARD_POM_PATHS = new Set(['modules', 'systemPath', 'sourceDirectory', 'testSourceDirectory',
   'outputDirectory', 'testOutputDirectory', 'directory', 'extensions']);
+const GRADLE_INPUTS = ['settings.gradle','settings.gradle.kts','build.gradle','build.gradle.kts','gradle.properties','gradle.lockfile'];
+const EXTERNAL_GRADLE_LAYOUT = new Set(['include','includeBuild','projectDir','sourceSets','srcDir','srcDirs','setSrcDirs',
+  'buildDir','buildDirectory','flatDir','fileTree','files']);
 const portable = value => value.split(path.sep).join('/');
 const sameFile = (a, b) => PHYSICAL_KEYS.every(key => a[key] === b[key]);
 
@@ -110,9 +115,18 @@ function localRepository(projectRoot, bytes) {
   return repository;
 }
 
+function gradleLayout(file, bytes) {
+  if (!/\.gradle(?:\.kts)?$/u.test(file)) return;
+  const {tokens,issues}=lexJava(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+  if (issues.length || tokens.some((token,index)=> token.kind==='id' && (EXTERNAL_GRADLE_LAYOUT.has(token.text) ||
+      token.text==='apply' && tokens.slice(index+1,index+6).some(item=>item.text==='from')))) {
+    throw fail('Use a standalone Micronaut Gradle application with conventional sources and dependencies.');
+  }
+}
+
 function captureRestartInputs(project, cancellation, includeBytes = false) {
   steady(cancellation);
-  const selected = micronautMavenProject(project);
+  const selected = micronautProject(project);
   const root = project.root;
   const rootStat = physical(root, 'directory');
   const files = [], names = new Set();
@@ -144,14 +158,28 @@ function captureRestartInputs(project, cancellation, includeBytes = false) {
       }
     } finally { handle.closeSync(); }
   }
-  singleModule(add(path.join(root, 'pom.xml'), LIMITS.fileBytes));
-  const configRoot = path.join(root, '.mvn');
-  if (physical(configRoot, 'directory', true)) {
-    const entries = fs.readdirSync(configRoot);
-    if (entries.some(name => name !== 'maven.config')) {
-      throw fail('The reviewed rebuild uses fixed Maven arguments and ordinary POM dependencies.');
+  if (selected.tool==='gradle') {
+    for (const name of ['buildSrc','build-logic']) {
+      if (physical(path.join(root,name),'directory',true)) {
+        throw fail('Use a standalone Micronaut Gradle application without local build logic.');
+      }
     }
-    if (entries.length) repository = localRepository(root, add(path.join(configRoot, 'maven.config'), 4096));
+    for (const name of GRADLE_INPUTS) {
+      const file=path.join(root,name);
+      if (physical(file,'file',true)) gradleLayout(name,add(file,LIMITS.fileBytes));
+    }
+    const support=path.join(root,'gradle');
+    if (physical(support,'directory',true)) visit(support,0);
+  } else {
+    singleModule(add(path.join(root, 'pom.xml'), LIMITS.fileBytes));
+    const configRoot = path.join(root, '.mvn');
+    if (physical(configRoot, 'directory', true)) {
+      const entries = fs.readdirSync(configRoot);
+      if (entries.some(name => name !== 'maven.config')) {
+        throw fail('The reviewed rebuild uses fixed Maven arguments and ordinary POM dependencies.');
+      }
+      if (entries.length) repository = localRepository(root, add(path.join(configRoot, 'maven.config'), 4096));
+    }
   }
   if (physical(path.join(root, 'src'), 'directory', true)) visit(path.join(root, 'src'), 0);
   if (!files.some(({ name }) => /^src\/main\/java\/.+\.java$/u.test(name))) {
@@ -175,6 +203,16 @@ function changedInputs(previous, next) {
 }
 
 function buildFor(project, tools, repository) {
+  if (project.tool==='gradle') {
+    const spec=buildSpec(project,tools,[':installDist']);
+    spec.args.splice(-1,0,'--offline','--no-build-cache','--no-configuration-cache','--gradle-user-home',tools.gradleUserHome);
+    for (const name of Object.keys(spec.env)) {
+      if (/^(?:GRADLE_OPTS|JAVA_OPTS|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS|ORG_GRADLE_PROJECT_.*)$/iu.test(name)) {
+        delete spec.env[name];
+      }
+    }
+    return spec;
+  }
   const spec = buildSpec(project, tools, ['package']);
   spec.args.splice(-1, 0, '--offline', '-DforkCount=0', ...(repository ? ['-Dmaven.repo.local=' + repository] : []));
   for (const name of Object.keys(spec.env)) {
@@ -186,6 +224,27 @@ function buildFor(project, tools, repository) {
 }
 
 function toolBinding(project, tools, repository) {
+  if (project.tool==='gradle') {
+    const home=tools.gradleUserHome;
+    if (!path.isAbsolute(home)) throw fail('Use an absolute local Gradle user home for the reviewed restart.');
+    const spec=buildFor(project,tools,repository);
+    const workspaceProperties=path.join(home,'gradle.properties');
+    for (const name of ['init.gradle','init.gradle.kts']) {
+      if (physical(path.join(home,name),'file',true)) throw fail('Use a Gradle cache without global initialization scripts for a reviewed restart.');
+    }
+    for (const directory of [path.join(home,'init.d'),path.join(tools.gradleHome,'init.d')]) {
+      if (physical(directory,'directory',true) && fs.readdirSync(directory).some(name=>/\.gradle(?:\.kts)?$/u.test(name))) {
+        throw fail('Use a Gradle distribution and cache without global initialization scripts for a reviewed restart.');
+      }
+    }
+    const globals=physical(workspaceProperties,'file',true) && SHA(readInput(workspaceProperties,LIMITS.fileBytes));
+    const stat=physical(home,'directory');
+    const launchers=[spec.command,spec.args[spec.args.indexOf('-cp')+1]];
+    return hash([spec.command,spec.args,...launchers.map(file=>{
+      const value=physical(file,'file');
+      return PHYSICAL_KEYS.map(key=>String(value[key]));
+    }),String(stat.dev),String(stat.ino),globals||null]);
+  }
   const spec = buildFor(project, tools, repository);
   return hash([spec.command, spec.args, ...[
     spec.command, spec.args.find(arg => arg.startsWith('-Dclassworlds.conf=')).slice('-Dclassworlds.conf='.length),
@@ -223,19 +282,28 @@ async function buildFresh(project, tools, snapshot, cancellation, log) {
     await fsp.rm(folder, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
   };
   try {
+    const root=project.tool==='gradle'?path.join(folder,path.basename(project.root)):folder;
     for (const entry of snapshot.files) {
       steady(cancellation);
       if (entry.name === '.mvn/maven.config') continue; // The reviewed repository is passed as one argv value.
-      const target = path.join(folder, entry.name);
+      const target = path.join(root, entry.name);
       await fsp.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
       await fsp.writeFile(target, entry.content, { flag: 'wx', mode: 0o600 });
     }
-    const copy = { ...project, root: folder };
+    const copy = { ...project, root };
     const spec = buildFor(copy, tools, snapshot.repository);
     const built = await execute(spec.command, spec.args, { cwd: spec.cwd, env: spec.env, cancellation,
       timeoutMs: LIMITS.buildMs, onOutput: log });
     steady(cancellation);
-    if (built.code !== 0) throw fail('Maven did not produce a fresh Micronaut package. See Rocketbrain Micronaut output.');
+    if (built.code !== 0) {
+      const tool=project.tool==='gradle'?'Gradle':'Maven';
+      throw fail(tool+' did not produce a fresh Micronaut package. See Rocketbrain Micronaut output.');
+    }
+    if (project.tool==='gradle') {
+      const model=micronautProject(copy), selected=await distribution(copy,model), jars=[];
+      for (const jar of selected.jars) jars.push([jar.artifact,await artifactDigest(jar.file,cancellation)]);
+      return {copy,sha256:hash([model.mainClass,jars]),remove};
+    }
     const artifact = await packagedJar(copy);
     const sha256 = await artifactDigest(artifact.file, cancellation);
     return { copy, sha256, remove };
@@ -255,8 +323,8 @@ function createMicronautRestart({ runtime, currentProject, currentTools, validat
 
   function owned(runId) {
     const run = runtime.getState();
-    if (run.state !== 'running' || run.kind !== 'maven-jar' || run.debug || runId && run.runId !== runId) {
-      throw fail('Choose the current owned, non-debug Micronaut Maven application to restart.');
+    if (run.state !== 'running' || !['maven-jar','gradle-distribution'].includes(run.kind) || run.debug || runId && run.runId !== runId) {
+      throw fail('Choose the current owned, non-debug Micronaut application to restart.');
     }
     return run;
   }
@@ -264,20 +332,20 @@ function createMicronautRestart({ runtime, currentProject, currentTools, validat
   async function prepare(cancellation) {
     const run = owned();
     const project = await currentProject(run.projectUri, cancellation);
-    validate(project, cancellation);
+    const imported=validate(project, cancellation);
     const input = captureRestartInputs(project, cancellation);
     const tools = toolBinding(project, currentTools(project), input.repository);
     await runtime.verifyHttpTarget({ runId: run.runId, cancellation });
-    validate(project, cancellation);
+    if (validate(project, cancellation)!==imported) throw fail('The imported Micronaut project changed. Review and try again.');
     owned(run.runId);
     const previous = retained?.runId === run.runId ? retained.input : undefined;
     const publicReview = {
       reviewId: randomUUID(), runId: run.runId, projectUri: run.projectUri, name: project.name,
-      environment: run.environment, task: 'Maven offline package', oldBaseUrl: run.baseUrl,
+      environment: run.environment, task: project.tool==='gradle'?'Gradle offline :installDist':'Maven offline package', oldBaseUrl: run.baseUrl,
       sourceDigest: input.digest, sourceCount: input.files.length, baselineObserved: !!previous,
       changes: changedInputs(previous, input)
     };
-    approval = { publicReview, tools, rootKey: input.rootKey, expires: Date.now() + REVIEW_LIFETIME_MS };
+    approval = { publicReview, tools, imported, rootKey: input.rootKey, expires: Date.now() + REVIEW_LIFETIME_MS };
     return structuredClone(publicReview);
   }
 
@@ -287,12 +355,12 @@ function createMicronautRestart({ runtime, currentProject, currentTools, validat
     if (typeof reviewId !== 'string' || !approval || approval.publicReview.reviewId !== reviewId || Date.now() >= approval.expires) {
       throw fail('Prepare a current one-use Micronaut restart review.');
     }
-    const { publicReview, tools, rootKey } = approval;
+    const { publicReview, tools, imported, rootKey } = approval;
     approval = undefined;
     const run = owned(publicReview.runId);
     const project = await currentProject(publicReview.projectUri, cancellation);
     const verifiedInputs = includeBytes => {
-      validate(project, cancellation);
+      if (validate(project, cancellation)!==imported) throw fail('The imported Micronaut project changed after review. Review and try again.');
       const input = captureRestartInputs(project, cancellation, includeBytes);
       if (input.digest !== publicReview.sourceDigest || input.rootKey !== rootKey ||
           toolBinding(project, currentTools(project), input.repository) !== tools) {
@@ -311,13 +379,18 @@ function createMicronautRestart({ runtime, currentProject, currentTools, validat
     try {
       await checkOwner();
       authorized();
-      const latest = verifiedInputs(false);
-      await runtime.stop();
-      authorized();
-      verifiedInputs(false);
-      next = await runtime.start({ project: built.copy, javaHome: selectedTools.javaHome,
+      let latest = verifiedInputs(false);
+      const options={ project: built.copy, javaHome: selectedTools.javaHome,
         environment: run.environment, cancellation, allowProjectExecution: true, workspaceTrusted: true,
-        expectedArtifactSha256: built.sha256, launchInStaging: true, verifyHttp: true });
+        expectedArtifactSha256: built.sha256, launchInStaging: true, verifyHttp: true };
+      if (project.tool==='gradle') {
+        next=await runtime.replace({...options,runId:run.runId,authorize(){authorized();latest=verifiedInputs(false);}});
+      } else {
+        await runtime.stop();
+        authorized();
+        verifiedInputs(false);
+        next=await runtime.start(options);
+      }
       remember(next, latest);
       return { ...next, restartedFrom: run.runId, sourceDigest: latest.digest, previousArtifactSha256: run.sha256,
         mode: 'owned-jvm-restart', ownershipVerified: true };

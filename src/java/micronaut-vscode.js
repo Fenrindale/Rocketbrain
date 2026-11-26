@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('node:path');
+const os = require('node:os');
 const { parseYaml } = require('../spring/configuration');
 const { inspectMicronautProject,micronautProject,snapshotMicronautDebugSources,CONFIG_FILE,PART } = require('./micronaut-model');
 const { createMicronautRuntime,packagedJar } = require('./micronaut-runtime');
@@ -8,7 +9,7 @@ const { createMicronautDebugger } = require('./micronaut-debugger');
 const { createMicronautRestart, captureRestartInputs } = require('./micronaut-restart');
 const { createMicronautNative } = require('./micronaut-native');
 const { distribution }=require('./micronaut-distribution');
-const { workspacePath,workspaceRoots,inside,fail,cancelled } = require('./workbench-model');
+const { workspacePath,workspaceRoots,inside,fail,cancelled,hash } = require('./workbench-model');
 
 const COMMANDS={inspect:'rocketbrain.micronaut.inspect',run:'rocketbrain.micronaut.run',debug:'rocketbrain.micronaut.debug',
   tests:'rocketbrain.micronaut.test',build:'rocketbrain.micronaut.build',stop:'rocketbrain.micronaut.stop',
@@ -58,26 +59,35 @@ function registerMicronautWorkbench(vscode,java) {
     const config=vscode.workspace.getConfiguration('rocketbrain.java',vscode.Uri.parse(project.uri));
     const latest=java.workbench.getSnapshot().projects.find(item => item.uri===project.uri);
     return {javaHome:latest?.jdk || config.get('javaHome') || java.getState().javaHome,
-      mavenHome:config.get('mavenHome'),graalvmHome:config.get('micronautGraalvmHome')};
+      mavenHome:config.get('mavenHome'),graalvmHome:config.get('micronautGraalvmHome'),gradleHome:config.get('gradleHome'),
+      gradleUserHome:process.env.GRADLE_USER_HOME || path.join(os.homedir(),'.gradle')};
   }
 
   function validateRestart(project,cancellation) {
     trusted(cancellation);
-    if (path.relative(project.root,workspacePath(project.root,roots())) ||
-        !java.workbench.getSnapshot().projects.some(item => item.uri===project.uri && item.tool==='maven')) {
-      throw fail('The reviewed Micronaut Maven module is no longer in the trusted workspace.');
+    const imported=java.workbench.getSnapshot().projects.find(item=>item.uri===project.uri && item.tool===project.tool);
+    if (!imported || path.relative(project.root,workspacePath(project.root,roots()))) {
+      throw fail('The reviewed Micronaut module is no longer in the trusted workspace.');
     }
     saveNeeded(project);
+    if (project.tool==='gradle') {
+      const javaRoot=path.join(project.root,'src','main','java');
+      const classpath=imported.libraries?.filter(item=>item.path && item.kind==='classpath' && !item.unavailable);
+      if (!imported.natures?.some(nature=>nature.includes('buildship')) ||
+          !imported.sourceRoots?.some(item=>!item.unavailable && !path.relative(item.path,javaRoot)) ||
+          !classpath?.some(item=>/^micronaut-core-5\..*\.jar$/u.test(item.name))) {
+        throw fail('Refresh the imported Micronaut Gradle Java source and runtime classpath before reviewing a restart.');
+      }
+      return hash([javaRoot,classpath.map(item=>item.path).sort()]);
+    }
   }
 
   const restart=createMicronautRestart({runtime,currentProject:projectFor,currentTools:tools,validate:validateRestart,
     log:chunk => output.append(chunk)});
 
-  function observedMavenSources(project,cancellation) {
-    if (project.tool==='maven') {
-      try {return captureRestartInputs(project,cancellation);}
-      catch { /* Existing run supports projects outside the narrower restart scope. */ }
-    }
+  function observedRestartSources(project,cancellation) {
+    try {return captureRestartInputs(project,cancellation);}
+    catch { /* Ordinary Run also supports projects beyond the reviewed restart scope. */ }
   }
 
   function prepareRestart({cancellation}={}) {
@@ -160,7 +170,7 @@ function registerMicronautWorkbench(vscode,java) {
     try {
       const signal=controller.signal;
       const project=await projectFor(projectUri,signal);
-      const initialMaven=debug ? undefined : observedMavenSources(project,signal);
+      const initial=debug ? undefined : observedRestartSources(project,signal);
       let sources;
       if (debug) {
         await java.start();
@@ -188,10 +198,10 @@ function registerMicronautWorkbench(vscode,java) {
         sessionId=await debuggerControl.attach({project,receipt:result,sourcePaths:sources.sourcePaths,
           cancellation:signal,validate:verify});
       }
-      if (initialMaven) {
-        const saved=observedMavenSources(project,signal);
-        if (saved?.digest===initialMaven.digest && saved.rootKey===initialMaven.rootKey) {
-          restart.remember(result,initialMaven);
+      if (initial) {
+        const saved=observedRestartSources(project,signal);
+        if (saved?.digest===initial.digest && saved.rootKey===initial.rootKey) {
+          restart.remember(result,initial);
         }
       }
       output.appendLine(`Micronaut ${environment} · ${result.artifact} · ${result.baseUrl}`);
@@ -224,6 +234,7 @@ function registerMicronautWorkbench(vscode,java) {
     if (cancelled(cancellation)) cancel();
     try {
       const signal=controller.signal, project=await projectFor(projectUri,signal);
+      if (project.tool!=='maven') throw fail('Choose an imported Maven Micronaut application for Native Image.');
       const current=()=>validateRestart(project,signal);
       current();
       const options={project,environment,buildId,cancellation:signal,current};
@@ -426,7 +437,9 @@ function registerMicronautWorkbench(vscode,java) {
     output.show(true);
     const approved='Build and Restart';
     const confirmed=await vscode.window.showWarningMessage('Build and restart the owned Micronaut application?',{
-      modal:true, detail:'Review the saved files in Rocketbrain Micronaut output. Maven builds a fresh package in a private folder before the current JVM stops. The new JVM can use a different port.'
+      modal:true, detail:review.task.startsWith('Gradle')
+        ? 'Gradle builds a fresh distribution offline. Rocketbrain verifies the new JVM on a separate loopback port before stopping the old JVM.'
+        : 'Review the saved files in Rocketbrain Micronaut output. Maven builds a fresh package in a private folder before the current JVM stops. The new JVM can use a different port.'
     },approved);
     if (confirmed!==approved) return;
     const result=await progress('Build and Restart Micronaut',cancellation =>
