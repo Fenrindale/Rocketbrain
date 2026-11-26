@@ -2,6 +2,7 @@
 
 const platforms = Object.freeze({ win32: 'Windows', linux: 'Linux', darwin: 'macOS' });
 const neutral = '!inQuickOpen';
+const activeContext = 'rocketbrain.keyboardProfile.enabled';
 const workspace = '(!inputFocus || editorTextFocus)';
 const trusted = 'isWorkspaceTrusted';
 const project = workspace + ' && ' + trusted + ' && workspaceFolderCount > 0';
@@ -87,6 +88,17 @@ function profileRules(platform) {
   })));
 }
 
+function activeRule(when) {
+  return activeContext + ' && workspaceFolderCount > 0 && ' + when;
+}
+
+function workspaceKeybindings() {
+  const mac = profileRules('darwin');
+  return profileRules('win32').map(({command,key,when},index) => ({
+    command,key,mac:mac[index].key,when:activeRule(when)
+  }));
+}
+
 const maxInputBytes = 1024 * 1024;
 const maxRules = 6000;
 
@@ -164,11 +176,12 @@ function scopeDisjoint(left, right) {
       key === peer && (equal && matches ? value !== expected : equal !== matches && value === expected)));
 }
 
-function auditProfile(platform, { commands, manifests = [], input } = {}) {
+function auditProfile(platform, { commands, manifests = [], input, ownerId } = {}) {
   const profile = profileRules(platform);
   const available = new Set(commands);
   const entries = new Map();
   let manifestRules = 0, manifestIncomplete = false;
+  const ownRules = new Map(workspaceKeybindings().map(rule => [rule.command,rule]));
   function scan(binding, source, contributed) {
     const override = { win32: 'win', linux: 'linux', darwin: 'mac' }[platform];
     const pressed = contributed && binding?.[override] !== undefined ? binding[override] : binding?.key;
@@ -185,6 +198,9 @@ function auditProfile(platform, { commands, manifests = [], input } = {}) {
     const bindings = manifest?.packageJSON?.contributes?.keybindings;
     if (!Array.isArray(bindings)) continue;
     for (const binding of bindings) {
+      const own=manifest.id===ownerId && ownRules.get(binding?.command);
+      if (own && Object.keys(own).length===Object.keys(binding).length &&
+          Object.entries(own).every(([key,value])=>binding[key]===value)) continue;
       if (manifestRules === maxRules) { manifestIncomplete = true; break; }
       manifestRules++;
       scan(binding, manifest.id, true);
@@ -219,4 +235,4 @@ function exportProfile(report) {
     ({ key, command, when })), null, 2) + '\n';
 }
 
-module.exports = { platforms, profileRules, parseKeybindings, auditProfile, exportProfile };
+module.exports = { platforms, profileRules, parseKeybindings, auditProfile, exportProfile, activeContext, workspaceKeybindings };

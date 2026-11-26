@@ -10,6 +10,7 @@ const { resolveNullChecks, nullCheckUpdates } = require('./null-checks');
 const { configureNullChecks } = require('./null-checks-vscode');
 const { hash, indexScope, indexStorage, readGeneration } = require('./workspace-index');
 const { registerWorkspaceIndex } = require('./workspace-index-vscode');
+const { registerJavaAutostart } = require('./startup');
 
 function registerJavaFeatures(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain Java', { log: true });
@@ -417,7 +418,7 @@ function registerJavaFeatures(context, vscode) {
     else if (selected?.action === 'output') output.show();
     else if (selected?.action === 'endpoints') await vscode.commands.executeCommand('rocketbrain.spring.endpoints');
   }));
-  subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => { void api.start().catch(error => output.appendLine(error.message)); }));
+
   subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.configureNullChecks',()=>{
     return configureNullChecks(vscode).catch(error=>{void vscode.window.showErrorMessage(error.message);});
   }));
@@ -426,7 +427,7 @@ function registerJavaFeatures(context, vscode) {
   }));
   subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (!configuring && ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome', 'extractInterface.replaceUsages', 'staticImport.favorites', 'annotationProcessing.gradleEnabled', 'annotationProcessing.lombokJar'].some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) void api.restart().catch(error => output.appendLine(error.message)); }));
   update('stopped', 'Java server is stopped.');
-  void api.start().catch(error => output.appendLine(error.message));
+  subscriptions.push(registerJavaAutostart(vscode,api.start,error=>output.appendLine(error.message)));
   return api;
 }
 

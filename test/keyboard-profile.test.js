@@ -6,7 +6,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
 const manifest = require('../package.json');
-const { auditProfile, exportProfile, parseKeybindings, profileRules } = require('../src/keyboard-profile');
+const { activeContext,auditProfile,exportProfile,parseKeybindings,profileRules,workspaceKeybindings } = require('../src/keyboard-profile');
+const { assertWorkspaceKeybindings } = require('../scripts/keyboard-profile-manifest');
+const { jdbcReadback } = require('./java-source-analysis-host');
 const { registerKeyboardProfile } = require('../src/keyboard-profile-vscode');
 const { createContextHarness, document, uri } = require('./helpers/context-actions-fixture');
 
@@ -15,6 +17,8 @@ const find = (rules, id) => rules.find(rule => rule.command === id);
 
 test('52 opt-in shortcuts use four platform leaders and registered Rocketbrain action IDs', () => {
   const declared = new Set(manifest.contributes.commands.map(value => value.command));
+  assertWorkspaceKeybindings(manifest);
+  const installed = workspaceKeybindings();
   for (const platform of ['win32', 'linux', 'darwin']) {
     const rules = profileRules(platform);
     assert.equal(rules.length, 52);
@@ -24,7 +28,13 @@ test('52 opt-in shortcuts use four platform leaders and registered Rocketbrain a
     const modifier = platform === 'darwin' ? 'cmd' : 'ctrl';
     assert.ok(rules.every(rule => rule.key.startsWith(modifier + '+shift+f')));
     for (const rule of rules.filter(rule => rule.command.startsWith('rocketbrain.'))) assert.ok(declared.has(rule.command), rule.command);
-    assert.ok(!manifest.contributes.keybindings.some(binding => rules.some(rule => rule.key === binding.key)));
+    for (const [index,rule] of rules.entries()) {
+      const contribution=installed[index];
+      assert.equal(contribution.command,rule.command);
+      assert.equal(platform==='darwin'?contribution.mac:contribution.key,rule.key);
+      assert.equal(contribution.when,activeContext+' && workspaceFolderCount > 0 && '+rule.when);
+      assert.match(contribution.when,/!inQuickOpen/);
+    }
     assert.match(find(rules, 'rocketbrain.runQuery').when, /editorTextFocus.*editorLangId == sql/u);
     assert.match(find(rules, 'rocketbrain.focusQueryEditor').when, /!editorTextFocus.*focusedView == rocketbrain.results/u);
     assert.match(find(rules, 'workbench.action.focusActiveEditorGroup').when, /\(terminalFocus \|\|/u);
@@ -62,10 +72,13 @@ test('preview separates identical rules, possible overlaps, prefix conflicts and
     { key: 'ctrl+x', win: rule.key, mac: 'cmd+x', command: 'fixture.extensionCommand' },
     { key: prefix + ' q', command: 'fixture.otherChord' }
   ] } } }];
-  const report = auditProfile('win32', { commands: [command], input, manifests });
+  const ownerId = 'rocketbrain-local.rocketbrain';
+  const report = auditProfile('win32',{commands:[command],input,manifests:[...manifests,{id:ownerId,packageJSON:manifest}],ownerId});
   const results = find(report.routes, command).overlaps;
   assert.equal(report.suppliedRules, 7);
-  assert.equal(report.manifestRules, 2);
+  const generated = manifest.contributes.keybindings.filter(binding => binding.when?.startsWith(activeContext+' && '));
+  assert.equal(generated.length,52);
+  assert.equal(report.manifestRules,2+manifest.contributes.keybindings.length-generated.length);
   assert.equal(results.find(item => item.command === 'fixture.otherLanguage').scope, 'disjoint literal contexts');
   assert.ok(results.some(item => item.scope === 'identical rule'));
   assert.ok(results.some(item => item.command === command && item.hasArgs && item.scope === 'possible overlap'));
@@ -144,4 +157,98 @@ test('preview, cancellation, stale review and untitled export leave the chosen k
   assert.equal(opens.length, 2);
   assert.equal(await fs.readFile(file, 'utf8'), baseline);
   assert.deepEqual(await fs.readdir(owned), ['keybindings.json']);
+});
+
+function profileState(root,context) {
+  const host=createContextHarness(root);
+  const writes=[], gate=[];
+  const pickedContext=context || host.context;
+  host.vscode.extensions={all:[pickedContext.extension]};
+  host.commands.set('setContext',(name,value) => {assert.equal(name,activeContext);gate.push(value);});
+  const workspaceState=pickedContext.workspaceState;
+  const memo={get:workspaceState.get,async update(key,value){writes.push(value);return workspaceState.update(key,value);}};
+  let folders;
+  host.vscode.workspace.onDidChangeWorkspaceFolders=fn=>{folders=fn;return {dispose(){folders=undefined;}};};
+  const service=registerKeyboardProfile(host.vscode,{...pickedContext,workspaceState:memo});
+  return {host,service,gate,writes,context:pickedContext,folders:()=>folders()};
+}
+
+test('workspace profile toggles through the normal Quick Pick, reloads and remains isolated', async () => {
+  const root=path.resolve('owned-workspace-a');
+  const first=profileState(root);
+  assert.deepEqual(await first.service.workspaceStatus(),{configured:false,enabled:false,hasWorkspace:true});
+  assert.deepEqual(first.gate,[false]);
+  const command=()=>first.host.vscode.commands.executeCommand('rocketbrain.keyboardProfile');
+  first.host.answer(items=>items.find(item=>item.kind==='workspace'));
+  assert.equal((await command()).kind,'enable');
+  assert.deepEqual(first.writes,[true]);
+  assert.deepEqual(first.gate,[false,true]);
+  await first.service.dispose();
+  assert.equal(first.gate.at(-1),false,'Disposal clears the live context while retaining the workspace preference.');
+
+  const reopened=profileState(root,first.context);
+  const other=profileState(path.resolve('owned-workspace-b'));
+  try {
+    assert.equal((await reopened.service.workspaceStatus()).enabled,true);
+    assert.equal((await other.service.workspaceStatus()).enabled,false);
+    const original=reopened.host.vscode.workspace.workspaceFolders;
+    reopened.host.vscode.workspace.workspaceFolders=[];
+    reopened.folders();
+    assert.deepEqual(await reopened.service.workspaceStatus(),{configured:true,enabled:false,hasWorkspace:false});
+    await assert.rejects(reopened.service.setWorkspaceEnabled(true),/Open a workspace folder/);
+    reopened.host.vscode.workspace.workspaceFolders=original;
+    reopened.folders();
+    assert.equal((await reopened.service.workspaceStatus()).enabled,true);
+    reopened.host.answer(items=>items.find(item=>item.kind==='workspace'));
+    assert.equal((await reopened.host.vscode.commands.executeCommand('rocketbrain.keyboardProfile')).kind,'disable');
+    assert.deepEqual(reopened.writes,[undefined]);
+    assert.equal((await reopened.service.workspaceStatus()).enabled,false);
+  } finally {
+    await Promise.all([reopened.service.dispose(),other.service.dispose()]);
+  }
+});
+
+test('a superseded profile picker cannot enable shortcuts', async () => {
+  const {host,service,writes,gate}=profileState(path.resolve('owned-workspace-quick-pick'));
+  let choose,started;
+  const decided=new Promise(resolve=>{choose=resolve;});
+  const began=new Promise(resolve=>{started=resolve;});
+  host.answer(async items=>{started();await decided;return items.find(item=>item.kind==='workspace');});
+  const open=()=>host.vscode.commands.executeCommand('rocketbrain.keyboardProfile');
+  try {
+    const stale=open();
+    await began;
+    host.answer(()=>undefined);
+    assert.equal(await open(),undefined);
+    choose();
+    assert.equal(await stale,undefined);
+    assert.equal((await service.workspaceStatus()).enabled,false);
+    assert.deepEqual(writes,[]);
+    assert.deepEqual(gate,[false]);
+  } finally {
+    await service.dispose();
+  }
+});
+
+test('workspace profile changes preserve an owned Spring JDBC read', {
+  skip:!process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG
+},async () => {
+  const {service}=profileState(path.resolve('owned-profile-spring'));
+  try {
+    const before=await jdbcReadback();
+    assert.ok(before);
+    assert.equal((await service.workspaceStatus()).enabled,false);
+    assert.equal((await service.setWorkspaceEnabled(true)).enabled,true);
+    assert.deepEqual(await jdbcReadback(),before);
+    assert.equal((await service.setWorkspaceEnabled(false)).enabled,false);
+    const after=await jdbcReadback();
+    assert.deepEqual(after,before);
+    if (process.env.ROCKETBRAIN_KEYBOARD_PROFILE_RECEIPT) {
+      await fs.writeFile(process.env.ROCKETBRAIN_KEYBOARD_PROFILE_RECEIPT,JSON.stringify({
+        engine:process.env.ROCKETBRAIN_TEST_MYSQL_ENGINE,disabledByDefault:true,enabledAndDisabled:true,readOnlySpringJdbc:after
+      },null,2)+'\n',{flag:'wx'});
+    }
+  } finally {
+    await service.dispose();
+  }
 });
