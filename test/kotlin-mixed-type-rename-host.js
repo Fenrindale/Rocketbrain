@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { fileURLToPath } = require('node:url');
 const { until, positionOf } = require('./helpers/stdio-lsp');
 const { ownerFile, kotlinCaller, javaCaller, sameName, newName, populate, rebuild, runJdbc } = require('./helpers/mixed-type-rename-fixture');
 
@@ -40,8 +41,9 @@ async function runKotlinMixedTypeRenameChecks(api, vscode, checks) {
     const point=new vscode.Position(position.line,position.character);
     await api.java.start();
     await until(async()=>{
-      const cp=await api.java.executeWorkspaceCommand('java.project.getClasspaths',uri.toString(),{scope:'runtime'});
-      return cp?.projectRoot && path.relative(project,cp.projectRoot)==='' &&
+      const cp=await api.java.executeWorkspaceCommand('java.project.getClasspaths',caller.uri.toString(),{scope:'runtime'});
+      const root = cp?.projectRoot && (cp.projectRoot.startsWith('file:') ? fileURLToPath(cp.projectRoot) : cp.projectRoot);
+      return root && path.isAbsolute(root) && path.relative(project,root)==='' &&
         cp.classpaths?.some(file=>file.endsWith('spring-jdbc-7.0.10.jar'));
     },100000);
     await api.java.kotlinEditor.start({document});

@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { setTimeout: delay } = require('node:timers/promises');
 const { inlineWorkstation } = require('./helpers/editor-inline-host');
 const { startLocalModel } = require('./helpers/local-sql-model-fixture');
 const { jdbcReadback } = require('./java-source-analysis-host');
@@ -66,13 +67,23 @@ async function runEditorInlineModelChecks(api, vscode, checks) {
     for (const key of keys) await preferences.update(key, model[key], vscode.ConfigurationTarget.Workspace);
     await fs.writeFile(file, initial, { flag: 'wx' });
     document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
-    const editor = await vscode.window.showTextDocument(document, { preview: false });
     const position = document.positionAt(prefix.length);
-    editor.selection = new vscode.Selection(position, position);
+    const cursor = new vscode.Selection(position, position);
+    const editor = await vscode.window.showTextDocument(document, { preview: false, selection: cursor });
+    // Drain the opening selection and configuration events before approving the
+    // file. These same events intentionally cancel an in-flight proposal.
+    const deadline = Date.now() + 3000;
+    while (!editor.selection.isEmpty || !editor.selection.active.isEqual(position)) {
+      assert.ok(Date.now()<deadline,'The native cursor never reached the completion point.');
+      await delay(25);
+    }
+    await vscode.commands.executeCommand('setContext','rocketbrain.fixtureInlineCursorReady',true);
     const provide = () => inline.provideInlineCompletionItems(document, position,
       { triggerKind: vscode.InlineCompletionTriggerKind.Invoke }, cancellation.token);
     assert.deepEqual(await provide(), []);
     assert.equal(await inline.approve(document, scope => scope.endpoint === model.endpoint && scope.model === model.model), true);
+    assert.equal(vscode.window.activeTextEditor,editor);
+    assert.equal(document.offsetAt(editor.selection.active),prefix.length);
     const item = verifyProposal(await provide());
     assert.ok(item.range.start.isEqual(position));
     assert.equal(document.getText(), initial);
