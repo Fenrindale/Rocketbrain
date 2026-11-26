@@ -180,3 +180,54 @@ test('Helm rollback compares exact manifests, refuses changed reviews, and verif
   await assert.rejects(operations.apply(valid, { approved: true }), /Approve a current/);
   assert.equal(writes, 1);
 });
+
+test('redirects only the approved non-interactive credential executable to an owned byte-for-byte snapshot', async t => {
+  const root = await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()), 'rb-kube-exec-'));
+  const command = path.join(root, process.platform === 'win32' ? 'helper.exe' : 'helper');
+  const file = path.join(root, 'provider.kubeconfig');
+  const bytes = Buffer.from('mock executable bytes');
+  await fs.writeFile(command, bytes, { flag: 'wx', mode: 0o700 });
+  const exec = { apiVersion: 'client.authentication.k8s.io/v1', command, args: ['credential scope'], interactiveMode: 'Never' };
+  const withExec = object => ({ ...config, users: [{ ...reader, user: { exec: object } }] });
+  for (const change of [{ command: 'helper' }, { interactiveMode: 'IfAvailable' }, { env: [{ name: 'X', value: 'value' }] },
+    { provideClusterInfo: true }, { apiVersion: 'client.authentication.k8s.io/v1beta1' }]) {
+    assert.equal(approvedContexts(withExec({ ...exec, ...change })).size, 0);
+  }
+  await fs.writeFile(file, JSON.stringify(withExec(exec)), { flag: 'wx' });
+  t.after(async () => { await fs.unlink(file); await fs.unlink(command); await fs.rmdir(root); });
+  let snapshot, calls = 0;
+  const tool = async (_binary, argv, options) => {
+    const pathArg = argv.find(arg => arg.startsWith('--kubeconfig='));
+    const cfg = JSON.parse(await fs.readFile(pathArg.slice('--kubeconfig='.length), 'utf8'));
+    if (argv.includes('view')) return JSON.stringify(cfg);
+    calls++;
+    const user = cfg.users[0].user;
+    assert.deepEqual(Object.keys(user), ['exec']);
+    snapshot = user.exec.command;
+    assert.equal(path.relative(options.folder, path.dirname(path.dirname(snapshot))), '');
+    assert.notEqual(snapshot, command);
+    assert.deepEqual(await fs.readFile(snapshot), bytes);
+    assert.deepEqual(user.exec.args, exec.args);
+    return '{"items":[]}';
+  };
+  const stale = await prepareKubernetesConfig({ file, kubectl: 'kubectl' }, tool);
+  t.after(() => stale.close());
+  const oldReview = await stale.reviewCredential('selected');
+  await fs.writeFile(command, 'updated');
+  await assert.rejects(stale.select('selected', { credentialReview: oldReview, approvedExecutable: true }), /executable changed/);
+  assert.equal(calls, 0);
+  await fs.writeFile(command, bytes);
+  const prepared = await prepareKubernetesConfig({ file, kubectl: 'kubectl' }, tool);
+  t.after(() => prepared.close());
+  const review = await prepared.reviewCredential('selected');
+  await assert.rejects(prepared.select('selected', { credentialReview: review }), /Approve the reviewed credential/);
+  const session = await prepared.select('selected', { credentialReview: review, approvedExecutable: true });
+  assert.equal(calls, 0);
+  assert.equal(session.scope.credential, 'reviewed-executable');
+  assert.ok(!JSON.stringify(session.scope).includes('credential scope'));
+  await fs.writeFile(command, 'updated after staging');
+  await session.resources('deployments', 'journal');
+  assert.equal(calls, 1);
+  await session.close();
+  await assert.rejects(fs.stat(snapshot), { code: 'ENOENT' });
+});

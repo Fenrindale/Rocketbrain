@@ -1,6 +1,8 @@
 # Reviewed Kubernetes operations
 
-Connect the Kubernetes explorer to a reviewed kubeconfig context and select a namespace. The connection uses the selected context's embedded credentials and the cluster's existing permissions.
+Connect the Kubernetes explorer to a reviewed kubeconfig context and select a namespace. The connection uses the cluster's existing permissions and supports embedded tokens, client certificates, and reviewed standalone credential executables.
+
+For a kubeconfig `exec` credential, use an absolute local executable, the `client.authentication.k8s.io/v1` protocol and `interactiveMode: Never`. The approval shows the path, arguments, and executable digest. Rocketbrain makes a private executable snapshot. Kubectl and Helm obtain credentials through their own exec authentication when they contact the cluster. The snapshot contains only the reviewed program, so the supported programs must run without files beside their original executable. Provider-specific environment overrides and interactive sign-in are outside this workflow.
 
 ## Scale a Deployment
 
