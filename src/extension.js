@@ -94,7 +94,7 @@ async function activate(context) {
   const codeReview = require('./vcs/code-review-vscode').registerCodeReview(context,vscode);
   context.subscriptions.push(codeReview);
   const codeModel = require('./ai/editor-model-vscode').registerEditorModel(vscode);
-  const sshWorkspace = require('./remote/ssh-workspace-vscode').registerSshWorkspace(context, vscode);
+  const sshWorkspace = require('./remote/ssh-workspace-vscode').registerSshWorkspace(context, vscode, { getLocalJava: () => java });
   const acpReview = require('./ai/acp-vscode').registerAcpReview(context,vscode);
   acpReview.database = require('./db/acp-database-vscode').registerDatabaseAcp(context,vscode,database);
   acpReview.workspaceEdits = require('./ai/acp-workspace-edit-vscode').registerWorkspaceAcpEdits(context,vscode);

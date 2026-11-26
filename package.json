@@ -109,6 +109,8 @@
       { "command": "rocketbrain.sshWorkspace.terminal", "title": "Open Reviewed SSH Workspace Terminal", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.javaStart", "title": "Start Reviewed SSH Java Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sshWorkspace.javaStop", "title": "Stop SSH Java Analysis", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sshWorkspace.javaDebug", "title": "Attach Reviewed SSH Java Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sshWorkspace.javaDebugStop", "title": "Disconnect SSH Java Debugger", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.acp.compare", "title": "Compare Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.acp.review", "title": "Review Local ACP Agent Replies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.docker.select", "title": "Select Docker Context", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(plug)" },
