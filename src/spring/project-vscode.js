@@ -1,5 +1,6 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),{fileURLToPath}=require('node:url'),{SpringProjectTools}=require('./project-tools'),{sha,fail}=require('./project-client');
+const { registerSpringAot } = require('./aot-vscode');
 const SCHEME='rocketbrain-spring-projects';
 function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
  let disposed=false;const subscriptions=[],outcomes=new Map();const trusted=()=>{if(disposed||vscode.workspace.isTrusted===false)throw fail('TRUST','Trust the workspace before using Spring project tools.');};
@@ -12,6 +13,7 @@ function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
   const doc=matches[0];
   return doc&&!doc.isClosed?{version:doc.version,dirty:doc.isDirty,text:doc.getText()}:undefined;
  }
+ const aot = registerSpringAot(vscode);
  const controller=new SpringProjectTools({
   fetchImpl,getWorkspaceRoots:()=>vscode.workspace.workspaceFolders?.map(folder=>folder.uri.fsPath)||[],assertTrusted:trusted,documentSnapshot,
   getMavenRepository:root=>vscode.workspace.getConfiguration('rocketbrain.spring',vscode.Uri.file(root)).get('mavenModelRepository',''),
@@ -40,7 +42,7 @@ function registerSpringProjectTools(context,vscode,{java,fetchImpl}={}){
    return result;
   }
  });
- const api={metadata:input=>controller.metadata(input),previewCreate:input=>controller.previewCreate(input),previewDependencies:input=>controller.previewDependencies(input),async inspectDependencies(input){const value=await controller.inspectDependencies(input);return{projectUri:value.projectUri,buildUri:value.buildUri,kind:value.kind,bootVersion:value.bootVersion,management:value.management,sourceSha256:value.sourceSha256,choices:value.choices,sources:value.sources,endpoint:value.endpoint,mavenProfiles:value.mavenProfiles,mavenProfile:value.mavenProfile};},async apply(input){const result=await controller.apply(input);outcomes.set(result.reviewId,JSON.stringify(result,null,2));await context.workspaceState.update('rocketbrain.spring.projects.last',result.projectUri);return result;},resync:input=>controller.resync(input),getReview:id=>controller.getReview(id),reviews:()=>[...controller.reviews.keys()].map(id=>controller.getReview(id)),reviewFile:(id,name)=>controller.reviewFile(id,name),discard:id=>controller.discard(id),async dispose(){if(disposed)return;disposed=true;controller.dispose();outcomes.clear();for(const item of subscriptions)item.dispose();}};
+ const api={aot,metadata:input=>controller.metadata(input),previewCreate:input=>controller.previewCreate(input),previewDependencies:input=>controller.previewDependencies(input),async inspectDependencies(input){const value=await controller.inspectDependencies(input);return{projectUri:value.projectUri,buildUri:value.buildUri,kind:value.kind,bootVersion:value.bootVersion,management:value.management,sourceSha256:value.sourceSha256,choices:value.choices,sources:value.sources,endpoint:value.endpoint,mavenProfiles:value.mavenProfiles,mavenProfile:value.mavenProfile};},async apply(input){const result=await controller.apply(input);outcomes.set(result.reviewId,JSON.stringify(result,null,2));await context.workspaceState.update('rocketbrain.spring.projects.last',result.projectUri);return result;},resync:input=>controller.resync(input),getReview:id=>controller.getReview(id),reviews:()=>[...controller.reviews.keys()].map(id=>controller.getReview(id)),reviewFile:(id,name)=>controller.reviewFile(id,name),discard:id=>controller.discard(id),async dispose(){if(disposed)return;disposed=true;aot.dispose();controller.dispose();outcomes.clear();for(const item of subscriptions)item.dispose();}};
  function managementLines(management){
   if(!management)return[];
   if(management.kind==='gradle-catalog-bom')return [

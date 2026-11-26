@@ -1,0 +1,25 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.2'
+}
+apply plugin: 'org.springframework.boot.aot'
+
+repositories { mavenCentral() }
+group = 'fixture'
+version = '1.0.0'
+java { sourceCompatibility = JavaVersion.VERSION_25; targetCompatibility = JavaVersion.VERSION_25 }
+
+dependencies {
+    implementation platform('org.springframework.boot:spring-boot-dependencies:4.1.2')
+    implementation 'org.springframework.boot:spring-boot'
+    implementation 'org.springframework.boot:spring-boot-autoconfigure'
+    implementation 'org.springframework:spring-jdbc'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
+}
+
+tasks.named('processAot') {
+    def feature = providers.environmentVariable('ROCKETBRAIN_AOT_FEATURE').orElse('off')
+    inputs.property('sourceReviewFeature', feature)
+    environment 'ROCKETBRAIN_AOT_FEATURE', feature.get()
+}

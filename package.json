@@ -1320,6 +1320,16 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.spring.inspectAotBeans",
+        "title": "Inspect Spring AOT Beans",
+        "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.spring.openAotBeanSource",
+        "title": "Open Spring AOT Bean Source",
+        "category": "Rocketbrain"
+      },
+      {
         "command": "rocketbrain.spring.createProject",
         "title": "Create Spring Project",
         "category": "Rocketbrain"

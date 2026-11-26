@@ -85,6 +85,7 @@ Dev Container 명령은 이미지나 Dockerfile 구성과 함께 명시한 Docke
 **Select Python Interpreter**로 프로젝트 가상환경을 선택합니다. Python Outline과 구문 오류는 해당 인터프리터의 AST에서 얻습니다. **Run Python File**로 저장한 파일을 실행하고 `debugpy`가 설치된 환경에서 **Debug Python File**로 중단점·변수를 볼 수 있습니다. [debugpy](https://github.com/microsoft/debugpy)
 4. **Build Java Project / Choose Build Task**, 저장한 **Run / Debug / Stop** 구성을 사용합니다.
 5. **Create Spring Project**로 공식 Initializr의 Java·Kotlin·Groovy JAR/WAR 프로젝트를 검토하고 생성합니다. **Edit Spring Starters**에서 지원하는 의존성 변경을 검토합니다. [Spring 프로젝트 만들기](docs/spring-initializr-project-forms.md) · [Maven BOM으로 관리하는 스타터](docs/spring-maven-bom-starters.md)
+   **Inspect Spring AOT Beans**에서 Gradle 또는 Maven이 생성한 `__BeanFactoryRegistrations.java`를 열어 빈 이름·별칭과 원본 `@Bean` 위치를 확인합니다. 같은 파일을 다시 검사하면 두 빌드의 등록 목록을 비교할 수 있습니다. [Spring AOT 생성 소스](https://docs.spring.io/spring-framework/reference/core/aot.html)
 6. **New Java File from Template**에서 소스 루트·패키지·템플릿을 골라 파일을 만듭니다. Maven·Gradle 및 main·test에 맞는 사용자 템플릿과 저작권 프로필을 선택하고 필요한 변수 값을 입력할 수 있습니다. [Java 파일 템플릿](docs/java-file-templates.md)
 7. **New JShell Scratch**로 저장할 코드를 만들고 **Run JShell Scratch**로 독립 JDK에서 실행합니다. 프로젝트 클래스가 필요하면 실행할 때 관찰된 로컬 클래스 경로를 선택합니다.
 8. **Explore Java Call Hierarchy**와 **Explore Java Type Hierarchy**에서 JDT가 확인한 호출과 상속·구현 관계를 이동합니다. **Inspect Java Dependencies**는 소스 import, 선언된 빌드·모듈과 빌드된 클래스의 의존성을 구분해 순환 경로를 보여줍니다.
