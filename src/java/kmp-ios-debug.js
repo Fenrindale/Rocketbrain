@@ -247,7 +247,7 @@ function createKmpIosDebug({ trust = () => {}, saved = () => {}, tools = systemT
     record.scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'rocketbrain-ios-'));
     const staged = path.join(record.scratch, path.basename(snapshot.app));
     fs.cpSync(snapshot.app, staged, { recursive: true, errorOnExist: true, force: false });
-    const symbols = path.join(record.scratch, 'Kotlin.dwarf');
+    const symbols = path.join(record.scratch, path.basename(snapshot.symbols));
     fs.copyFileSync(snapshot.symbols, symbols, fs.constants.COPYFILE_EXCL);
     if (bundleDigest(staged) !== snapshot.appSha256 || fileDigest(symbols) !== snapshot.symbolsSha256) {
       throw Error('The retained iOS app or Kotlin dSYM changed during staging.');

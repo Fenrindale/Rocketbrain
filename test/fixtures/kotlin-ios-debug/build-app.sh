@@ -28,3 +28,5 @@ xcrun --sdk iphonesimulator vtool -show-build "$app/RocketbrainIosFixture"
 codesign -d --entitlements :- "$app"
 xcrun dwarfdump --uuid "$app/Frameworks/RocketbrainProbe.framework/RocketbrainProbe"
 xcrun dwarfdump --uuid "$dsym/Contents/Resources/DWARF/RocketbrainProbe"
+xcrun dwarfdump --debug-line "$dsym/Contents/Resources/DWARF/RocketbrainProbe" \
+  | awk '/Probe\.kt/ { if (++found <= 15) print "Reviewed DWARF line file: " $0 } END { if (!found) exit 1 }'
