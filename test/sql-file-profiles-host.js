@@ -256,8 +256,10 @@ async function runSqlFileProfilesChecks(api, vscode, checks) {
   async function bind(document, target, profile, index) {
     const approved = await api.changeSqlFileProfile(document, target, review => {
       assert.equal(path.basename(review.path), path.basename(files[index]));
-      assert.match(review.after, /rocketbrain_fixture$/);
-      assert.ok(review.after.startsWith(profile.name + ' · '));
+      const { name, database, host, port } = profile.profile;
+      assert.equal(database, 'rocketbrain_fixture');
+      assert.equal(review.after, `${name} · ${database}`);
+      assert.equal(review.endpoint, `${host}:${port}`);
       assert.equal(review.readOnly, true);
       assert.equal(review.inTransaction, false);
       return true;
@@ -271,8 +273,9 @@ async function runSqlFileProfilesChecks(api, vscode, checks) {
     const row = api.results().find(item => item.id === id);
     assert.ok(row?.result, row?.error || 'The installed extension should return a result for the selected SQL file.');
     assert.equal(row.sessionId, target.sessionId);
-    assert.ok(row.source.includes(profiles[index].name));
-    assert.deepEqual(row.result.rows, [[fixtures[index].version, profiles[index].name]]);
+    const { name } = profiles[index].profile;
+    assert.ok(row.source.includes(name));
+    assert.deepEqual(row.result.rows, [[fixtures[index].version, name]]);
     return id;
   }
   let spawned, folder;
