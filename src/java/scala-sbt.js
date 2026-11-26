@@ -34,17 +34,30 @@ async function projectSbt(root) {
   return {sbtVersion:values[0]};
 }
 
-function launcherCommands(action,projectId,main) {
+function isDebugTask(action) {return action==='debug' || action==='debugSuite';}
+
+function launcherCommands(action,projectId,target) {
   if (action==='discover') return ['projects'];
-  if (projectId && !MODULE.test(projectId)) throw fail('Choose an observed sbt project ID.');
+  if (projectId && (typeof projectId!=='string' || !MODULE.test(projectId))) throw fail('Choose an observed sbt project ID.');
   const scope=projectId ? projectId+' / ' : '';
   if (action==='compile' || action==='test') return [scope+action];
   if (action==='renameIndex' && !projectId) return ['Compile / compile','Test / compile'];
   if (action==='mains') return ['show '+scope+'Compile / discoveredMainClasses'];
-  if (typeof main==='string' && main.length<=220 && MAIN.test(main)) {
-    if (action==='run') return [scope+'Compile / runMain '+main];
+  if (action==='suites' || action==='debugSuite') {
+    if (!projectId) throw fail('Choose an observed sbt project ID for Scala test suites.');
+    if (action==='suites') {
+      const task=scope+'Test / definedTests';
+      return ['set '+task+' / aggregate := false','show '+task];
+    }
+    if (typeof target==='string' && target.length<=220 && MAIN.test(target)) {
+      return ['show '+scope+'Test / startTestSuitesDebugSession '+JSON.stringify([target]),'shell'];
+    }
+    throw fail('Choose a supported sbt test suite name.');
+  }
+  if (typeof target==='string' && target.length<=220 && MAIN.test(target)) {
+    if (action==='run') return [scope+'Compile / runMain '+target];
     if (action==='debug') {
-      const input=JSON.stringify({class:main,arguments:[],jvmOptions:[],environmentVariables:[]});
+      const input=JSON.stringify({class:target,arguments:[],jvmOptions:[],environmentVariables:[]});
       return ['show '+scope+'Compile / startMainClassDebugSession '+input,'shell'];
     }
   }
@@ -71,7 +84,12 @@ function mainClasses(text) {
     .filter(value => value && MAIN.test(value)))];
 }
 
-async function spec({root,javaHome,launcher,cache,repositoryConfig,action,projectId,main}) {
+function testSuites(text) {
+  return [...new Set(cleanTranscript(text).split('\n').map(line => /^\[info\] \* Test (\S+)\s+:\s+/.exec(line)?.[1])
+    .filter(value => value && value.length<=220 && MAIN.test(value)))];
+}
+
+async function spec({root,javaHome,launcher,cache,repositoryConfig,action,projectId,main,suite}) {
   const metadata=await projectSbt(root);
   const file=await physical(launcher,8*1024*1024,'the sbt '+LAUNCHER_VERSION+' launcher JAR');
   if (createHash('sha256').update(await fs.readFile(file)).digest('hex')!==LAUNCHER_SHA256) {
@@ -88,7 +106,7 @@ async function spec({root,javaHome,launcher,cache,repositoryConfig,action,projec
     '-Dsbt.log.noformat=true','-Dsbt.server.autostart=false','-Dsbt.task.cpus=2','-Dsbt.boot.directory='+path.join(working,'boot'),
     '-Dsbt.global.base='+path.join(working,'global'),'-Dsbt.ivy.home='+path.join(working,'ivy'),
     ...(repos ? ['-Dsbt.override.build.repos=true','-Dsbt.repository.config='+repos] : []),'-jar',file,
-    ...launcherCommands(action,projectId,main)];
+    ...launcherCommands(action,projectId,action==='debugSuite' ? suite : main)];
   return {command,args,env,...metadata};
 }
 
@@ -144,7 +162,7 @@ function createSbtRunner({log=()=>{},timeoutMs=240000}={}) {
     };
     try {
       const launch=await spec(options);
-      if (action==='debug') record.agent=await buildLoopbackAgent(path.dirname(launch.command),launch.env);
+      if (isDebugTask(action)) record.agent=await buildLoopbackAgent(path.dirname(launch.command),launch.env);
       if (disposed || record.cancelled || cancelled(cancellation)) throw fail('The sbt task was cancelled.');
       const args=record.agent ? ['-javaagent:'+record.agent.jar,...launch.args] : launch.args;
       const child=spawn(launch.command,args,{cwd:root,env:launch.env,windowsHide:true,
@@ -168,7 +186,7 @@ function createSbtRunner({log=()=>{},timeoutMs=240000}={}) {
   }
 
   async function run(options={}) {
-    if (options.action==='debug') throw fail('Use the managed Scala debug session.');
+    if (isDebugTask(options.action)) throw fail('Use the managed Scala debug session.');
     const {record,sbtVersion}=await open(options);
     const code=await record.done;
     if (record.spawnError) throw record.spawnError;
@@ -188,8 +206,8 @@ function createSbtRunner({log=()=>{},timeoutMs=240000}={}) {
     return proof;
   }
 
-  async function debug(options={}) {
-    const {record}=await open({...options,action:'debug'});
+  async function openDebug(options,action) {
+    const {record}=await open({...options,action});
     try {
       while (!record.exited && !record.cancelled) {
         const line=cleanTranscript(record.output).match(/^\[info\] (tcp:\/\/[^\s]+)$/m)?.[1];
@@ -211,7 +229,8 @@ function createSbtRunner({log=()=>{},timeoutMs=240000}={}) {
     }
   }
 
-  return {run,debug,verifyDebug,stop,async dispose(){disposed=true;await stop();}};
+  return {run,debug:(options={}) => openDebug(options,'debug'),debugSuite:(options={}) => openDebug(options,'debugSuite'),
+    verifyDebug,stop,async dispose(){disposed=true;await stop();}};
 }
 
-module.exports = { projectSbt,createSbtRunner,observedProjects,mainClasses,launcherCommands,LAUNCHER_VERSION,LAUNCHER_SHA256 };
+module.exports = { projectSbt,createSbtRunner,observedProjects,mainClasses,testSuites,launcherCommands,LAUNCHER_VERSION,LAUNCHER_SHA256 };
