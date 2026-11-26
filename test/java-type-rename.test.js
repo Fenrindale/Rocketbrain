@@ -7,7 +7,8 @@ const path = require('node:path');
 const { fileURLToPath, pathToFileURL } = require('node:url');
 const { test } = require('node:test');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
-const { editedText } = require('../src/java/refactoring');
+const { editedText, registerJavaRefactoring } = require('../src/java/refactoring');
+const { commentGroups, withCommentGroups } = require('../src/java/type-rename-comments');
 const { prepareJavaTypeRename, classContracts, verifiedEngineEdits } = require('../src/java/java-type-rename');
 const { moveScope, snapshotScope, validateScope } = require('../src/java/move-scope');
 const { beanClassEdits } = require('../src/java/java-type-rename-xml');
@@ -133,7 +134,32 @@ test('type rename pins JDT test paths and reassesses clients while Move keeps ru
   assert.deepEqual(new Set(calls), new Set(['runtime']));
 });
 
-test('pinned JDT and Javac review one public class and saved Spring XML loads before and after on both actual databases', {
+test('optional candidates occur only in exact ordinary TODO/NOTE comments and never replace Java code', () => {
+  const text = [
+    'class Owner {} // NOTE: Owner and fixture.Owner.',
+    '// TODO fixture.Owner — retained explanation',
+    '/// NOTE fixture.Owner',
+    '/** TODO: fixture.Owner */',
+    '/* // NOTE fixture.Owner */',
+    'class Other { String marker = "// NOTE fixture.Owner"; }',
+    '// TODO other.Owner and fixture.OwnerExtra',
+    '// Historical fixture.Owner'
+  ].join('\r\n');
+  const uri = 'file:///c:/workspace/Owner.java', owner = {uri,file:'Owner.java',text,version:1};
+  const mandatory = [{textDocument:{uri,version:1},edits:[{range:{start:{line:0,character:6},
+    end:{line:0,character:11}},newText:'Renamed'}]}];
+  const groups = commentGroups([owner],mandatory,'fixture.Owner','Renamed',editedText);
+  assert.equal(groups.length,1);
+  assert.equal(groups[0].edits.length,3);
+  const [selected] = withCommentGroups(mandatory,groups);
+  const result = editedText(text,selected.edits);
+  assert.match(result,/class Renamed \{\} \/\/ NOTE: Renamed and fixture\.Renamed\./u);
+  assert.match(result,/\/\/ TODO fixture\.Renamed — retained explanation/u);
+  for (const line of text.split('\r\n').slice(2)) assert.ok(result.includes(line));
+  assert.deepEqual(withCommentGroups(mandatory,[]),mandatory);
+});
+
+test('pinned JDT and Javac review mandatory Java/Spring XML and optional per-file comments on both actual databases', {
   skip: !stateFile || !classpathFile || !dbFiles.every(([, file]) => file), timeout: 220000
 }, async t => {
   const state = await read(stateFile);
@@ -141,6 +167,9 @@ test('pinned JDT and Javac review one public class and saved Spring XML loads be
   const owned = await fs.mkdtemp(path.join(parent, 'rb-type-rename-'));
   const root = path.join(owned, 'project');
   const fixture = typeRenameFixture('fixture.billing', 'Ledger');
+  const ownerNote = '// TODO ' + fixture.oldName + ' implementation.\n';
+  const callerNote = '// NOTE ' + fixture.oldName + ' caller.\n';
+  const extraNote = '// NOTE ' + fixture.oldFqn + ' documentation only.\n';
   const sourceRoot = path.join(root, 'src');
   const classRoot = path.join(sourceRoot, ...fixture.namespace.split('.'));
   const callerRoot = path.join(sourceRoot, ...fixture.callerPackage.split('.'));
@@ -150,7 +179,9 @@ test('pinned JDT and Javac review one public class and saved Spring XML loads be
   const xml = path.join(root, fixture.xmlFileName);
   const target = path.join(classRoot, fixture.newName + '.java');
   const lsp = new StdioLsp(resolveLaunch({ ...state, storagePath: path.join(owned, 'jdt') }));
+  let review;
   t.after(async () => {
+    await review?.dispose();
     await lsp.close();
     assert.equal(await fs.realpath(owned), owned);
     assert.equal(path.dirname(owned), parent);
@@ -166,14 +197,38 @@ test('pinned JDT and Javac review one public class and saved Spring XML loads be
     '<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>' +
     initCp.map(file => '<classpathentry kind="lib" path="' + file.replaceAll('\\', '/').replaceAll('&', '&amp;') + '"/>').join('') +
     '<classpathentry kind="output" path="bin"/></classpath>');
-  for (const [file, contents] of [[owner, fixture.ownerText], [caller, fixture.callerText], [extra, fixture.extraText], [xml, fixture.xml]]) {
+  for (const [file, contents] of [[owner, fixture.ownerText + ownerNote], [caller, fixture.callerText + callerNote], [extra, fixture.extraText + extraNote], [xml, fixture.xml]]) {
     await fs.writeFile(file, contents);
   }
   const makeUri = file => ({ scheme: 'file', fsPath: file, toString: () => pathToFileURL(file).href });
-  const docs = new Map();
+  const docs = new Map(), submitted = [], diffs = [];
+  let provider, pick = () => undefined, approve = true;
   const vscode = {
-    Uri: { file: makeUri, parse: uri => makeUri(fileURLToPath(uri)) },
+    Range: class {
+      constructor(sl,sc,el,ec) { this.start={line:sl,character:sc}; this.end={line:el,character:ec}; }
+    },
+    TextEdit: class { constructor(range,newText) { Object.assign(this,{range,newText}); } },
+    WorkspaceEdit: class {
+      changes = new Map();
+      resources = [];
+      set(uri,edits) { this.changes.set(uri.fsPath,edits); }
+      renameFile(oldUri,newUri,options) { this.resources.push({old:oldUri.fsPath,next:newUri.fsPath,options}); }
+    },
+    commands: { registerCommand: () => ({dispose(){}}),
+      async executeCommand(command,before,after) {
+        assert.equal(command,'vscode.diff');
+        diffs.push({before:provider.provideTextDocumentContent({path:new URL(before.raw).pathname}),
+          after:provider.provideTextDocumentContent({path:new URL(after.raw).pathname})});
+      } },
+    window: {
+      async showQuickPick(choices,options) { assert.equal(options.canPickMany,true); return pick(choices); },
+      async showInformationMessage(_message,_options,action) { return approve ? action : undefined; }
+    },
+    Uri: { file: makeUri, parse: value => value.startsWith('file:') ? makeUri(fileURLToPath(value)) : { raw:value } },
     workspace: {
+      isTrusted: true,
+      registerTextDocumentContentProvider(_scheme,selected) { provider=selected; return {dispose(){}}; },
+      async applyEdit(edit) { submitted.push(edit); return true; },
       get textDocuments() { return [...docs.values()]; },
       getWorkspaceFolder: () => ({ uri: makeUri(root) }),
       openTextDocument: async uri => {
@@ -224,6 +279,54 @@ test('pinned JDT and Javac review one public class and saved Spring XML loads be
   assert.equal(options.allowedBeanClassEdits.length, 1);
   assert.equal(options.guards.find(guard => guard.uri === makeUri(caller).toString()).diskGuard, undefined);
   assert.match(options.guards.find(guard => guard.uri === makeUri(extra).toString()).diskGuard.diskHash, /^[a-f0-9]{64}$/u);
+  review = registerJavaRefactoring({},vscode);
+  const prepare = () => prepareJavaTypeRename({ vscode, request, refactoring:review,
+    runtime: () => ({javaHome:state.javaHome,storagePath:owned}), trusted:() => {}
+  },{document,newName:fixture.newName,position:{line:1,character:'public final class '.length}});
+  const cancelled = await prepare();
+  assert.equal(cancelled.optionalCommentGroups.length,3);
+  assert.equal((await review.review(cancelled)).state,'cancelled');
+  await assert.rejects(review.apply(cancelled.id),/expired/u);
+  assert.equal(submitted.length,0);
+  assert.equal(diffs.length,0);
+  const modal = await prepare();
+  pick = () => [];
+  approve = false;
+  const dismissed = await review.review(modal);
+  assert.equal(dismissed.state,'cancelled');
+  await assert.rejects(review.apply(dismissed.id),/expired/u);
+  assert.equal(submitted.length,0);
+  assert.equal(diffs.length,3);
+  diffs.length = 0;
+  approve = true;
+  const declined = await prepare();
+  const required = await review.selectOptionalComments(declined.id,[]);
+  assert.equal(required.documents.length,3);
+  assert.match(required.documents.find(file=>file.newUri).after,new RegExp(fixture.oldName+' implementation'));
+  await assert.rejects(review.apply(declined.id),/expired/u);
+  assert.equal((await review.apply(required.id)).state,'applied');
+  assert.equal(submitted.length,1);
+  const unconditional = submitted.shift();
+  assert.equal(unconditional.changes.size,3);
+  assert.equal(unconditional.resources.length,1);
+  assert.ok(!unconditional.changes.has(extra));
+  const pending = await prepare();
+  await assert.rejects(review.selectOptionalComments(pending.id,['mandatory']),/listed optional/u);
+  const externalNote = pending.optionalCommentGroups.find(item=>item.uri===makeUri(extra).toString());
+  await fs.appendFile(extra,'// new external edit\n');
+  await assert.rejects(review.selectOptionalComments(pending.id,[externalNote.id]),/changed after review|source changed/u);
+  assert.equal(submitted.length,0);
+  await fs.writeFile(extra,fixture.extraText+extraNote);
+  pick = choices => choices.filter(choice=>[path.basename(owner),path.basename(extra)].includes(choice.label));
+  const approved = await review.review(pending);
+  assert.equal(approved.state,'applied');
+  assert.equal(submitted.length,1);
+  assert.equal(submitted[0].changes.size,4);
+  assert.deepEqual(submitted[0].resources,[{old:owner,next:target,options:{overwrite:false,ignoreIfExists:false}}]);
+  assert.ok(diffs.some(item=>item.after.includes(fixture.newFqn+' documentation only.')));
+  assert.ok(diffs.some(item=>item.after.includes(fixture.newName+' implementation.')));
+  assert.ok(diffs.some(item=>item.after.includes(fixture.oldName+' caller.')));
+  await assert.rejects(review.apply(pending.id),/expired/u);
   const values = [];
   for (const [engine, file] of dbFiles) {
     const config = await read(file), classpath = await springTypeRenameClasspath(classpathFile, engine);
@@ -233,21 +336,30 @@ test('pinned JDT and Javac review one public class and saved Spring XML loads be
     const before = await run([owner, caller, extra], xml);
     assert.equal(before.output, fixture.expected);
     const afterFiles = await fs.mkdtemp(path.join(owned, 'saved-'));
-    for (const entry of edit.documentChanges.filter(change => change.textDocument)) {
-      const file = fileURLToPath(entry.textDocument.uri);
-      const text = editedText(await fs.readFile(file, 'utf8'), entry.edits);
+    for (const [file,edits] of unconditional.changes) {
+      const text = editedText(await fs.readFile(file,'utf8'),edits);
       await fs.writeFile(path.join(afterFiles, path.basename(file === owner ? target : file)), text);
     }
     const afterXml = path.join(afterFiles, path.basename(xml));
     assert.equal(await fs.readFile(afterXml, 'utf8'), fixture.xml.replace("class='" + fixture.oldFqn + "'", "class='" + fixture.newFqn + "'"));
     const after = await run([path.join(afterFiles, path.basename(target)), path.join(afterFiles, path.basename(caller)), extra], afterXml);
-    assert.deepEqual(after, before);
-    values.push(after);
+    assert.deepEqual(after,before);
+    const selected = await fs.mkdtemp(path.join(owned,'selected-'));
+    for (const [file,edits] of submitted[0].changes) {
+      const resolved = path.join(selected,path.basename(file===owner?target:file));
+      await fs.writeFile(resolved,editedText(await fs.readFile(file,'utf8'),edits));
+    }
+    const withNotes = await run([target,caller,extra].map(file=>path.join(selected,path.basename(file))),
+      path.join(selected,path.basename(xml)));
+    assert.deepEqual(withNotes,before);
+    values.push({ before, mandatoryOnly: after, selectedComments: withNotes });
   }
   await fs.appendFile(xml, '\n<!-- stale XML -->\n');
   assert.throws(options.preApply, /descriptor changed/u);
   if (process.env.ROCKETBRAIN_TYPE_RENAME_RECEIPT) {
     await fs.writeFile(process.env.ROCKETBRAIN_TYPE_RENAME_RECEIPT,
-      JSON.stringify({ typeRename, actualJdt: true, savedSpringXmlAndJava: true, unchangedPrefix: true, staleXmlRefused: true, values }) + '\n');
+      JSON.stringify({ typeRename, actualJdt: true, savedSpringXmlAndJava: true, unchangedPrefix: true, staleXmlRefused: true,
+        optionalReview: { groups:3, selected:2, unchanged:1, cancelledWithoutEdits:true, modalDismissedWithoutEdits:true, selectedOptionalDriftRefused:true,
+          mandatoryFileRename:true, workspaceEdits:submitted.length }, values }) + '\n');
   }
 });

@@ -126,3 +126,41 @@ test('a Kotlin formatting review only permits text edits to its anchored Kotlin 
   assert.equal((await h.api.apply(plan.id)).state,'applied');
  }finally{await h.api.dispose();}
 });
+
+test('an optional comment selection cannot drop a mandatory edit or add Java tokens',async()=>{
+ const h=fixture(),root=path.dirname(h.file),workspace=h.vscode.workspace;
+ const noteFile=path.join(root,'Note.java'),target=path.join(root,'Reviewed.java');
+ const noteText='class Note {} // TODO Example\n';
+ fs.writeFileSync(noteFile,noteText);
+ const noteUri=h.vscode.Uri.parse(pathToFileURL(noteFile).href);
+ const noteDoc={uri:noteUri,version:1,isClosed:false,isDirty:false,getText:()=>noteText};
+ workspace.textDocuments=[h.document,noteDoc];
+ workspace.openTextDocument=async address=>address.fsPath===h.file?h.document:noteDoc;
+ let applied=0,child;
+ workspace.applyEdit=async()=>{applied++;return true;};
+ const source=h.document.uri.toString(),destination=pathToFileURL(target).href;
+ const move={kind:'rename',oldUri:source,newUri:destination};
+ const required={textDocument:{uri:source,version:1},edits:h.action.edit.changes[source]};
+ const options={kind:'refactor.rename.java.type',anchorDocument:h.document,allowedResourceOperations:['rename'],
+  guards:[{uri:noteUri.toString()}],validate:()=>{},preApply:()=>{}};
+ const prepare=omitMandatory=>h.api.previewWorkspaceEdit({documentChanges:[required,move]},{
+  ...options,commentChoices:{groups:[{id:'1',uri:noteUri.toString(),count:1}],async select(){
+   const note={textDocument:{uri:noteUri.toString(),version:1},edits:[{
+    range:{start:{line:0,character:0},end:{line:0,character:5}},newText:'interface'
+   }]};
+   const entries=omitMandatory?[note,move]:[required,note,move];
+   child=await h.api.previewWorkspaceEdit({documentChanges:entries},options);
+   return child;
+  }}
+ });
+ try{
+  for(const omitMandatory of [true,false]){
+   const plan=await prepare(omitMandatory);
+   await assert.rejects(h.api.selectOptionalComments(plan.id,['1']),/mandatory edit or reviewed source/u);
+   await assert.rejects(h.api.apply(plan.id),/expired/u);
+   await assert.rejects(h.api.apply(child.id),/expired/u);
+  }
+  assert.equal(applied,0);
+  assert.equal(fs.readFileSync(noteFile,'utf8'),noteText);
+ }finally{await h.api.dispose();}
+});

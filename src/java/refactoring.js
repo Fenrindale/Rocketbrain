@@ -4,6 +4,7 @@ const {inside}=require('./testing-projects');
 const {metadataFile}=require('./package-services');
 const {bootImportsPath,maxImportsBytes}=require('./package-boot-imports');
 const {namedAction,editorAnchor}=require('./extraction-actions');
+const {sameJavaTokens}=require('./type-rename-comments');
 const hash=text=>crypto.createHash('sha256').update(text).digest('hex');
 const key=file=>process.platform==='win32'?path.resolve(file).toLowerCase():path.resolve(file);
 function binaryIdentity(file){const stat=fs.lstatSync(file,{bigint:true});if(!stat.isFile()||stat.isSymbolicLink())throw Error('Reviewed binary resources require plain regular files.');return {real:fs.realpathSync(file),size:String(stat.size),mtimeNs:String(stat.mtimeNs),ctimeNs:String(stat.ctimeNs),ino:String(stat.ino),dev:String(stat.dev)};}
@@ -78,7 +79,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   return {dispose(){if(prepareConstant===prepare)prepareConstant=undefined;}};
  }
  function removePlan(id){plans.delete(id);checkedPlans.delete(id);validators.delete(id);}
- async function previewWorkspaceEdit(workspaceEdit,{title='Java refactoring',kind='refactor',cancellation,anchorDocument,allowedResourceOperations=[],allowedResourceRenames=[],allowedServiceEdits=[],allowedBeanClassEdits=[],allowedBootImportsEdits=[],allowedJavaTypeKotlinEdits=[],allowedDirectoryRename,createJavaFile,guards=[],warnings=[],validate:extraValidate,preApply,formattingEndOfLine}={}){
+ async function previewWorkspaceEdit(workspaceEdit,{title='Java refactoring',kind='refactor',cancellation,anchorDocument,allowedResourceOperations=[],allowedResourceRenames=[],allowedServiceEdits=[],allowedBeanClassEdits=[],allowedBootImportsEdits=[],allowedJavaTypeKotlinEdits=[],allowedDirectoryRename,createJavaFile,guards=[],warnings=[],validate:extraValidate,preApply,formattingEndOfLine,commentChoices}={}){
   trusted();cancelled(cancellation);if(!workspaceEdit||typeof workspaceEdit!=='object'||Array.isArray(workspaceEdit))throw Error('The Java engine did not return a WorkspaceEdit.');if(Object.keys(workspaceEdit.changeAnnotations||{}).length)throw Error('Annotated refactoring conflicts require a separate review workflow.');
   const kotlinFormatting=kind==='source.format.kotlin';
   const kotlinRename=kind==='refactor.rename.kotlin';
@@ -271,7 +272,19 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   }
   trusted();cancelled(cancellation);if(anchor&&(anchor.document.isClosed||anchor.document.version!==anchor.version||anchor.document.getText()!==anchor.text))throw Error('The selected source changed during refactoring review.');
   for(const [id,plan]of plans)if(Date.now()>plan.expiresAt)removePlan(id);while(plans.size>=10)removePlan(plans.keys().next().value);
-  const id=crypto.randomUUID(),plan={id,title,kind,documents,resourceOperations:resources,guardCount:guardSnapshots.length,warnings:[...warnings],expiresAt:Date.now()+120000};plans.set(id,{...plan,guardSnapshots});validators.set(id,{validate:extraValidate,preApply});
+  if(commentChoices!==undefined&&(kind!=='refactor.rename.java.type'||!anchor||!commentChoices||
+     typeof extraValidate!=='function'||typeof preApply!=='function'||typeof commentChoices.select!=='function'||
+     resources.length!==1||resources[0].kind!=='rename'||!Array.isArray(commentChoices.groups)||
+     !commentChoices.groups.length||commentChoices.groups.length>30||
+     commentChoices.groups.some(group=>!group||typeof group.id!=='string'||!/^\d{1,2}$/u.test(group.id)||typeof group.uri!=='string'||
+      !Number.isInteger(group.count)||group.count<1||group.count>80||
+      !captured.has(key(sourceUri(group.uri).fsPath)))||
+     new Set(commentChoices.groups.map(group=>group.id)).size!==commentChoices.groups.length||
+     new Set(commentChoices.groups.map(group=>group.uri)).size!==commentChoices.groups.length))throw Error('Invalid optional Java type-rename comment review.');
+  const id=crypto.randomUUID(),plan={id,title,kind,documents,resourceOperations:resources,guardCount:guardSnapshots.length,
+   warnings:[...warnings],expiresAt:Date.now()+120000,
+   ...(commentChoices&&{optionalCommentGroups:structuredClone(commentChoices.groups)})};
+  plans.set(id,{...plan,guardSnapshots});validators.set(id,{validate:extraValidate,preApply,selectComments:commentChoices?.select});
   try{await validate(id,cancellation);}catch(error){removePlan(id);throw error;}return structuredClone(plan);
  }
  function checkResources(plan){
@@ -338,9 +351,47 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   if(!converted&&file.edits.length) throw Error('Text formatting was applied. Line-ending conversion failed. Review the document again.');
   return converted;
  }
+ function verifyCommentSelection(original,chosen,selection){
+  const selected=new Map(original.optionalCommentGroups.filter(group=>selection.includes(group.id)).map(group=>[group.uri,group.count]));
+  const before=new Map(original.documents.map(file=>[file.uri,file]));
+  const after=new Map(chosen.documents.map(file=>[file.uri,file]));
+  const snapshots=plan=>[...plan.documents,...plan.guardSnapshots].map(file=>[file.uri,file.hash,file.diskHash]).sort();
+  const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+  if(chosen.optionalCommentGroups||chosen.kind!==original.kind||!same(chosen.resourceOperations,original.resourceOperations)||
+     !same(snapshots(original),snapshots(chosen))||[...before.keys(),...selected.keys()].some(uri=>!after.has(uri))||
+     chosen.documents.some(file=>{
+       const required=before.get(file.uri),added=selected.get(file.uri)||0;
+       return !required&&!added||required&&file.version!==required.version||
+         file.edits.length!==(required?.edits.length||0)+added||
+         added&&!sameJavaTokens(required?.after??file.before,file.after)||
+         required&&!same(file.edits.slice(0,required.edits.length),required.edits);
+     }))throw Error('Selection changed a mandatory edit or reviewed source. Preview again.');
+ }
+ async function selectOptionalComments(id,selected,cancellation){
+  trusted();cancelled(cancellation);
+  const original=plans.get(id), parent=validators.get(id), choose=parent?.selectComments;
+  if(!original||!choose||!original.optionalCommentGroups)throw Error('Open a current optional comment review.');
+  if(!Array.isArray(selected)||selected.length>original.optionalCommentGroups.length||
+     new Set(selected).size!==selected.length||selected.some(id=>typeof id!=='string'||
+       !original.optionalCommentGroups.some(group=>group.id===id)))throw Error('Choose only listed optional comment groups.');
+  const selection=[...selected];
+  await validate(id,cancellation);
+  if(plans.get(id)!==original)throw Error('The optional comment review changed. Preview again.');
+  removePlan(id);
+  const existing=new Set(plans.keys()), next=await choose(selection,cancellation);
+  const chosen=plans.get(next?.id), child=validators.get(next?.id);
+  try {
+   if(!chosen||existing.has(next.id)||child?.validate!==parent.validate||child?.preApply!==parent.preApply){
+    throw Error('The optional selection did not retain its reviewed validation.');
+   }
+   verifyCommentSelection(original,chosen,selection);
+   return next;
+  }catch(error){if(chosen&&!existing.has(next.id))removePlan(next.id);throw error;}
+ }
  async function apply(id,cancellation){
   await validate(id,cancellation);
-  const plan=plans.get(id),edit=new vscode.WorkspaceEdit();
+  const plan=plans.get(id);if(!plan)throw Error('The Java refactoring review expired. Preview it again.');
+  const edit=new vscode.WorkspaceEdit();
   const formatting=plan.documents.find(file=>file.formattingEndOfLine);
   let applied;
   if(formatting) applied=await applyFormattingEndOfLine(id,formatting,cancellation);
@@ -380,6 +431,19 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
  const provider={provideTextDocumentContent(uri){const parts=uri.path.split('/').filter(Boolean),plan=plans.get(parts[0]),file=plan?.documents[Number(parts[1])],before=/^before\.(java|kt|xml|imports|txt)$/.test(parts[2]);return file?(file.binary?'Opaque binary resource: '+file.bytes+' bytes; SHA-256 '+file.resourceSha256+(before?' (source)':' (same bytes at destination)'):(before?file.before:file.after)):'This refactoring review expired.';}};subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('rocketbrain-java-refactor',provider));
  async function review(plan){
   await validate(plan.id);plan=plans.get(plan.id);
+  if(!plan)throw Error('The Java refactoring review expired. Preview it again.');
+  const choosingComments=Boolean(plan.optionalCommentGroups);
+  if(choosingComments){
+   const picked=await vscode.window.showQuickPick(plan.optionalCommentGroups.map(group=>{
+    const uri=vscode.Uri.parse(group.uri),folder=vscode.workspace.getWorkspaceFolder(uri);
+    return {label:path.basename(uri.fsPath),description:path.relative(folder.uri.fsPath,uri.fsPath),
+      detail:group.count+' TODO or NOTE comment name updates',id:group.id};
+   }),{title:'Optional Java Type Rename Comments',canPickMany:true,
+     placeHolder:'Choose comment updates. Declaration, reference and file changes are required.'});
+   if(picked===undefined){removePlan(plan.id);return {state:'cancelled',id:plan.id};}
+   const selected=await selectOptionalComments(plan.id,picked.map(group=>group.id));
+   plan=plans.get(selected.id);
+  }
   for(let index=0;index<plan.documents.length;index++){
    const file=plan.documents[index];if(file.binary)continue;const extension=file.serviceDescriptor?'txt':file.bootImportsReference?'imports':file.beanClassReference?'xml':file.javaTypeKotlinReference||file.kotlinFormatting||file.kotlinRename||file.kotlinMixedRename&&file.uri.endsWith('.kt')?'kt':'java';
    await vscode.commands.executeCommand('vscode.diff',
@@ -402,6 +466,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
     'Restore deleted Java files with Rocketbrain: Restore Deleted Java File during this session.':'Use normal Undo after applying.'),
    {modal:true},action);
   if(choice===action)return api.apply(plan.id);
+  if(choosingComments)removePlan(plan.id);
   return {state:'cancelled',id:plan.id};
  }
  subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.refactor',async()=>{
@@ -418,6 +483,6 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   }catch(error){if(!closed)void vscode.window.showErrorMessage('Rocketbrain Java: '+error.message);}
  }));
  function tracked(fn){return (...args)=>{const work=fn(...args);operations.add(work);void work.finally(()=>operations.delete(work)).catch(()=>{});return work;};}
- const api={list:tracked(list),resolveAction:tracked(resolveAction),preview:tracked(preview),previewWorkspaceEdit:tracked(previewWorkspaceEdit),review:tracked(review),apply:tracked(apply),validate:tracked(validate),registerConstantPreparation,isApplyingPackageRename,async dispose(){closed=true;prepareConstant=undefined;plans.clear();checkedPlans.clear();validators.clear();await Promise.allSettled([...operations]);for(const sub of subscriptions)sub.dispose();}};return api;
+ const api={list:tracked(list),resolveAction:tracked(resolveAction),preview:tracked(preview),previewWorkspaceEdit:tracked(previewWorkspaceEdit),review:tracked(review),apply:tracked(apply),validate:tracked(validate),selectOptionalComments:tracked(selectOptionalComments),registerConstantPreparation,isApplyingPackageRename,async dispose(){closed=true;prepareConstant=undefined;plans.clear();checkedPlans.clear();validators.clear();await Promise.allSettled([...operations]);for(const sub of subscriptions)sub.dispose();}};return api;
 }
 module.exports={registerJavaRefactoring,editedText};
