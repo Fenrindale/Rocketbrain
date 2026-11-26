@@ -103,15 +103,26 @@ function trackingEntries(text, validName) {
   return tracking;
 }
 
-function metadataVersion(text, node) {
+function metadataVersion(text, node, extension = 'jar') {
   if (/<!DOCTYPE|<!ENTITY/iu.test(text)) return undefined;
-  const fields = Object.create(null), versions = [], stack = [];
+  const fields = Object.create(null), versions = [], stack = [], singletons = new Set();
   let entry;
   const parser = new SaxesParser({ xmlns: true });
   parser.on('opentag', tag => {
     stack.push(tag.local);
+    if (stack.length <= 3) {
+      const location = stack.join('/');
+      if (['metadata/groupId', 'metadata/artifactId', 'metadata/version', 'metadata/versioning',
+        'metadata/versioning/snapshotVersions'].includes(location)) {
+        if (singletons.has(location)) throw Error('Duplicate Maven snapshot identity or versioning element.');
+        singletons.add(location);
+      }
+    }
     if (stack.length === 4 && stack.join('/') === 'metadata/versioning/snapshotVersions/snapshotVersion') {
       entry = Object.create(null);
+    } else if (entry && stack.length === 5) {
+      if (Object.hasOwn(entry, tag.local)) throw Error('Duplicate Maven snapshot version field.');
+      entry[tag.local] = '';
     }
   });
   parser.on('text', value => {
@@ -127,7 +138,7 @@ function metadataVersion(text, node) {
   catch { return undefined; }
   const { groupId, artifactId, version } = fields;
   if (groupId?.trim() !== node.group || artifactId?.trim() !== node.artifact || version?.trim() !== node.version) return undefined;
-  const candidates = versions.filter(item => item.extension?.trim() === 'jar' &&
+  const candidates = versions.filter(item => item.extension?.trim() === extension &&
     (item.classifier?.trim() || '') === node.classifier);
   if (candidates.length !== 1) return undefined;
   const resolved = candidates[0].value?.trim(), prefix = node.version.slice(0, -'SNAPSHOT'.length);
@@ -198,4 +209,4 @@ async function observeSnapshotCache(nodes, text, selectedRoot, cancellation) {
   return { summary, validate };
 }
 
-module.exports = { cacheDirectory, snapshotNode, observeSnapshotCache };
+module.exports = { cacheDirectory, snapshotNode, observeSnapshotCache, metadataVersion, trackingEntries };

@@ -97,7 +97,12 @@ function registerJavaMove(context,vscode,{request,refactoring,runtime,synchroniz
   const sourceGuard=S.scopeGuards(scope,sources,vscode,trusted,cancellation);let compilerGuard=()=>{};const preApply=()=>{sourceGuard();compilerGuard();};const response=await send('workspace/willRenameFiles',{files:[{oldUri:document.uri.toString(),newUri:destination.toString()}]},cancellation),entries=S.textEntries(response,sources),rename={kind:'rename',oldUri:document.uri.toString(),newUri:destination.toString(),options:{overwrite:false,ignoreIfExists:false}};
   const compiled=await S.validateCompilation(scope,sources,entries,rename,runtime,cancellation);compilerGuard=compiled.validate;const semantic=compiled.report;preApply();
   const warnings=['The existing compile-exposed project dependency is preserved. Saved source, resource and build descriptors are guarded. External, binary and reflective clients require separate review.'];
-  if(scope.externalModels)warnings.push('SHA-256 was verified for '+scope.externalModels.pins.length+' pinned external Maven models. Their cached POMs and pins are checked again before applying.');
+  if(scope.externalModels){
+   warnings.push('SHA-256 was verified for '+scope.externalModels.pins.length+' pinned external Maven models. Their cached POMs and pins are checked again before applying.');
+   for(const model of scope.externalModels.pins.filter(item=>item.resolvedVersion)){
+    warnings.push('Maven SNAPSHOT '+model.coordinate+' resolved to '+model.resolvedVersion+' in repository '+model.repositoryId+'.');
+   }
+  }
   const plan=await refactoring.previewWorkspaceEdit({documentChanges:[...entries,rename]},{title:'Move '+selected.className+' to '+path.basename(scope.target.root)+':'+targetPackage,kind:'refactor.move.project',anchorDocument:document,cancellation,allowedResourceOperations:['rename'],guards:sources.map(s=>({uri:s.uri})),validate:async()=>{await S.validateScope(scope,vscode,send,document.uri,targetFolder,cancellation);preApply();},preApply,warnings});
   return {...plan,move:{source:document.uri.toString(),destination:destination.toString(),oldPackage:selected.packageName,newPackage:targetPackage,reviewedFiles:sources.length,crossProject:true,buildKind:scope.buildKind,reviewedProjects:scope.projects.length,buildProof:scope.buildProof,semantic,scope:'One independent public utility Java class moved across a complete observed Gradle DAG/composite with supported finite source branches and all-client compile-exposure checks, or a literal Maven reactor with a predeclared compile dependency. Pure static methods and literal constants only; build-file creation, instance/stateful classes, modules, external and reflective clients are outside this proof.'}};
  }

@@ -327,6 +327,8 @@ Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 
 
 외부 Maven 모델을 사용하는 리액터는 루트의 `.rocketbrain-maven-models.json`에 `version`을 `1`로 설정하고, `models` 배열에 각 모델의 `groupId`, `artifactId`, `version`, `sha256`을 기록합니다. 외부 부모에는 `<relativePath/>`를 사용합니다. 검토 범위는 기본 로컬 Maven 저장소에 설치한 릴리스 POM과 원격 출처 추적이 없는 기존 로컬 POM입니다. 미리보기 뒤 핀·모델·출처 기록이 바뀌면 적용을 중단합니다. [핀 파일 예제](test/fixtures/refactoring-v27-maven/.rocketbrain-maven-models.json)
 
+외부 SNAPSHOT 부모 POM이나 BOM을 사용하는 리액터는 핀 파일 형식 `version: 2`를 사용합니다. SNAPSHOT 핀마다 실제 타임스탬프가 포함된 `resolvedVersion`과 캐시의 `repositoryId`를 추가하고, 기본 SNAPSHOT POM과 타임스탬프 POM에 공통인 SHA-256을 기록합니다. 설정의 단일 스냅샷 저장소가 명시적으로 활성화되어야 합니다. Maven으로 캐시를 준비한 뒤 리액터의 `.mvn/maven.config`에 `--offline`, `-Dmaven.repo.local=<절대 경로>`, `--settings=<절대 경로>`, `--global-settings=<절대 경로>`를 한 줄씩 지정합니다. 두 설정 파일은 리액터의 `.mvn` 바로 아래에 두고, 전역 설정 파일은 빈 `<settings/>`를 사용합니다. Move 미리보기는 캐시에서 선택한 타임스탬프와 저장소 ID를 표시하며 적용 직전에 같은 POM·메타데이터·설정을 다시 확인합니다.
+
 상속·오버로드 분석과 새 이동 검사는 별도 JDK 컴파일러로 파싱·타입 연결을 검사합니다. 프로젝트 클래스·어노테이션 처리기·컴파일러 플러그인을 분석 목적으로 실행하지 않습니다. 지원하지 않는 확장이나 불완전한 클래스 경로는 거부합니다.
 
 기존 메서드·지역 변수·필드 추출, 지역 변수 인라인과 import 정리는 **Refactor Java Selection with Preview**에서 계속 사용할 수 있습니다.
