@@ -221,7 +221,7 @@ function registerJavaFeatures(context, vscode) {
     dispose() {
       if (!disposing) {
         disposed = true;
-        disposing = serial(async()=>{await api.workbench?.dispose();await api.groovy?.dispose();await api.quarkus?.dispose();await api.jakarta?.dispose();await api.micronaut?.dispose();await api.scalaEditor?.dispose();await api.scala?.dispose();await api.kotlinMultiplatform?.dispose();await api.kotlinEditor?.dispose();await api.coroutines?.dispose();await api.typeRename?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
+        disposing = serial(async()=>{await api.workbench?.dispose();await api.groovy?.dispose();await api.quarkus?.dispose();await api.jakarta?.dispose();await api.micronaut?.dispose();await api.scalaEditor?.dispose();await api.scala?.dispose();await api.kotlinMultiplatform?.dispose();await api.androidDebug?.dispose();await api.kotlinEditor?.dispose();await api.coroutines?.dispose();await api.typeRename?.dispose();await api.move?.dispose();await api.memberMove?.dispose();await api.changeSignature?.dispose();await api.safeDelete?.dispose();await api.refactoring?.dispose();await stopNow();}).finally(() => { for (const item of subscriptions) item.dispose(); });
       }
       return disposing;
     }
@@ -325,6 +325,7 @@ function registerJavaFeatures(context, vscode) {
   api.scala=require('./scala-vscode').registerScalaWorkbench(context,vscode,api);
   api.scalaEditor=require('./scala-editor-vscode').registerScalaEditor(vscode,api);
   api.kotlinMultiplatform=require('./kmp-vscode').registerKmpWorkbench(vscode,api);
+  api.androidDebug=require('./android-debug-vscode').registerAndroidDebug(vscode,api);
   api.kotlinEditor=require('./kotlin-editor-vscode').registerKotlinEditor(context,vscode,api);
   api.structure=registerFileStructure(vscode,{java:api,output,readJava:async (document,token)=>{
     const server=client;

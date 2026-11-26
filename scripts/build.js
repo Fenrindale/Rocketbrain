@@ -48,6 +48,8 @@ async function build() {
   for (const file of fs.readdirSync(path.join(__dirname, '../runtime/java-debug')).filter(file => file.endsWith('.java'))) {
     fs.copyFileSync(path.join(__dirname, '../runtime/java-debug', file), path.join('dist', 'java-debug', file));
   }
+  fs.mkdirSync(path.join('dist', 'android-debug'), { recursive: true });
+  fs.copyFileSync(path.join(__dirname, '../runtime/android-debug/AndroidBreakpoint.java'), path.join('dist', 'android-debug/AndroidBreakpoint.java'));
   await esbuild.build({ entryPoints: ['scripts/java-quality-gate.js'], outfile: 'dist/java-quality-gate.js', bundle: true, platform: 'node', target: 'node20' });
   await esbuild.build({ entryPoints: ['scripts/ide-mcp-server.js'], outfile: 'dist/ide-mcp-server.js', bundle: true, platform: 'node', target: 'node20' });
   await esbuild.build({ entryPoints: ['src/extension.js'], outfile: 'dist/extension.js', bundle: true, platform: 'node', target: 'node20', external: ['vscode', 'cpu-features', './crypto/build/Release/sshcrypto.node'], sourcemap: false });

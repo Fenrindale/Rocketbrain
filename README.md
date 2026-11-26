@@ -183,6 +183,8 @@ Linux x64 확장 호스트에서는 **Debug Kotlin/Native Executable**에서 로
 
 Gradle JVM 타깃의 main 컴파일에 속하는 저장된 Kotlin 파일에서 **Preview Kotlin Compose**를 실행하면 매개변수 없는 최상위 `@Preview`·`@Composable` 함수를 선택할 수 있습니다. `commonMain`, `desktopMain`, `jvmMain`과 Gradle에 등록한 Kotlin 소스 디렉터리를 지원합니다. 프로젝트의 Compose Desktop 런타임으로 별도 창 없이 PNG를 렌더링합니다. Gradle 소스셋에 등록된 프로젝트 리소스와 Kotlin 파일을 저장한 뒤 **Refresh Preview**로 같은 소스셋을 다시 그립니다. 렌더링 도중 입력이 달라지면 해당 이미지를 표시하기 전에 다시 검토하도록 안내합니다.
 
+**Debug Kotlin Android APK**는 Android SDK가 실행 중인 로컬 에뮬레이터와 해당 APK를 빌드한 Kotlin 소스를 사용합니다. 저장한 Kotlin 클래스에서 실행할 줄을 선택한 뒤 독립 JDK 25와 Android SDK 경로를 설정합니다. 검토 화면에서 에뮬레이터, 디버그용 단일 APK, 앱과 액티비티를 확인하면 임시 설치가 시작됩니다. 앱에서 선택한 코드를 실행해 중단되면 출력 창에서 프리미티브 지역 변수를 읽을 수 있습니다. **Continue Kotlin Android Breakpoint**로 앱을 재개하고 **Stop Kotlin Android Debug**로 검증한 임시 설치를 정리합니다. [Android Debug Bridge](https://developer.android.com/tools/adb)
+
 Windows에서 한글 프로젝트 경로의 JVM 테스트가 Gradle 작업자를 시작하지 못하면 `rocketbrain.kotlin.gradleHome`에 Gradle 9.7.0 설치 경로를 지정합니다. 이 설정은 Kotlin Multiplatform 작업에 적용됩니다.
 
 컴파일 뒤 편집기의 **Go to Definition** 또는 **Open Kotlin Expect or Actual Declaration**에서 최상위 함수와 프로퍼티의 단순 스칼라 시그니처를 연결합니다. 공통 `expect`에서 플랫폼별 `actual`을 선택하거나 `actual`에서 원래 선언으로 돌아갈 수 있습니다. 소스나 빌드 구성이 바뀌면 다시 컴파일합니다.

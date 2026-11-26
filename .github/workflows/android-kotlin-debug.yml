@@ -1,0 +1,83 @@
+name: Android Kotlin emulator debug
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['verify-android-debug-*']
+    paths:
+      - '.github/workflows/android-kotlin-debug.yml'
+      - 'src/java/android-*.js'
+      - 'runtime/android-debug/*'
+      - 'test/android-kotlin-debug.test.js'
+      - 'test/fixtures/android-debug/**'
+
+permissions:
+  contents: read
+
+jobs:
+  actual-android-emulator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install locked Rocketbrain dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Install standard Android emulator tools and API 35
+        run: |
+          set -euo pipefail
+          test -c /dev/kvm
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?}}"
+          tools="$sdk/cmdline-tools/latest/bin"
+          image='system-images;android-35;google_apis;x86_64'
+          "$tools/sdkmanager" --sdk_root="$sdk" 'platform-tools' 'emulator' 'build-tools;35.0.0' 'platforms;android-35' "$image"
+          printf 'no\n' | "$tools/avdmanager" create avd --name rocketbrain-art-fixture --package "$image"
+      - name: Build and sign the owned Kotlin APK
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/rocketbrain-android-apk"
+          bash test/fixtures/android-debug/build-apk.sh "$RUNNER_TEMP/rocketbrain-android-apk"
+      - name: Verify live ART source line and named primitive local on the owned emulator
+        env:
+          ROCKETBRAIN_ANDROID_RECEIPT: ${{ runner.temp }}/rocketbrain-android-receipt.json
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?}}"
+          adb="$sdk/platform-tools/adb"
+          emulator="$sdk/emulator/emulator"
+          "$emulator" -avd rocketbrain-art-fixture -port 5570 -no-window -no-audio -no-snapshot -no-boot-anim \
+            -gpu swiftshader_indirect > "$RUNNER_TEMP/rocketbrain-android-emulator.log" 2>&1 &
+          owned_emulator="$!"
+          trap 'kill "$owned_emulator" 2>/dev/null || true; wait "$owned_emulator" 2>/dev/null || true' EXIT
+          export ROCKETBRAIN_ANDROID_TEST_SDK="$sdk"
+          export ROCKETBRAIN_ANDROID_TEST_ROOT="$RUNNER_TEMP/rocketbrain-android-apk"
+          export ROCKETBRAIN_ANDROID_TEST_SERIAL='emulator-5570'
+          export ROCKETBRAIN_ANDROID_TEST_JAVA_HOME="$(realpath "$JAVA_HOME")"
+          deadline=$((SECONDS + 200))
+          until test "$("$adb" -s "$ROCKETBRAIN_ANDROID_TEST_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)" = 1; do
+            kill -0 "$owned_emulator" || { cat "$RUNNER_TEMP/rocketbrain-android-emulator.log"; exit 1; }
+            if (( SECONDS >= deadline )); then cat "$RUNNER_TEMP/rocketbrain-android-emulator.log"; exit 1; fi
+            sleep 2
+          done
+          "$adb" version
+          "$emulator" -version
+          node --test test/android-kotlin-debug.test.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocketbrain-android-kotlin-debug
+          path: ${{ runner.temp }}/rocketbrain-android-receipt.json
+          if-no-files-found: error
+          retention-days: 7

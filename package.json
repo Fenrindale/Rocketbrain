@@ -262,6 +262,9 @@
       { "command": "rocketbrain.kotlin.multiplatform.debugJvm", "title": "Debug Kotlin Multiplatform JVM Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.debugJs", "title": "Debug Kotlin Multiplatform JS Node Target", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.debugNative", "title": "Debug Kotlin/Native Executable", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.android.debugApk", "title": "Debug Kotlin Android APK", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == kotlin" },
+      { "command": "rocketbrain.kotlin.android.continue", "title": "Continue Kotlin Android Breakpoint", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.kotlin.android.stop", "title": "Stop Kotlin Android Debug", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.definition", "title": "Open Kotlin Expect or Actual Declaration", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && resourceScheme == file && editorLangId == kotlin" },
       { "command": "rocketbrain.kotlin.multiplatform.stop", "title": "Stop Kotlin Multiplatform Task", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.kotlin.multiplatform.previewCompose", "title": "Preview Kotlin Compose", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == kotlin" },
@@ -3097,6 +3100,26 @@
           "default": "",
           "scope": "machine",
           "description": "Optional absolute path to your sbt repository override configuration for managed tasks."
+        },
+        "rocketbrain.kotlin.android.sdkPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute local Android SDK directory containing platform-tools adb and AAPT2."
+        },
+        "rocketbrain.kotlin.android.buildToolsVersion": {
+          "type": "string",
+          "default": "35.0.0",
+          "scope": "machine",
+          "description": "Installed Android SDK Build Tools revision for APK manifest inspection."
+        },
+        "rocketbrain.kotlin.android.adbPort": {
+          "type": "integer",
+          "default": 5037,
+          "minimum": 1024,
+          "maximum": 65535,
+          "scope": "machine",
+          "description": "Port of the local Android Debug Bridge server at 127.0.0.1."
         },
         "rocketbrain.kotlin.gradleHome": {
           "type": "string",
