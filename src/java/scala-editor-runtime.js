@@ -57,4 +57,24 @@ async function scalaEditorLaunch({root,javaHome,classpathFile,sbtCacheDirectory}
   return {command,args,options:{cwd:root,env,windowsHide:true},port,root,version};
 }
 
-module.exports = { scalaEditorLaunch, version };
+function configureScalaTransport(transports,onError) {
+  const configuration={metals:{autoImportBuilds:'off',targetBuildTool:'sbt',defaultBspToBuildTool:false,startMcpServer:false}};
+  const {reader,writer}=transports;
+  return {...transports,reader:{
+    onError:reader.onError,onClose:reader.onClose,onPartialMessage:reader.onPartialMessage,
+    dispose:()=>reader.dispose(),
+    listen(listener) {
+      return reader.listen(message => {
+        // Metals requests these settings while initialize is outstanding.
+        // The client registers its normal configuration handler after that response.
+        if (message.method!=='workspace/configuration'||!Object.hasOwn(message,'id')) return listener(message);
+        const items=message.params?.items ?? [];
+        const result=items.map(item=>item.section ? item.section.split('.')
+          .reduce((section,key)=>section&&Object.hasOwn(section,key)?section[key]:null,configuration) : configuration);
+        void writer.write({jsonrpc:'2.0',id:message.id,result}).catch(onError);
+      });
+    }
+  }};
+}
+
+module.exports = { scalaEditorLaunch, configureScalaTransport, version };
