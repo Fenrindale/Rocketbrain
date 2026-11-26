@@ -5,6 +5,9 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { spawn } = require('node:child_process');
+const { once } = require('node:events');
+const { randomUUID } = require('node:crypto');
 const { test } = require('node:test');
 const { createDebugProcessDiscovery, processId, readSocketOwners, readyProcesses } = require('../src/java/debug-processes');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
@@ -37,6 +40,51 @@ test('Java process discovery respects trust and cancellation before reading syst
   const cancel = new AbortController(); cancel.abort();
   await assert.rejects(trusted.list(cancel.signal), /cancelled/);
   assert.equal(homeReached, false);
+});
+
+test('actual JVM descendant proof binds the suspended listener to the owned launch', {
+  skip: (!testConfig || !['win32','linux','darwin'].includes(process.platform)) && 'Configure the independent Java test JDK.',
+  timeout: 65000
+}, async () => {
+  const runtime = JSON.parse(await fs.readFile(testConfig, 'utf8'));
+  const javaHome = runtime.javaHome || runtime.settings?.['rocketbrain.java.javaHome'];
+  const executable = path.join(javaHome, 'bin', process.platform==='win32' ? 'java.exe' : 'java');
+  const marker = { key:'rocketbrain.tests.ownedDebug',value:randomUUID() };
+  const script = `
+    const {spawn}=require('node:child_process');
+    const child=spawn(process.argv[1],[process.argv[2],'-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:0','-version'],
+      {windowsHide:true,stdio:['ignore','pipe','inherit']});
+    child.stdout.pipe(process.stdout);
+    child.once('spawn',()=>process.send(child.pid));
+    process.once('message',()=>child.kill());
+    child.once('close',()=>process.exit(0));
+  `;
+  const parent = spawn(process.execPath, ['-e', script, executable, '-D'+marker.key+'='+marker.value],
+    { windowsHide:true, stdio:['ignore','pipe','inherit','ipc'] });
+  const stopped = once(parent, 'close');
+  const childPid = once(parent, 'message');
+  let output='';
+  parent.stdout.setEncoding('utf8').on('data',chunk=>{output+=chunk;});
+  try {
+    const [port, pid] = await Promise.all([
+      until(() => Number(/Listening for transport dt_socket at address: (\d+)/.exec(output)?.[1]), 12000),
+      childPid.then(([value])=>value)
+    ]);
+    const service = createDebugProcessDiscovery({javaHome:()=>javaHome,trusted(){}});
+    const selection = {ancestorPid:parent.pid,port,marker};
+    const verified = await service.resolveDescendant(selection);
+    assert.equal(verified.pid,pid);
+    assert.equal(verified.port,port);
+    assert.equal(verified.hostName,'127.0.0.1');
+    assert.equal(verified.ancestorPid,parent.pid);
+    assert.equal((await service.resolveDescendant({ancestorPid:process.pid,port})).pid,pid);
+    await assert.rejects(service.resolveDescendant({...selection,ancestorPid:pid}),/does not own the selected/);
+    await assert.rejects(service.resolveDescendant({...selection,marker:{...marker,value:randomUUID()}}),/does not own the selected/);
+    await assert.rejects(service.resolveDescendant({...selection,marker:{...marker,key:'java.home'}}),/optional Rocketbrain launch marker/);
+  } finally {
+    if (parent.connected) parent.send('stop');
+    await stopped;
+  }
 });
 
 test('actual Windows JVM discovery finds only debug-ready PIDs, attaches and detaches without killing the external JVM', {

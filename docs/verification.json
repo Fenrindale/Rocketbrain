@@ -1,28 +1,28 @@
 {
-  "version": "0.136.0",
-  "verifiedAt": "2026-11-26T10:53:24.697Z",
+  "version": "0.138.0",
+  "verifiedAt": "2026-11-26T11:41:50.017Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.136.0.vsix",
-    "sha256": "be72da0c6b9d0ed2d3c6fd05c4300bdd63aa87d39bb7f3c6fe9b1c33b76da632",
-    "bytes": 4396627,
-    "files": 29
+    "name": "rocketbrain-0.138.0.vsix",
+    "sha256": "7ce2dcce8c1742fbc42ada8dbd8d3306c4742246c03d5c9517bd033f6ca1b715",
+    "bytes": 4442149,
+    "files": 31
   },
   "source": {
-    "frozenPublicInputs": 2807,
-    "inputVectorSha256": "0d93dc3d4e80fabae32e8770f9ea8cb595901fd8ba126f1ce3559647b9fa79d4",
+    "frozenPublicInputs": 2851,
+    "inputVectorSha256": "6e7589a65fb622f34f581a9cdb8f258ad4b39aa98f7c5440554f915f6fbc241d",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45797722795",
-    "tests": 2094,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45810752233",
+    "tests": 2110,
     "suites": 0,
-    "pass": 1881,
+    "pass": 1894,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 213,
+    "skipped": 216,
     "todo": 0
   },
   "focusedPackagedNative": [
@@ -35,39 +35,39 @@
       "groupCount": 9,
       "groups": [
         {
-          "group": "schemaRecovery",
+          "group": "quarkusLiveDebug",
           "checks": 1
         },
         {
-          "group": "quarkusGradle",
+          "group": "jakartaManager",
           "checks": 1
         },
         {
-          "group": "kmpComposePreview",
+          "group": "javafxGradleImage",
           "checks": 1
         },
         {
-          "group": "jakartaMulti",
+          "group": "javafxProperties",
           "checks": 1
         },
         {
-          "group": "javafxPreview",
+          "group": "javafxCompletion",
           "checks": 1
         },
         {
-          "group": "scala2Language",
+          "group": "kmpJvmDebug",
           "checks": 1
         },
         {
-          "group": "scala3Language",
+          "group": "kmpJvmSourceLines",
           "checks": 1
         },
         {
-          "group": "scala2TestDebug",
+          "group": "mavenSnapshot",
           "checks": 1
         },
         {
-          "group": "scala3TestDebug",
+          "group": "mavenSnapshotMove",
           "checks": 1
         }
       ],
@@ -85,39 +85,39 @@
       "groupCount": 9,
       "groups": [
         {
-          "group": "schemaRecovery",
+          "group": "quarkusLiveDebug",
           "checks": 1
         },
         {
-          "group": "quarkusGradle",
+          "group": "jakartaManager",
           "checks": 1
         },
         {
-          "group": "kmpComposePreview",
+          "group": "javafxGradleImage",
           "checks": 1
         },
         {
-          "group": "jakartaMulti",
+          "group": "javafxProperties",
           "checks": 1
         },
         {
-          "group": "javafxPreview",
+          "group": "javafxCompletion",
           "checks": 1
         },
         {
-          "group": "scala2Language",
+          "group": "kmpJvmDebug",
           "checks": 1
         },
         {
-          "group": "scala3Language",
+          "group": "kmpJvmSourceLines",
           "checks": 1
         },
         {
-          "group": "scala2TestDebug",
+          "group": "mavenSnapshot",
           "checks": 1
         },
         {
-          "group": "scala3TestDebug",
+          "group": "mavenSnapshotMove",
           "checks": 1
         }
       ],
@@ -129,86 +129,89 @@
   ],
   "newlyVerified": {
     "IDEA-045": {
-      "scope": "공통 소스의 Compose 장면을 실제 JVM Desktop으로 96×72 렌더링했다. 배경색과 포함 컴포넌트 픽셀, 편집 후 재렌더링, 미저장 소스 거부를 두 DB 환경의 설치본에서 확인했다.",
+      "scope": "실제 Gradle Kotlin JVM 실행에서 commonMain SMAP과 jvmMain Java 줄 테이블의 위치, 지역 변수, 스텝, Spring JDBC 완료를 두 DB에서 확인했다.",
       "runtimeGroups": [
-        "kmpComposePreview"
-      ]
-    },
-    "IDEA-046": {
-      "scope": "실제 sbt와 Scala 2.13.18 및 3.9.0에서 형제 모듈 타입과 오버로드 편집을 확인했다. 정확한 테스트 소스에 중단했고 지역 변수를 읽은 뒤 선택한 스위트만 재개했다. Spring JDBC는 두 DB에서 확인했다.",
-      "runtimeGroups": [
-        "scala2Language",
-        "scala3Language",
-        "scala2TestDebug",
-        "scala3TestDebug"
+        "kmpJvmDebug",
+        "kmpJvmSourceLines"
       ]
     },
     "IDEA-066": {
-      "scope": "실제 Gradle Quarkus 앱의 테스트·HTTP/JDBC·중단점에서 두 DB를 확인했다. 중단점을 제거하고 재개한 뒤 재요청이 정상 응답했고 소유한 런타임을 종료했다.",
+      "scope": "실제 Quarkus 3.40.1.2와 두 Spring DB 환경에서 변경 전후 같은 디버그 세션으로 Java 줄에서 멈췄다. DAP 중단점 해제, 이후 HTTP/JDBC 요청과 소유 JVM 종료도 확인했다.",
       "runtimeGroups": [
-        "quarkusGradle"
+        "quarkusLiveDebug"
       ]
     },
     "IDEA-068": {
-      "scope": "Tomcat 11.0.29와 두 Spring DB 환경에서 두 Servlet/JSP 앱의 응답, 한 앱 제거 뒤 다른 앱의 계속 실행, 변경된 파일 거부와 마지막 앱 종료를 확인했다.",
+      "scope": "Tomcat 11.0.29 HTTPS Manager 인증과 WAR 변경·재사용 거부, 정상 앱 유지, 두 Spring DB의 Servlet/JSP·JDBC 작동을 확인했다.",
       "runtimeGroups": [
-        "jakartaMulti"
+        "jakartaManager"
+      ]
+    },
+    "IDEA-069": {
+      "scope": "실제 Maven에서 두 SNAPSHOT 버전을 내려받고, 내려받은 위치를 Maven 캐시와 대조했다. 외부 SNAPSHOT 부모와 BOM을 사용하는 리액터에서 설치형 Java Move, 변경된 캐시 메타데이터의 거부, 재검토 후 컴파일과 Spring JDBC를 두 DB에서 확인했다.",
+      "runtimeGroups": [
+        "mavenSnapshot",
+        "mavenSnapshotMove"
       ]
     },
     "IDEA-120": {
-      "scope": "실제 OpenJFX 26.0.2+3에서 CSS 배경과 포함 도형의 픽셀을 확인했다. 원본 컨트롤러와 핸들러 선언을 보존했고 미저장 CSS를 거부했다.",
+      "scope": "실제 OpenJFX에서 제안 속성과 저장한 FXML의 이미지가 일치했다. 내장 및 프로젝트 컴포넌트 완성을 실제 FXMLLoader가 읽었고, Gradle jlink 런처도 실행했다.",
       "runtimeGroups": [
-        "javafxPreview"
-      ]
-    },
-    "DG-083": {
-      "scope": "실제 Spring JDBC의 MySQL과 MariaDB에서 검토 후 변경 전 거부와 작업 제출 후 통신 실패를 구분했다. 내구성 기록을 찾아 원본 스키마·데이터를 복구했다.",
-      "runtimeGroups": [
-        "schemaRecovery"
+        "javafxGradleImage",
+        "javafxProperties",
+        "javafxCompletion"
       ]
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 635,
+    "sourceCorrespondences": 647,
     "sourceConfidence": "inferred",
-    "archiveEntries": 29,
+    "archiveEntries": 31,
     "archiveConfidence": "observed"
+  },
+  "nativePayloadEquivalence": {
+    "files": 31,
+    "testedArchiveSha256": "eb8fe772b68bdbd2620313a753c48898fd0f7008dc807d245d75f69bb28da033",
+    "testedInputVectorSha256": "1b1dbd70f50c67668630154ed1782fd5568205f7c96587ce684de20708bda6d9",
+    "onlySourceChanges": [
+      "test/javafx-completion-host.js",
+      "test/maven-snapshot-host.js"
+    ]
   },
   "progress": {
     "counts": {
-      "implemented": 180,
-      "partial": 22,
+      "implemented": 181,
+      "partial": 21,
       "not-implemented": 0,
       "host-provided": 12,
       "unverified": 0,
       "platform-limited": 2
     },
-    "weightedPoints": 203,
-    "previousWeightedPoints": 202.5,
+    "weightedPoints": 203.5,
+    "previousWeightedPoints": 203,
     "targetWeightedPoints": 216,
-    "referencePercent": 94,
+    "referencePercent": 94.2,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "stateChanges": [
       {
-        "id": "IDEA-046",
+        "id": "IDEA-069",
         "before": "partial",
         "after": "implemented"
       }
     ]
   },
   "limits": [
-    "기능 216개와 기존 가중치 기준을 유지한다.",
-    "Scala 이름 변경은 SemanticDB로 확인한 독립 객체의 메서드 오버로드를 지원한다. 상속 계층 및 생성 코드의 이름 변경은 남아 있다.",
-    "Compose 미리보기는 JVM Desktop에서 인수가 없는 @Preview를 실행한다. JavaFX는 OpenJFX 내장 컴포넌트의 정적 장면을 렌더링한다.",
-    "Tomcat 다중 배포는 소유한 로컬 서버를 대상으로 한다. 원격 Manager·서버 도메인·EJB는 별도 범위다.",
-    "첫 쓰기 전 스키마 거부는 복구 대상을 만들지 않는다. 작업을 제출한 뒤 응답을 잃은 경우에는 확인과 복구가 필요하다."
+    "가중 점수는 216개 기능표 기준으로 집계한다.",
+    "Kotlin Multiplatform 디버깅은 선택한 JVM 애플리케이션과 검증한 소스 위치를 지원한다.",
+    "Maven 의존성 보고서는 검사 시점의 캐시를 표시한다. 다운로드가 바뀐 뒤에는 새로 검사한다. 모델 추적은 출처를 확인할 수 있는 Maven 캐시와 표준 POM 선언을 대상으로 한다.",
+    "Tomcat HTTPS Manager 배포는 업로드할 WAR와 대상 서버를 검토한다. 네트워크 응답이 불확실하면 원격 바이트 복원 여부를 추측하지 않는다."
   ],
   "next": [
-    "Kotlin Multiplatform JVM 타깃 디버깅",
-    "Gradle JavaFX jlink 이미지와 시각 속성 편집",
-    "원격 Tomcat Manager 배포와 갱신",
-    "Quarkus dev-mode JVM 디버깅"
+    "Spring 상위 BeanFactory의 실제 주입 소유권과 선언 탐색",
+    "React 속성과 Angular 템플릿 편집",
+    "개별 Spock 명세 실행과 Java 가변 인수 변경",
+    "SSH Maven·Gradle 작업과 FXML 장면 편집"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

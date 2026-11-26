@@ -15,14 +15,15 @@ const COMMANDS = Object.freeze({
   create:'rocketbrain.quarkus.create',
   inspect:'rocketbrain.quarkus.inspect', start:'rocketbrain.quarkus.startDev',
   stop:'rocketbrain.quarkus.stopDev', test:'rocketbrain.quarkus.runTests',
-  build:'rocketbrain.quarkus.build', debug:'rocketbrain.quarkus.debug'
+  build:'rocketbrain.quarkus.build', debug:'rocketbrain.quarkus.debug', debugDev:'rocketbrain.quarkus.debugDev'
 });
 
 function registerQuarkusWorkbench(vscode,java) {
   let disposed=false, closing, busy=false, generation=0, debugSession;
   const subscriptions=[], jobs=new Set(), pending=new Map();
   const output=vscode.window.createOutputChannel('Rocketbrain Quarkus');
-  const dev=createQuarkusDev({log:chunk => output.append(chunk)});
+  const dev=createQuarkusDev({log:chunk => output.append(chunk),
+    resolveDescendant:(target,cancellation) => java.debug.processes.resolveDescendant(target,cancellation)});
   subscriptions.push(output);
 
   function trusted(cancellation) {
@@ -127,10 +128,12 @@ function registerQuarkusWorkbench(vscode,java) {
     return receipt;
   }
 
-  const startDebug=(options={})=>exclusive(options,async(project,current)=>{
-    const result=await task(project,'build',options,current);
-    if (result.state!=='succeeded') throw fail('The Quarkus fast-jar build did not succeed.');
-    const receipt=await launch(project,options,true);
+  const startDebug=(options={},profile='prod')=>exclusive(options,async(project,current)=>{
+    if (profile==='prod') {
+      const result=await task(project,'build',options,current);
+      if (result.state!=='succeeded') throw fail('The Quarkus fast-jar build did not succeed.');
+    }
+    const receipt=await launch(project,options,profile==='dev'?'development':true);
     const key=randomUUID(), record={};
     let timer;
     try {
@@ -144,7 +147,7 @@ function registerQuarkusWorkbench(vscode,java) {
       const began=new Promise(resolve=>{record.resolve=resolve;});
       pending.set(key,record);
       const attached=await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(project.uri)),{
-        type:DEBUG_TYPE,request:'attach',name:'Rocketbrain Quarkus '+project.name,
+        type:DEBUG_TYPE,request:'attach',name:(profile==='dev'?'Rocketbrain Quarkus Dev ':'Rocketbrain Quarkus ')+project.name,
         ...processAttachTarget(candidate),[DEBUG_MARKER]:key,
         sourcePaths:project.sourceRoots.filter(item=>!item.unavailable).map(item=>item.path)
       },{suppressSaveBeforeStart:true});
@@ -313,12 +316,19 @@ function registerQuarkusWorkbench(vscode,java) {
     output.show(true);
     return progress('Debug Quarkus Application',cancellation=>startDebug({projectUri,allowProjectExecution:true,cancellation}));
   });
+  register(COMMANDS.debugDev,async()=>{
+    const projectUri=await choose();
+    if (!projectUri) return;
+    output.show(true);
+    return progress('Debug Quarkus Dev Mode',
+      cancellation=>startDebug({projectUri,allowProjectExecution:true,cancellation},'dev'));
+  });
 
   return {
     create:options => track(() => create(options)),
     inspect:options => track(() => inspect(options)), startDev:options => track(() => start(options)),
     runTests:options => track(() => tests(options)),build:options=>track(()=>build(options)),
-    debug:options=>track(()=>startDebug(options)),stopDev:stop,
+    debug:options=>track(()=>startDebug(options)),debugDev:options=>track(()=>startDebug(options,'dev')),stopDev:stop,
     dispose() {
       if (closing) return closing;
       disposed=true;

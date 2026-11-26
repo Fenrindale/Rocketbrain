@@ -4,6 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { EXCEPTION_SOURCE_PATH, EXCEPTION_SOURCE_SHA256, patchExceptionSession } = require('./java-debug-exception-patch');
+const { kotlinLineSites,patchKotlinLines } = require('./java-debug-kotlin-lines-patch');
 
 const SOURCE_COMMIT = '5c7562ade22977b15f76f46d13c098e82cc58ced';
 const SOURCE_PATH = 'com.microsoft.java.debug.plugin/src/main/java/com/microsoft/java/debug/plugin/internal/JavaDebugServer.java';
@@ -18,8 +19,15 @@ const EXCEPTION_SOURCE_URL = 'https://raw.githubusercontent.com/microsoft/java-d
 const INSPECTION_SOURCE_PATH = 'com.microsoft.java.debug.core/src/main/java/com/microsoft/java/debug/core/adapter/DebugAdapter.java';
 const INSPECTION_SOURCE_URL = 'https://raw.githubusercontent.com/microsoft/java-debug/' + SOURCE_COMMIT + '/' + INSPECTION_SOURCE_PATH;
 const INSPECTION_SOURCE_SHA256 = '9e4ecb59403bacf8f2dc7ef537a13717a17981ad0636b14402e0b4e7b5bae322';
+const KOTLIN_LINE_UPSTREAM = kotlinLineSites.map(site=>({...site,
+  sourceUrl:'https://raw.githubusercontent.com/microsoft/java-debug/'+SOURCE_COMMIT+'/com.microsoft.java.debug.core/src/main/java/'+site.entry}));
 const DISPATCH_FROM = '        Command command = Command.parse(request.command);';
-const DISPATCH_TO = '        if ("rocketbrain/readJavaValues".equals(request.command)) {\n' +
+const DISPATCH_TO = '        try {\n' +
+  '            com.microsoft.java.debug.core.KotlinLineBreakpoints.updateSession(debugContext, request);\n' +
+  '        } catch (RuntimeException invalidSourceLines) {\n' +
+  '            return AdapterUtils.createAsyncErrorResponse(response, ErrorCode.ATTACH_FAILURE, "Invalid owned Kotlin source-line evidence.");\n' +
+  '        }\n' +
+  '        if ("rocketbrain/readJavaValues".equals(request.command)) {\n' +
   '            return LocalValueInspection.read(request, response, debugContext);\n        }\n' +
   '        if ("rocketbrain/watchKotlinCoroutine".equals(request.command)) {\n' +
   '            return CoroutineFrameWatch.dispatch(request, response, debugContext);\n        }\n' +
@@ -34,7 +42,7 @@ const CORE_PATCH_TO = '                try {\n                    Path fullpath 
 const PATCH_FROM = 'this.serverSocket = new ServerSocket(0, 1);';
 const PATCH_TO = 'this.serverSocket = new ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"));';
 const PATCH_NOTICE = [
-  'Rocketbrain Java debug server patches v9',
+  'Rocketbrain Java debug server patches v10',
   'Upstream: microsoft/java-debug 0.53.1 (' + SOURCE_COMMIT + ')',
   'Patch 1 source: ' + SOURCE_URL,
   'Original source SHA-256: ' + SOURCE_SHA256,
@@ -53,6 +61,8 @@ const PATCH_NOTICE = [
   'Patch 7: read bounded indexed Kotlin array and standard JVM list elements through pinned JDI layouts.',
   'Patch 8: review and change one primitive Kotlin-frame local while its exact JDI frame remains suspended.',
   'Patch 9: inspect declared Kotlin JVM scalar fields and review one exact instance-field update without invoking target methods.',
+  'Patch 10: bind managed Kotlin JVM source lines to actual JDI locations using compiled source and bytecode evidence.',
+  ...KOTLIN_LINE_UPSTREAM.map(site=>site.sourceUrl+' SHA-256 '+site.sha256),
   'Removed original signature files from modified JARs. Original project copyright and license notices are retained.',
   'Patched adapter and added helper sources are included under META-INF/rocketbrain-sources/.',
   'Full upstream source is available at https://github.com/microsoft/java-debug/tree/' + SOURCE_COMMIT,
@@ -80,6 +90,8 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
   const originalCoreSource = await verifiedText(CORE_SOURCE_URL, CORE_SOURCE_SHA256, path.join(target, 'AdapterUtils.upstream.java'));
   const originalExceptionSource = await verifiedText(EXCEPTION_SOURCE_URL, EXCEPTION_SOURCE_SHA256, path.join(target, 'DebugSession.upstream.java'));
   const originalInspectionSource = await verifiedText(INSPECTION_SOURCE_URL, INSPECTION_SOURCE_SHA256, path.join(target, 'DebugAdapter.upstream.java'));
+  const lineSources = await Promise.all(KOTLIN_LINE_UPSTREAM.map(async site=>({...site,
+    patched:patchKotlinLines(site.name,await verifiedText(site.sourceUrl,site.sha256,path.join(target,site.name+'.upstream')))})));
   const license = await verifiedText(LICENSE_URL, LICENSE_SHA256, path.join(target, 'LICENSE.txt'));
   if (originalSource.split(PATCH_FROM).length !== 2) throw new Error('Expected exactly one Java debug server socket construction.');
   const patchedSource = originalSource.replace(PATCH_FROM, PATCH_TO);
@@ -93,6 +105,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
   const kotlinWatchName = 'KotlinWatchEvaluation.java';
   const kotlinLocalName = 'KotlinLocalAssignment.java';
   const kotlinFieldsName = 'KotlinObjectFields.java', kotlinAccessName = 'KotlinFieldAccess.java';
+  const kotlinLinesName = 'KotlinLineBreakpoints.java';
   const readHelper = name => {
     const helper = [path.join(__dirname, 'java-debug', name), path.join(__dirname, '../runtime/java-debug', name)]
       .find(candidate => fs.existsSync(candidate));
@@ -103,6 +116,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
   const kotlinWatchSource = readHelper(kotlinWatchName);
   const kotlinLocalSource = readHelper(kotlinLocalName);
   const kotlinFieldsSource = readHelper(kotlinFieldsName), kotlinAccessSource = readHelper(kotlinAccessName);
+  const kotlinLinesSource = readHelper(kotlinLinesName);
   const buildDir = await fs.promises.mkdtemp(path.join(target, '.loopback-build-'));
   const stage = path.join(buildDir, 'stage'), classes = path.join(buildDir, 'classes'), sourceDir = path.join(buildDir, 'source');
   for (const folder of [stage, classes, sourceDir]) await fs.promises.mkdir(folder);
@@ -130,10 +144,13 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
       const entry = 'com/microsoft/java/debug/core/adapter/AdapterUtils.java';
       const exceptionEntry = 'com/microsoft/java/debug/core/DebugSession.java';
       const inspectionEntry = 'com/microsoft/java/debug/core/adapter/DebugAdapter.java';
-      run(executable('jar'), ['xf', coreSourceJar, entry, exceptionEntry, inspectionEntry], sourceDir);
+      run(executable('jar'), ['xf', coreSourceJar, entry, exceptionEntry, inspectionEntry, ...lineSources.map(site=>site.entry)], sourceDir);
       if (hash(fs.readFileSync(path.join(sourceDir, entry))) !== CORE_SOURCE_SHA256) throw new Error('Maven core source JAR and pinned upstream source do not agree.');
       if (hash(fs.readFileSync(path.join(sourceDir, exceptionEntry))) !== EXCEPTION_SOURCE_SHA256) throw new Error('Maven exception source and pinned upstream source do not agree.');
       if (hash(fs.readFileSync(path.join(sourceDir, inspectionEntry))) !== INSPECTION_SOURCE_SHA256) throw new Error('Maven adapter source and pinned upstream source do not agree.');
+      for (const site of lineSources) {
+        if (hash(fs.readFileSync(path.join(sourceDir,site.entry)))!==site.sha256) throw Error('Maven breakpoint source and pinned upstream source do not agree.');
+      }
     }
     const coreJava = path.join(sourceDir, 'AdapterUtils.java'); await fs.promises.writeFile(coreJava, patchedCoreSource);
     const exceptionJava = path.join(sourceDir, 'DebugSession.java'); await fs.promises.writeFile(exceptionJava, patchedExceptionSource);
@@ -144,12 +161,20 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
     const kotlinLocalJava = path.join(sourceDir, kotlinLocalName); await fs.promises.writeFile(kotlinLocalJava, kotlinLocalSource);
     const kotlinFieldsJava = path.join(sourceDir, kotlinFieldsName); await fs.promises.writeFile(kotlinFieldsJava, kotlinFieldsSource);
     const kotlinAccessJava = path.join(sourceDir, kotlinAccessName); await fs.promises.writeFile(kotlinAccessJava, kotlinAccessSource);
+    const kotlinLinesJava = path.join(sourceDir, kotlinLinesName); await fs.promises.writeFile(kotlinLinesJava, kotlinLinesSource);
+    const patchedLineFiles=[];
+    for (const site of lineSources) {
+      const file=path.join(sourceDir,site.name);
+      await fs.promises.writeFile(file,site.patched);
+      patchedLineFiles.push(file);
+    }
     if (!path.isAbsolute(serverPath || '')) throw new Error('The independent JDT LS serverPath is required to compile the public core source patch.');
     const dependencies = fs.readdirSync(path.join(serverPath, 'plugins')).filter(name => /^(?:org\.apache\.commons\.lang3_|com\.google\.gson_).*\.jar$/.test(name)).map(name => path.join(serverPath, 'plugins', name));
     if (dependencies.length !== 2) throw new Error('Expected the verified JDT LS commons-lang3 and Gson build dependencies.');
-    dependencies.push(...['rxjava-2.2.21.jar', 'reactive-streams-1.0.4.jar'].map(name => path.join(stage, 'lib', name)));
+    dependencies.push(...['rxjava-2.2.21.jar', 'reactive-streams-1.0.4.jar', 'commons-io-2.11.0.jar'].map(name => path.join(stage, 'lib', name)));
     run(executable('javac'), ['--release', '11', '-encoding', 'UTF-8', '-cp', [coreJar, ...dependencies].join(path.delimiter),
-      '-d', coreClasses, coreJava, exceptionJava, adapterJava, inspectionJava, coroutineJava, kotlinWatchJava, kotlinLocalJava, kotlinFieldsJava, kotlinAccessJava]);
+      '-d', coreClasses, coreJava, exceptionJava, adapterJava, inspectionJava, coroutineJava, kotlinWatchJava, kotlinLocalJava, kotlinFieldsJava, kotlinAccessJava,
+      kotlinLinesJava,...patchedLineFiles]);
     const corePackage = path.join('com', 'microsoft', 'java', 'debug', 'core');
     for (const file of ['DebugSession.class', 'adapter/AdapterUtils.class', 'adapter/DebugAdapter.class',
       'adapter/LocalValueInspection.class', 'adapter/LocalValueInspection$IndexedValue.class', 'adapter/CoroutineFrameWatch.class',
@@ -158,7 +183,10 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
       'adapter/KotlinWatchEvaluation$Expression.class', 'adapter/KotlinWatchEvaluation$Operand.class', 'adapter/KotlinWatchEvaluation$Parser.class',
       'adapter/KotlinLocalAssignment.class', 'adapter/KotlinLocalAssignment$Review.class', 'adapter/KotlinFieldAccess.class',
       'adapter/KotlinObjectFields.class', 'adapter/KotlinObjectFields$Frame.class', 'adapter/KotlinObjectFields$Receiver.class',
-      'adapter/KotlinObjectFields$Replacement.class', 'adapter/KotlinObjectFields$Review.class']) {
+      'adapter/KotlinObjectFields$Replacement.class', 'adapter/KotlinObjectFields$Review.class',
+      'Breakpoint.class','adapter/handler/SetBreakpointsRequestHandler.class','adapter/handler/StackTraceRequestHandler.class',
+      'adapter/handler/StackTraceRequestHandler$StackFrameInfo.class','KotlinLineBreakpoints.class',
+      'KotlinLineBreakpoints$Site.class','KotlinLineBreakpoints$Source.class','KotlinLineBreakpoints$Session.class']) {
       await fs.promises.copyFile(path.join(coreClasses, corePackage, file), path.join(coreStage, corePackage, file));
     }
     const coreMeta = path.join(coreStage, 'META-INF');
@@ -176,6 +204,8 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
     await fs.promises.writeFile(path.join(coreSources, kotlinLocalName), kotlinLocalSource);
     await fs.promises.writeFile(path.join(coreSources, kotlinFieldsName), kotlinFieldsSource);
     await fs.promises.writeFile(path.join(coreSources, kotlinAccessName), kotlinAccessSource);
+    await fs.promises.writeFile(path.join(coreSources, kotlinLinesName), kotlinLinesSource);
+    for (const site of lineSources) await fs.promises.writeFile(path.join(coreSources,site.name),site.patched);
     await fs.promises.writeFile(path.join(coreMeta, 'ROCKETBRAIN-PATCH.txt'), PATCH_NOTICE);
     await fs.promises.writeFile(path.join(coreMeta, 'LICENSE-java-debug.txt'), license);
     const rebuiltCore = path.join(buildDir, 'com.microsoft.java.debug.core-0.53.1.jar');
@@ -184,7 +214,7 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
     const meta = path.join(stage, 'META-INF');
     for (const name of fs.readdirSync(meta)) if (/\.(?:SF|RSA|DSA|EC)$|^SIG-/i.test(name)) await fs.promises.rm(path.join(meta, name));
     const manifestPath = path.join(meta, 'MANIFEST.MF');
-    const main = fs.readFileSync(manifestPath, 'utf8').split(/\r?\n\r?\n/)[0].replace(/Bundle-Version: 0\.53\.1\b/, 'Bundle-Version: 0.53.1.rocketbrain9');
+    const main = fs.readFileSync(manifestPath, 'utf8').split(/\r?\n\r?\n/)[0].replace(/Bundle-Version: 0\.53\.1\b/, 'Bundle-Version: 0.53.1.rocketbrain10');
     await fs.promises.writeFile(manifestPath, main.replace(/\r?\n/g, '\r\n') + '\r\n\r\n');
     const sourcesDir = path.join(meta, 'rocketbrain-sources'); await fs.promises.mkdir(sourcesDir);
     await fs.promises.writeFile(path.join(sourcesDir, 'JavaDebugServer.java'), patchedSource);
@@ -197,6 +227,8 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
     await fs.promises.writeFile(path.join(sourcesDir, kotlinLocalName), kotlinLocalSource);
     await fs.promises.writeFile(path.join(sourcesDir, kotlinFieldsName), kotlinFieldsSource);
     await fs.promises.writeFile(path.join(sourcesDir, kotlinAccessName), kotlinAccessSource);
+    await fs.promises.writeFile(path.join(sourcesDir, kotlinLinesName), kotlinLinesSource);
+    for (const site of lineSources) await fs.promises.writeFile(path.join(sourcesDir,site.name),site.patched);
     await fs.promises.writeFile(path.join(meta, 'ROCKETBRAIN-PATCH.txt'), PATCH_NOTICE);
     await fs.promises.writeFile(path.join(meta, 'LICENSE-java-debug.txt'), license);
     run(executable('jar'), ['--create', '--file', outputJar, '--no-manifest', '--date=2024-01-01T00:00:00Z', '-C', stage, '.']);
@@ -210,6 +242,8 @@ async function buildPatchedBundle({ target, javaHome, serverPath, upstreamJar, s
       kotlinWatchSourceSha256: hash(Buffer.from(kotlinWatchSource)),
       kotlinLocalSourceSha256: hash(Buffer.from(kotlinLocalSource)),
       kotlinFieldsSourceSha256: hash(Buffer.from(kotlinFieldsSource)), kotlinFieldAccessSourceSha256: hash(Buffer.from(kotlinAccessSource)),
+      kotlinLinesSourceSha256:hash(Buffer.from(kotlinLinesSource)),
+      kotlinLinesUpstream:lineSources.map(({name,sourceUrl,sha256,patched})=>({name,sourceUrl,sha256,patchedSha256:hash(Buffer.from(patched))})),
       rebuiltCoreSha256: hash(fs.readFileSync(coreJar)), sourceCommit: SOURCE_COMMIT, sourceUrl: SOURCE_URL,
       coreSourceUrl: CORE_SOURCE_URL, exceptionSourceUrl: EXCEPTION_SOURCE_URL, inspectionSourceUrl: INSPECTION_SOURCE_URL,
       buildDependencies: dependencies.map(file => ({ file: path.basename(file), sha256: hash(fs.readFileSync(file)) })),

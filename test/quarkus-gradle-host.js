@@ -105,8 +105,20 @@ async function testCount(root) {
   return 2;
 }
 
+async function observeLiveReload(source, baseUrl) {
+  const previous=await fs.readFile(source,'utf8');
+  const updated=previous.replace('String message = greeting + "-ready";','String message = greeting + "-ready-reloaded";');
+  assert.notEqual(updated,previous);
+  await fs.writeFile(source,updated);
+  await until(async()=>await web(baseUrl,'/proof','text',18000)==='dev-fixture-ready-reloaded',85000);
+  assert.equal(await web(baseUrl,'/proof/jdbc'),'2');
+  assert.equal((await web(baseUrl,'/q/health/ready','json')).status,'UP');
+}
+
 async function actualBreakpoint(command,session,project) {
   const source=path.join(project.root,sourceRelative), line=await breakpointLine(source);
+  const profile=session.profile==='dev'?'dev':'packaged';
+  const greeting=profile+'-fixture-ready';
   const dap=new DapClient(await command('vscode.java.startDebugSession'));
   const location={name:'FixtureResource.java',path:source};
   let request;
@@ -131,7 +143,7 @@ async function actualBreakpoint(command,session,project) {
     assert.match(frame.name,/FixtureResource\.greeting/u);
     assert.equal(path.relative(source,frame.source.path),'');
     await dap.request('continue',{threadId:stopped.threadId});
-    assert.equal(await request,'packaged-fixture-ready');
+    assert.equal(await request,greeting);
 
     // A retained breakpoint can suspend a second HTTP request. Exercise it with
     // the same attached JVM before requiring acknowledgement of its removal.
@@ -148,20 +160,36 @@ async function actualBreakpoint(command,session,project) {
     const cleared=await dap.request('setBreakpoints',{source:location,breakpoints:[]});
     assert.deepEqual(cleared.breakpoints,[]);
     await dap.request('continue',{threadId:repeatedStop.threadId});
-    assert.equal(await request,'packaged-fixture-ready');
-    await verifyServed(session.baseUrl,'packaged');
+    assert.equal(await request,greeting);
+    await verifyServed(session.baseUrl,profile);
+    if (profile==='dev') {
+      await observeLiveReload(source,session.baseUrl);
+      const next=await dap.request('setBreakpoints',{source:location,breakpoints:[{line}]});
+      assert.equal(next.breakpoints.length,1);
+      const afterReload=dap.events.length;
+      request=web(session.baseUrl,'/proof','text',50000);
+      request.catch(()=>{});
+      const reloaded=await dap.event('stopped',afterReload,40000);
+      assert.equal(reloaded.reason,'breakpoint');
+      const reloadedFrame=(await dap.request('stackTrace',{threadId:reloaded.threadId})).stackFrames[0];
+      assert.equal(reloadedFrame.line,line);
+      assert.equal(path.relative(source,reloadedFrame.source.path),'');
+      await dap.request('setBreakpoints',{source:location,breakpoints:[]});
+      await dap.request('continue',{threadId:reloaded.threadId});
+      assert.equal(await request,'dev-fixture-ready-reloaded');
+    }
     await dap.request('disconnect',{terminateDebuggee:false});
     dap.socket.destroy();
     return {source:sourceRelative,line,method:className+'.greeting',retainedBreakpointSuspendedRepeatHttp:true,
-      clearAcknowledged:true,attachedHttpStillReady:true};
+      clearAcknowledged:true,attachedHttpStillReady:true,...(profile==='dev'&&{debuggerStoppedAfterLiveReload:true})};
   } finally {
     await dap.close();
     await request?.catch(()=>{});
   }
 }
 
-async function headless() {
-  const root=await fs.realpath(fixture), uri=pathToFileURL(root).href;
+async function headless({live=false,projectRoot=fixture}={}) {
+  const root=await fs.realpath(projectRoot), uri=pathToFileURL(root).href;
   const config=await read(process.env.ROCKETBRAIN_JAVA_TEST_CONFIG);
   const javaHome=await fs.realpath(process.env.ROCKETBRAIN_SPRING_JAVA_HOME||config.javaHome);
   const gradleHome=await fs.realpath(process.env.ROCKETBRAIN_QUARKUS_GRADLE_HOME||process.env.ROCKETBRAIN_GRADLE_HOME);
@@ -172,7 +200,9 @@ async function headless() {
   launch.options.env.GRADLE_USER_HOME=cache;
   const lsp=new StdioLsp(launch);
   let log='';
-  const runtime=createQuarkusDev({startupMs:200000,log:chunk=>{log=(log+chunk).slice(-8192);}});
+  const processes=createDebugProcessDiscovery({javaHome:()=>javaHome,trusted(){}});
+  const runtime=createQuarkusDev({startupMs:200000,resolveDescendant:processes.resolveDescendant,
+    log:chunk=>{log=(log+chunk).slice(-8192);}});
   const taskTools={javaHome,gradleHome};
   const tasks=new BuildTasks({storagePath:storage,tools:()=>taskTools,runner:{
     async execute(spec,{timeoutMs}){
@@ -209,6 +239,21 @@ async function headless() {
     assert.ok(model.configuration.some(item=>item.key==='rocketbrain.greeting'));
     assert.ok(model.endpoints.some(item=>item.path==='/proof/jdbc'));
     const approval={allowProjectExecution:true};
+    const start={project,...taskTools,workspaceTrusted:true,...approval};
+    if (live) {
+      const debug=await runtime.start({...start,debug:'development'});
+      assert.equal(debug.profile,'dev');
+      assert.equal(debug.artifact,undefined);
+      assert.equal(debug.debug.verified,true);
+      const frame=await actualBreakpoint(command,debug,project);
+      assert.equal(frame.debuggerStoppedAfterLiveReload,true);
+      assert.deepEqual(await runtime.verifyDebugTarget(),debug.debug);
+      assert.equal((await runtime.stop()).state,'stopped');
+      await assertStopped(debug.baseUrl);
+      await assertDebugClosed(debug.debug.port);
+      return {version:model.version,tool:'gradle',realBuildshipImport:true,profile:debug.profile,
+        frame,ownedJvmVerified:true,ownedShutdown:true,quarkusJdbc:true,nativeView:false};
+    }
     const catalog=await tasks.discover(project,approval);
     for(const name of [':test',':quarkusBuild']) {
       const selected=catalog.find(task=>task.name===name);
@@ -216,7 +261,6 @@ async function headless() {
       assert.equal((await tasks.run(project,selected.id,approval)).state,'succeeded');
     }
     const tests=await testCount(root);
-    const start={project,...taskTools,workspaceTrusted:true,...approval};
     await assert.rejects(runtime.start({...start,allowProjectExecution:false,debug:true}),/trusted workspace/);
     const dev=await runtime.start(start);
     assert.deepEqual([dev.profile,dev.tool,dev.version],['dev','gradle','3.40.1.2']);
@@ -247,8 +291,8 @@ async function headless() {
   }
 }
 
-async function openNativeFixture(vscode,work) {
-  const workspace=await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
+async function withOwnedFixture(parent,work) {
+  const workspace=await fs.realpath(parent);
   const name='rb-quarkus-gradle-'+randomUUID().slice(0,8), root=path.join(workspace,name);
   await fs.mkdir(root);
   const copy=source=>!['build','bin','.gradle','.project','.classpath','.settings'].includes(path.basename(source));
@@ -262,11 +306,12 @@ async function openNativeFixture(vscode,work) {
   }
 }
 
-async function runQuarkusGradleChecks(api,vscode,checks) {
+async function runQuarkusGradleChecks(api,vscode,checks,live=false) {
   const selected=process.env.ROCKETBRAIN_QUARKUS_GRADLE_HOME;
   if(selected)assert.equal(await fs.realpath(vscode.workspace.getConfiguration('rocketbrain.java').get('gradleHome')),
     await fs.realpath(selected));
-  return ownedDatabase(()=>openNativeFixture(vscode,async(workspace,root)=>{
+  const parent=vscode.workspace.workspaceFolders[0].uri.fsPath;
+  return ownedDatabase(()=>withOwnedFixture(parent,async(workspace,root)=>{
     const service=api.java.quarkus, projectUri=vscode.Uri.file(root).toString();
     const options={projectUri,allowProjectExecution:true};
     let breakpoint, tracker, request;
@@ -303,8 +348,10 @@ async function runQuarkusGradleChecks(api,vscode,checks) {
       await service.stopDev();
       await assertStopped(dev.baseUrl);
       complete();
-      begin('packaged debugger startup and owned JVM attach');
-      await assert.rejects(service.debug({projectUri}),/Explicitly choose Quarkus debugging/);
+      const debug=live?service.debugDev:service.debug;
+      const profile=live?'dev':'packaged';
+      begin(profile+' debugger startup and owned JVM attach');
+      await assert.rejects(debug({projectUri}),/Explicitly choose Quarkus debugging/);
       const source=vscode.Uri.file(path.join(root,sourceRelative)), line=await breakpointLine(source.fsPath);
       breakpoint=new vscode.SourceBreakpoint(new vscode.Location(source,new vscode.Position(line-1,0)),true);
       vscode.debug.addBreakpoints([breakpoint]);
@@ -330,14 +377,15 @@ async function runQuarkusGradleChecks(api,vscode,checks) {
           }
         };
       }});
-      const session=await service.debug(options);
+      const session=await debug(options);
+      assert.equal(session.profile,live?'dev':'prod');
       assert.equal(session.debug.verified,true);
       const active=vscode.debug.activeDebugSession;
       assert.equal(active?.id,session.sessionId);
       assert.equal(api.java.debug.verifiedLocalPid(active),session.debug.pid);
       await until(()=>events.some(event=>event.id===active.id&&event.configured),26000);
       complete();
-      begin('packaged GET /proof at the source breakpoint');
+      begin(profile+' GET /proof at the source breakpoint');
       request=web(session.baseUrl,'/proof','text',50000);
       request.catch(()=>{});
       const stopped=await until(()=>events.find(event=>event.id===active.id&&event.reason==='breakpoint'),40000);
@@ -345,20 +393,27 @@ async function runQuarkusGradleChecks(api,vscode,checks) {
       assert.equal(frame.line,line);
       assert.match(frame.name,/FixtureResource\.greeting/u);
       complete();
-      begin('packaged GET /proof after debugger continue');
+      begin(profile+' GET /proof after debugger continue');
       await active.customRequest('continue',{threadId:stopped.threadId});
-      assert.equal(await request,'packaged-fixture-ready');
+      assert.equal(await request,profile+'-fixture-ready');
       complete();
-      begin('packaged debugger breakpoint removal acknowledgement');
+      begin(profile+' debugger breakpoint removal acknowledgement');
       vscode.debug.removeBreakpoints([breakpoint]);
       breakpoint=undefined;
       assert.deepEqual(await until(()=>cleared.get(active.id),8000),{success:true,breakpoints:[]});
       complete();
-      begin('packaged HTTP verification after breakpoint removal');
-      await verifyServed(session.baseUrl,'packaged');
+      begin(profile+' HTTP verification after breakpoint removal');
+      await verifyServed(session.baseUrl,profile);
       assert.equal(events.filter(event=>event.id===active.id&&event.reason==='breakpoint').length,1);
       complete();
-      begin('packaged HTTP and JDWP shutdown');
+      if (live) {
+        begin('dev hot reload with debugger attached');
+        await observeLiveReload(source.fsPath,session.baseUrl);
+        assert.equal(vscode.debug.activeDebugSession?.id,active.id);
+        assert.equal(api.java.debug.verifiedLocalPid(active),session.debug.pid);
+        complete();
+      }
+      begin(profile+' HTTP and JDWP shutdown');
       await service.stopDev();
       await assertStopped(session.baseUrl);
       await assertDebugClosed(session.debug.port);
@@ -366,7 +421,7 @@ async function runQuarkusGradleChecks(api,vscode,checks) {
       checks.push('Imported Quarkus Gradle in Java Projects, ran its observed tests and fast-jar build, and hit a source breakpoint in its verified owned JVM.');
       return {tool:'gradle',version:'3.40.1.2',tests,buildTask:build.task,frame:{line,source:sourceRelative},nativeView:true,
         ownedLoopbackListener:true,ownedShutdown:true,devProfile:true,quarkusJdbc:true,
-        breakpointRemovalAcknowledged:true,attachedHttpStillReady:true,phases};
+        breakpointRemovalAcknowledged:true,attachedHttpStillReady:true,...(live&&{sameDebugSessionAcrossLiveReload:true}),phases};
     } catch(error) {
       failure=new Error(`Quarkus Gradle ${phase} failed after ${Math.round(performance.now()-phaseStart)} ms: ${error.message}`,
         {cause:error});
@@ -387,7 +442,11 @@ async function runQuarkusGradleChecks(api,vscode,checks) {
   }));
 }
 
-module.exports={runQuarkusGradleChecks};
-if(require.main===module)ownedDatabase(headless).then(receipt=>console.log(JSON.stringify(receipt))).catch(error=>{
+const runQuarkusLiveDebugChecks=(api,vscode,checks)=>runQuarkusGradleChecks(api,vscode,checks,true);
+const runHeadless=()=>process.argv.includes('--live-debug')?
+  withOwnedFixture(path.resolve(__dirname,'../test-output'),(_workspace,projectRoot)=>headless({live:true,projectRoot})):headless();
+
+module.exports={runQuarkusGradleChecks,runQuarkusLiveDebugChecks};
+if(require.main===module)ownedDatabase(runHeadless).then(receipt=>console.log(JSON.stringify(receipt))).catch(error=>{
   console.error(error.stack);process.exitCode=1;
 });

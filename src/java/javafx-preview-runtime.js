@@ -79,7 +79,7 @@ async function runtime(storage,cancellation) {
 }
 
 async function renderFxmlPreview({file,workspace,dirty,javaHome,storage,width=480,height=320,workspaceTrusted,
-  allowPreview,cancellation}) {
+  allowPreview,cancellation,propertyEdit,expectedFingerprint}) {
   if (workspaceTrusted!==true||allowPreview!==true||cancelled(cancellation)) {
     throw Error('Choose an FXML preview in a trusted workspace.');
   }
@@ -90,7 +90,7 @@ async function renderFxmlPreview({file,workspace,dirty,javaHome,storage,width=48
   const java=independentJavaExecutable(path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'));
   const version=await fs.readFile(path.join(path.dirname(path.dirname(java)),'release'),'utf8');
   if (Number(/^JAVA_VERSION="(\d+)/mu.exec(version)?.[1]||0)<24) throw Error('JavaFX preview requires JDK 24 or later.');
-  const before=captureFxmlPreview(file,workspace,{dirty});
+  const before=captureFxmlPreview(file,workspace,{dirty,propertyEdit,expectedFingerprint});
   const modules=await runtime(storage,cancellation);
   if (cancelled(cancellation)) throw Error('FXML preview cancelled.');
   const parent=await fs.realpath(os.tmpdir()), stage=await fs.mkdtemp(path.join(parent,'rb-fxml-preview-'));
@@ -104,12 +104,14 @@ async function renderFxmlPreview({file,workspace,dirty,javaHome,storage,width=48
     }
     const sourceWorker=path.join(stage,'FxmlPreview.java');
     await fs.writeFile(sourceWorker,worker,{flag:'wx'});
+    const targets=path.join(stage,'targets.txt');
+    await fs.writeFile(targets,before.targets.map(target=>target.id).join('\n'),{flag:'wx'});
     const env={...process.env};
     for (const key of Object.keys(env)) if (/^(?:JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS|CLASSPATH)$/iu.test(key)) delete env[key];
     const input=path.join(resources,path.relative(before.root,file));
     const run=await execute(java,['-Dglass.platform=headless','-Dprism.order=sw','-Djava.awt.headless=true','-Duser.home='+stage,
       '-Djava.io.tmpdir='+stage,'--enable-native-access=javafx.graphics','--module-path',modules.join(path.delimiter),
-      '--add-modules','javafx.controls,javafx.fxml,java.desktop',sourceWorker,input,output,String(width),String(height)],
+      '--add-modules','javafx.controls,javafx.fxml,java.desktop',sourceWorker,input,output,String(width),String(height),targets],
     {cwd:stage,env,timeoutMs:42000,cancellation,maxOutputBytes:256*1024});
     if (run.cancelled||cancelled(cancellation)) throw Error('FXML preview cancelled.');
     const observed=/^Rocketbrain FXML Preview (26\.0\.2\+\d+)\s*$/mu.exec(run.output)?.[1];
@@ -129,8 +131,17 @@ async function renderFxmlPreview({file,workspace,dirty,javaHome,storage,width=48
         png.readUInt32BE(16)!==width||png.readUInt32BE(20)!==height||!png.subarray(-12).equals(IEND)) {
       throw Error('JavaFX did not return a complete PNG of the reviewed dimensions.');
     }
-    return {png,report:{runtime:observed,width,height,bytes:png.length,imageSha256:hash(png),resourcesSha256:before.fingerprint,
-      ...before.summary}};
+    const bounds=new Map(),ids=new Set(before.targets.map(target=>target.id));
+    for (const line of run.output.split(/\r?\n/u).filter(line=>line.startsWith('RB_FRAME_TARGET\t'))) {
+      const [,id,...coordinates]=line.split('\t');
+      const [x,y,w,h]=coordinates.map(value=>/^\d{1,4}$/u.test(value)?Number(value):NaN);
+      if (!ids.has(id)||bounds.has(id)||coordinates.length!==4||![x,y,w,h].every(Number.isSafeInteger)||
+          w<1||h<1||x+w>width||y+h>height) throw Error('JavaFX returned invalid FXML property bounds.');
+      bounds.set(id,{x,y,width:w,height:h});
+    }
+    return {png,report:{runtime:observed,width,height,bytes:png.length,imageSha256:hash(png),resourcesSha256:before.effective,
+      ...before.summary},design:{targets:before.targets.map(target=>({...target,bounds:bounds.get(target.id)})),
+      sourceText:before.sourceText,edit:before.edit}};
   } finally {
     const actual=await fs.realpath(stage),observed=await fs.lstat(actual,{bigint:true});
     if (path.relative(stage,actual)||path.relative(parent,path.dirname(actual))||!path.basename(actual).startsWith('rb-fxml-preview-')||

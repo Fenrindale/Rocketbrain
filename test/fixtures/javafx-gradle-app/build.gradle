@@ -1,0 +1,26 @@
+plugins {
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+    id 'org.beryx.jlink' version '4.2.0'
+}
+
+repositories {
+    mavenCentral()
+}
+
+application {
+    mainModule = 'dev.rocketbrain.fxml'
+    mainClass = 'dev.rocketbrain.fxml.App'
+}
+
+javafx {
+    version = '25.0.2'
+    modules = ['javafx.graphics', 'javafx.fxml']
+}
+
+jlink {
+    imageName = 'rocketbrain-gradle-fxml'
+    launcher {
+        name = 'fxml-gradle'
+    }
+}

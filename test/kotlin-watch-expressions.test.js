@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { test } = require('node:test');
-const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, resolveDebugBundle } = require('../src/java/debug-runtime');
+const { WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILD, resolveDebugBundle } = require('../src/java/debug-runtime');
 const { assignment, assertKotlinLocalChanges } = require('./helpers/kotlin-local-write');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { DapClient, freePort } = require('./java-debug-dap');
@@ -28,7 +28,7 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
   const runtime = JSON.parse(await fs.readFile(runtimeFile, 'utf8'));
   const { javaHome, serverPath } = runtime;
   const bundle = resolveDebugBundle(runtime.settings['rocketbrain.java.debugBundlePath'], serverPath);
-  assert.ok([WATCH_BUILD,INDEXED_WATCH_BUILD,KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD].includes(bundle?.build));
+  assert.ok([WATCH_BUILD,INDEXED_WATCH_BUILD,KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD,KOTLIN_LINE_BUILD].includes(bundle?.build));
   const parent = await fs.realpath(os.tmpdir()), directory = await fs.mkdtemp(path.join(parent, 'rb-kotlin-watch-'));
   let lsp;
   t.after(async () => {
@@ -55,7 +55,7 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
   let previousSessionFrame;
   for (const [engine, configFile] of dbFiles) {
     const jdwp = await freePort();
-    const fieldSignal = bundle.build === KOTLIN_FIELD_BUILD ? path.join(directory, engine + '.signal') : undefined;
+    const fieldSignal = [KOTLIN_FIELD_BUILD,KOTLIN_LINE_BUILD].includes(bundle.build) ? path.join(directory, engine + '.signal') : undefined;
     const running = await launchKotlinWatches(fixture, { engine, configFile, classpathFile, fieldSignal }, jdwp);
     let dap, failure;
     try {
@@ -84,7 +84,7 @@ test('native DAP Kotlin watch evaluates live locals from actual Spring JDBC fram
       assert.equal(path.relative(source, frame.source.path), '');
       const values = await assertKotlinWatchValues(send, frame.id);
       const indexed = bundle.build !== WATCH_BUILD ? await assertIndexedKotlinWatchValues(send, frame.id) : undefined;
-      const write = [KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD].includes(bundle.build) ? await assertKotlinLocalChanges(send,frame.id) : undefined;
+      const write = [KOTLIN_LOCAL_WRITE_BUILD,KOTLIN_FIELD_BUILD,KOTLIN_LINE_BUILD].includes(bundle.build) ? await assertKotlinLocalChanges(send,frame.id) : undefined;
       const fields = fieldSignal ? await assertKotlinFields(send,frame.id,async () => {
         await fs.writeFile(fieldSignal,'change',{flag:'wx'});
         await running.waitFor('Rocketbrain Kotlin field changed by fixture');

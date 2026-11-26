@@ -5,6 +5,8 @@ const path = require('node:path');
 const os = require('node:os');
 const { createHash } = require('node:crypto');
 const { SaxesParser } = require('saxes');
+const { metadataVersion, trackingEntries } = require('./maven-snapshot-cache');
+const { modelSnapshotSettings, repoIdPattern } = require('./maven-snapshot-model-settings');
 
 const lockName = '.rocketbrain-maven-models.json';
 const maxModels = 16;
@@ -34,8 +36,11 @@ function optionalFile(file, limit) {
  }
 }
 
-function repositorySettings(reactor, roots, repository) {
+function repositorySettings(reactor, roots, repository, snapshot) {
  for (const name of ['MAVEN_OPTS','MAVEN_ARGS','JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS']) {
+  if (snapshot && name === 'MAVEN_ARGS' && process.env[name]?.trim()) {
+   throw Error('MAVEN_ARGS overrides require separate Maven SNAPSHOT model verification.');
+  }
   if (/maven\.repo\.local|user\.home|maven\.ext\.class\.path|maven\.(?:user|global)\.settings|aether\.(?:enhancedLocalRepository|localRepository|lrm)|(?:^|\s)(?:-s|-gs|--settings|--global-settings)(?:[=\s]|$)/i.test(process.env[name] || '')) {
    throw Error('External Maven models require the default Maven repository and standard settings resolution.');
   }
@@ -47,14 +52,17 @@ function repositorySettings(reactor, roots, repository) {
  }
  for (const folder of folders) {
   for (const name of ['maven.config','jvm.config','extensions.xml']) {
+   const file = path.join(folder,'.mvn',name);
+   if (snapshot && samePath(snapshot.config,file)) continue;
    try {
-    fs.lstatSync(path.join(folder,'.mvn',name));
+    fs.lstatSync(file);
     throw Error('Maven command or extension overrides require separate external model verification.');
    } catch (error) {
     if (error.code !== 'ENOENT') throw error;
    }
   }
  }
+ if (snapshot) return snapshot.identity;
  const settings = optionalFile(path.join(path.dirname(repository),'settings.xml'), maxBytes);
  if (!settings) return null;
  const text = settings.toString('utf8');
@@ -93,10 +101,35 @@ function repositoryTracking(file) {
  return {trackingFile, trackingHash:hash(bytes)};
 }
 
+function readSnapshotModel(alias, pin, snapshot) {
+ const directory = path.dirname(alias);
+ if (pin.repositoryId !== snapshot.repositoryId) throw Error('The SNAPSHOT pin repository does not match the active Maven settings.');
+ const basename = path.basename(alias), timedName = pin.artifactId+'-'+pin.resolvedVersion+'.pom';
+ const exact = path.join(directory,timedName), metadata = path.join(directory,'maven-metadata-'+snapshot.repositoryId+'.xml');
+ const trackingFile = path.join(directory,'_remote.repositories'), localMetadata = path.join(directory,'maven-metadata-local.xml');
+ const trackingBytes = optionalFile(trackingFile,16*1024), modelBytes = optionalFile(metadata,maxBytes);
+ const origins = trackingBytes && trackingEntries(trackingBytes.toString('latin1'),name=>name===timedName||name===basename);
+ if (fs.lstatSync(localMetadata,{throwIfNoEntry:false}) || !origins || origins.get(timedName)?.size !== 1 ||
+     !origins.get(timedName).has(snapshot.repositoryId) ||
+     [...(origins.get(basename)||[])].some(origin=>origin!==snapshot.repositoryId)) {
+  throw Error('The Maven SNAPSHOT origin is unavailable, locally installed or ambiguous.');
+ }
+ const selected = modelBytes && metadataVersion(modelBytes.toString('utf8'),
+  {group:pin.groupId,artifact:pin.artifactId,version:pin.version,classifier:''},'pom');
+ if (selected !== pin.resolvedVersion) throw Error('Maven SNAPSHOT metadata selects a different timestamped POM.');
+ const exactBytes = optionalFile(exact,maxBytes), bytes = optionalFile(alias,maxBytes);
+ if (!exactBytes || !bytes) throw Error('The normalized and timestamped Maven SNAPSHOT POMs must be present in the cache.');
+ if (hash(bytes) !== pin.sha256 || hash(exactBytes) !== pin.sha256) {
+  throw Error('Pinned Maven SNAPSHOT POM SHA-256 mismatch.');
+ }
+ return {bytes,trackingFile,trackingHash:hash(JSON.stringify([hash(trackingBytes),hash(modelBytes),pin.resolvedVersion])),
+  evidenceFiles:[alias,exact,metadata,trackingFile,localMetadata],resolvedVersion:pin.resolvedVersion,repositoryId:pin.repositoryId};
+}
+
 function openExternalMavenModels(reactor, roots, { repository = path.join(os.homedir(),'.m2','repository') } = {}) {
  const lock = path.join(reactor, lockName);
  const pins = new Map(), observed = new Map();
- let lockHash, settingsHash;
+ let lockHash, settingsHash, snapshot;
 
  function loadPins() {
   const input = optionalFile(lock, 16 * 1024);
@@ -107,20 +140,39 @@ function openExternalMavenModels(reactor, roots, { repository = path.join(os.hom
   } catch {
    throw Error('Invalid external Maven model pin file.');
   }
-  if (data?.version !== 1 || !Array.isArray(data.models) || !data.models.length || data.models.length > maxModels ||
+  if (![1,2].includes(data?.version) || !Array.isArray(data.models) || !data.models.length || data.models.length > maxModels ||
       Object.keys(data).some(name => !['version','models'].includes(name))) throw Error('Invalid external Maven model pin file.');
+  let snapshots=0;
   for (const pin of data.models) {
    if (!pin || ![pin.groupId,pin.artifactId,pin.version,pin.sha256].every(value => typeof value === 'string') ||
-       Object.keys(pin).length !== 4 || !groupPattern.test(pin.groupId) || !coordinatePattern.test(pin.artifactId) ||
-       !coordinatePattern.test(pin.version) || /-SNAPSHOT$/i.test(pin.version) || !/^[0-9a-f]{64}$/.test(pin.sha256)) {
-    throw Error('External Maven model pins require literal release coordinates and a SHA-256.');
+       !groupPattern.test(pin.groupId) || !coordinatePattern.test(pin.artifactId) ||
+       !coordinatePattern.test(pin.version) || !/^[0-9a-f]{64}$/.test(pin.sha256)) {
+    throw Error('External Maven model pins require literal coordinates and a SHA-256.');
+   }
+   if (/-SNAPSHOT$/i.test(pin.version)) {
+    if (data.version===1) throw Error('External Maven model pins require literal release coordinates and a SHA-256.');
+    const prefix=pin.version.slice(0,-'SNAPSHOT'.length);
+    if (!pin.version.endsWith('-SNAPSHOT') || Object.keys(pin).length!==6 || typeof pin.repositoryId!=='string' ||
+        !repoIdPattern.test(pin.repositoryId) ||
+        typeof pin.resolvedVersion!=='string' || !pin.resolvedVersion.startsWith(prefix) ||
+        !/^\d{8}\.\d{6}-[1-9][0-9]{0,8}$/u.test(pin.resolvedVersion.slice(prefix.length))) {
+     throw Error('Maven SNAPSHOT model pins require the exact timestamped version, repository ID and SHA-256.');
+    }
+    snapshots++;
+   } else if (Object.keys(pin).length!==4) {
+    throw Error('External Maven release pins require literal release coordinates and a SHA-256.');
    }
    const id = [pin.groupId,pin.artifactId,pin.version].join(':');
    if (pins.has(id)) throw Error('Duplicate external Maven model pin: ' + id + '.');
    pins.set(id,pin);
   }
+  if (data.version===2 && !snapshots) throw Error('Use version 1 pins for release-only external Maven models.');
+  if (snapshots) {
+   snapshot = modelSnapshotSettings({reactor,read:optionalFile,hash});
+   repository = snapshot.repository;
+  }
   lockHash = hash(input);
-  settingsHash = repositorySettings(reactor,roots,repository);
+  settingsHash = repositorySettings(reactor,roots,repository,snapshot);
  }
 
  function inspect(dependency) {
@@ -129,6 +181,7 @@ function openExternalMavenModels(reactor, roots, { repository = path.join(os.hom
   const pin = pins.get(id);
   if (!pin) throw Error('No exact external Maven model pin for ' + id + '.');
   const file = path.join(repository,...pin.groupId.split('.'),pin.artifactId,pin.version,pin.artifactId+'-'+pin.version+'.pom');
+  if (pin.resolvedVersion) return {id,file,sha256:pin.sha256,...readSnapshotModel(file,pin,snapshot)};
   const bytes = optionalFile(file, maxBytes);
   if (!bytes) throw Error('Pinned external Maven model is missing from the local repository: ' + id + '.');
   if (hash(bytes) !== pin.sha256) throw Error('Pinned external Maven model SHA-256 mismatch: ' + id + '.');
@@ -138,7 +191,9 @@ function openExternalMavenModels(reactor, roots, { repository = path.join(os.hom
  return {
   read(dependency) {
    const model = inspect(dependency);
-   observed.set(model.id, { dependency, file:model.file, sha256:model.sha256, trackingFile:model.trackingFile, trackingHash:model.trackingHash });
+   observed.set(model.id, { dependency, file:model.file, sha256:model.sha256,
+    files:model.evidenceFiles||[model.file,model.trackingFile],trackingHash:model.trackingHash,
+    ...(model.resolvedVersion&&{resolvedVersion:model.resolvedVersion,repositoryId:model.repositoryId}) });
    return model;
   },
   finish() {
@@ -146,7 +201,8 @@ function openExternalMavenModels(reactor, roots, { repository = path.join(os.hom
    const records = [...observed.values()];
    const validate = () => {
     const input = optionalFile(lock, 16 * 1024);
-    if (!input || hash(input) !== lockHash || repositorySettings(reactor,roots,repository) !== settingsHash) {
+    const configuration = snapshot && modelSnapshotSettings({reactor,read:optionalFile,hash});
+    if (!input || hash(input) !== lockHash || repositorySettings(reactor,roots,repository,configuration) !== settingsHash) {
      throw Error('External Maven model pins or settings changed after review.');
     }
     for (const {dependency,trackingHash} of records) {
@@ -154,8 +210,9 @@ function openExternalMavenModels(reactor, roots, { repository = path.join(os.hom
     }
    };
    validate();
-   return { lock, files:records.flatMap(({file,trackingFile}) => [file,trackingFile]),
-    pins:records.map(({dependency,sha256}) => ({coordinate:coordinate(dependency),sha256})), validate };
+   return { lock, files:[...(snapshot?.files||[]),...records.flatMap(record=>record.files)],
+    pins:records.map(({dependency,sha256,resolvedVersion,repositoryId}) => ({coordinate:coordinate(dependency),sha256,
+     ...(resolvedVersion&&{resolvedVersion,repositoryId})})), validate };
   }
  };
 }

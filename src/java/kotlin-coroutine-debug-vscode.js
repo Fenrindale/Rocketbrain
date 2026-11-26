@@ -2,7 +2,7 @@
 
 const { randomUUID } = require('node:crypto');
 const { DEBUG_TYPE } = require('./debug');
-const { COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD } = require('./debug-runtime');
+const { COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD, KOTLIN_LINE_BUILD } = require('./debug-runtime');
 
 const REQUEST = 'rocketbrain/watchKotlinCoroutine';
 const FRAME_EVENT = 'rocketbrainCoroutineFrame';
@@ -115,7 +115,7 @@ function coroutineDebugger(vscode, java, { trusted, resolveSource, report, revea
     }
     await bounded(java.start(), 30000, 'The Java debug engine did not start in time.');
     check();
-    if (![COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD].includes(java.getState().debugBuild)) throw Error('Install or update the Rocketbrain Java debugger for Kotlin continuation attach.');
+    if (![COROUTINE_BUILD, WATCH_BUILD, INDEXED_WATCH_BUILD, KOTLIN_LOCAL_WRITE_BUILD, KOTLIN_FIELD_BUILD,KOTLIN_LINE_BUILD].includes(java.getState().debugBuild)) throw Error('Install or update the Rocketbrain Java debugger for Kotlin continuation attach.');
     const reviewed = await java.debug.processes.resolve(descriptor.pid);
     if (reviewed.hostName !== '127.0.0.1' || reviewed.port !== descriptor.debugPort) {
       throw Error('The selected JVM no longer owns its approved Kotlin debug listener.');

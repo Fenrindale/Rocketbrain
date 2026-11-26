@@ -1,5 +1,5 @@
 {
-  "version": "0.136.0",
+  "version": "0.138.0",
   "asOf": "2026-11-26",
   "total": 216,
   "fullProductParityVerified": false,
@@ -30,33 +30,31 @@
     }
   },
   "summary": {
-    "implemented": 180,
-    "partial": 22,
+    "implemented": 181,
+    "partial": 21,
     "not-implemented": 0,
     "host-provided": 12,
     "unverified": 0,
     "platform-limited": 2
   },
   "referenceProgress": {
-    "percent": 94,
+    "percent": 94.2,
     "formula": "(implemented + host-provided + 0.5 * partial) / 216 * 100",
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
     "IDEA-045",
-    "IDEA-046",
     "IDEA-066",
     "IDEA-068",
-    "IDEA-120",
-    "DG-083"
+    "IDEA-069",
+    "IDEA-120"
   ],
   "expandedFeatures": [
     "IDEA-045",
-    "IDEA-046",
     "IDEA-066",
     "IDEA-068",
-    "IDEA-120",
-    "DG-083"
+    "IDEA-069",
+    "IDEA-120"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -1364,23 +1362,24 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Kotlin Multiplatform의 JVM·JS 빌드·테스트·실행과 연결된 expect/actual 선언을 제공한다. Gradle에서 선택한 Compose Desktop @Preview를 실제로 렌더링하고 소스 변경 후 갱신한다.",
+      "scope": "Kotlin Multiplatform JVM·JS 빌드와 테스트, expect/actual 이동, Compose Desktop 미리보기 및 선택한 Gradle JVM 실행의 함수·줄 중단점과 스텝을 제공한다.",
       "remaining": [
-        "플랫폼별 디버깅, Android·iOS·Native, 제네릭과 expect 클래스가 남아 있다."
+        "Android·iOS·Native 실행과 디버깅, 전체 expect 클래스·제네릭 분석이 남아 있다."
       ],
       "verification": {
-        "state": "v0.136-installed-coverage",
+        "state": "v0.138-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "공통 소스의 Compose 장면을 실제 JVM Desktop으로 96×72 렌더링했다. 배경색과 포함 컴포넌트 픽셀, 편집 후 재렌더링, 미저장 소스 거부를 두 DB 환경의 설치본에서 확인했다.",
+        "testedScope": "실제 Gradle Kotlin JVM 실행에서 commonMain SMAP과 jvmMain Java 줄 테이블의 위치, 지역 변수, 스텝, Spring JDBC 완료를 두 DB에서 확인했다.",
         "publicEvidence": [
-          "src/java/kmp-compose-preview.js",
-          "src/java/kmp-vscode.js",
-          "test/kmp-compose-preview-host.js"
+          "src/java/kmp-jvm-debug.js",
+          "src/java/kmp-debug-sources.js",
+          "test/kmp-jvm-debug-host.js",
+          "test/kmp-jvm-source-lines-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -1399,8 +1398,8 @@
       "verification": {
         "state": "v0.136-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.136.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -1972,20 +1971,21 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "Quarkus Gradle 앱의 설정 완성·HTTP·Qute·테스트·패키징 및 소유 로컬 JVM에 대한 디버거 연결을 제공한다. 반복 요청 전에 DAP 중단점 해제를 확인한다.",
+      "scope": "Quarkus의 설정·Qute·HTTP·테스트·패키징과 관찰한 Arc 주입 조회에 소유한 Gradle dev JVM 라이브 리로드 중 Java 디버깅을 추가했다.",
       "remaining": [
-        "라이브 리로드 중 디버거 연결, 추가 CDI·인터셉터 및 네이티브 이미지 워크플로가 남아 있다."
+        "임의 CDI 인터셉터의 정적 연결, 네이티브 이미지 작업과 Maven 라이브 줄 중단점의 설치형 종단 확인이 남아 있다."
       ],
       "verification": {
-        "state": "v0.136-installed-coverage",
+        "state": "v0.138-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 Gradle Quarkus 앱의 테스트·HTTP/JDBC·중단점에서 두 DB를 확인했다. 중단점을 제거하고 재개한 뒤 재요청이 정상 응답했고 소유한 런타임을 종료했다.",
+        "testedScope": "실제 Quarkus 3.40.1.2와 두 Spring DB 환경에서 변경 전후 같은 디버그 세션으로 Java 줄에서 멈췄다. DAP 중단점 해제, 이후 HTTP/JDBC 요청과 소유 JVM 종료도 확인했다.",
         "publicEvidence": [
+          "src/java/quarkus-dev.js",
           "src/java/quarkus-vscode.js",
           "test/quarkus-gradle-host.js"
         ],
@@ -2031,24 +2031,23 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "소유한 로컬 Tomcat에 경로와 SHA-256을 검토한 Maven WAR 2~8개를 배포한다. 사용자가 선택한 컨텍스트만 내리고 마지막 앱을 내리면 서버를 종료한다. 단일 WAR 디버그 경로도 제공한다.",
+      "scope": "로컬 Tomcat 단일·다중 WAR 배포와 디버깅, HTTPS Tomcat Manager에서 검토한 원격 WAR 배포·갱신 및 개별 애플리케이션 제거를 제공한다.",
       "remaining": [
-        "원격 Manager, 실행 중인 세트에 새 WAR 추가, 서버 도메인·EJB가 남아 있다."
+        "실행 중인 로컬 세트에 WAR 추가, 원격 WAR 롤백 보장, 다른 Jakarta EE 서버 도메인과 EJB가 남아 있다."
       ],
       "verification": {
-        "state": "v0.136-installed-coverage",
+        "state": "v0.138-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "Tomcat 11.0.29와 두 Spring DB 환경에서 두 Servlet/JSP 앱의 응답, 한 앱 제거 뒤 다른 앱의 계속 실행, 변경된 파일 거부와 마지막 앱 종료를 확인했다.",
+        "testedScope": "Tomcat 11.0.29 HTTPS Manager 인증과 WAR 변경·재사용 거부, 정상 앱 유지, 두 Spring DB의 Servlet/JSP·JDBC 작동을 확인했다.",
         "publicEvidence": [
-          "src/java/jakarta-tomcat.js",
-          "src/java/jakarta-vscode.js",
-          "runtime/jakarta/JakartaWarHost.java",
-          "test/jakarta-multi-host.js"
+          "src/java/jakarta-manager.js",
+          "src/java/jakarta-manager-vscode.js",
+          "test/jakarta-manager-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -2059,26 +2058,26 @@
       "category": "빌드·실행",
       "feature": "Maven 프로젝트·목표·의존성",
       "priority": "P0",
-      "status": "partial",
-      "label": "부분 구현",
+      "status": "implemented",
+      "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "실제 Maven 전이 그래프의 선택, 생략된 충돌과 dependencyManagement 버전 변경을 표시하고 정확한 POM 선언으로 이동한다.",
-      "remaining": [
-        "외부 SNAPSHOT, 사용자 지정 저장소 캐시의 원격 출처와 복합 플러그인 모델이 남아 있다."
-      ],
+      "scope": "표준 Maven 작업과 실제 의존성 그래프, 버전 충돌·관리와 POM 이동, 추적 가능한 시간표시 SNAPSHOT 아티팩트·외부 부모·BOM을 확인해 표시한다. Java Move의 검토와 적용 사이에 Maven 모델이 달라지면 새 검토를 요구한다.",
+      "remaining": [],
       "verification": {
-        "state": "v0.119-installed-coverage",
+        "state": "v0.138-installed-coverage",
         "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.119.0",
+          "kind": "updated-bounded-current-audit",
+          "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 POM의 두 조합에서 선택된 JAR을 Spring이 로드하고 두 DB의 결과를 읽었다. POM navigation이 의존성 또는 관리 버전 선언을 가리켰다.",
+        "testedScope": "실제 Maven에서 두 SNAPSHOT 버전을 내려받고, 내려받은 위치를 Maven 캐시와 대조했다. 외부 SNAPSHOT 부모와 BOM을 사용하는 리액터에서 설치형 Java Move, 변경된 캐시 메타데이터의 거부, 재검토 후 컴파일과 Spring JDBC를 두 DB에서 확인했다.",
         "publicEvidence": [
-          "src/java/maven-resolution.js",
-          "test/maven-resolution-host.js",
-          "test/workflows-v119-host.js"
+          "src/java/maven-snapshot-cache.js",
+          "src/java/maven-external-models.js",
+          "src/java/maven-snapshot-model-settings.js",
+          "test/maven-snapshot-host.js",
+          "test/maven-snapshot-model-move-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -3550,24 +3549,26 @@
       "status": "partial",
       "label": "부분 구현",
       "delivery": "rocketbrain",
-      "scope": "기존 FXML·컨트롤러 탐색과 Maven JavaFX 실행·jlink에 OpenJFX 기반 정적 FXML 및 로컬 CSS·포함 파일 미리보기와 갱신을 추가했다.",
+      "scope": "FXML 탐색·미리보기·정적 속성 편집, JDT 클래스 경로의 FXML 컴포넌트와 속성 완성, Maven·Gradle jlink 작업과 실행 파일 검증을 제공한다.",
       "remaining": [
-        "시각 속성 편집, 일반 FXML 타입 완성, Gradle 이미지 작업이 남아 있다. 미리보기에서 프로젝트 컨트롤러를 실행하지 않는다."
+        "장면 계층 작성, 커스텀 컴포넌트의 시각 편집과 전체 Scene Builder 기능이 남아 있다."
       ],
       "verification": {
-        "state": "v0.136-installed-coverage",
+        "state": "v0.138-installed-coverage",
         "scopeProvenance": {
           "kind": "updated-bounded-current-audit",
           "inheritedContainerVersion": null,
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
-        "testedScope": "실제 OpenJFX 26.0.2+3에서 CSS 배경과 포함 도형의 픽셀을 확인했다. 원본 컨트롤러와 핸들러 선언을 보존했고 미저장 CSS를 거부했다.",
+        "testedScope": "실제 OpenJFX에서 제안 속성과 저장한 FXML의 이미지가 일치했다. 내장 및 프로젝트 컴포넌트 완성을 실제 FXMLLoader가 읽었고, Gradle jlink 런처도 실행했다.",
         "publicEvidence": [
           "src/java/javafx-vscode.js",
-          "src/java/javafx-preview-runtime.js",
-          "src/java/javafx-preview-fxml.js",
-          "test/javafx-preview-host.js"
+          "src/java/javafx-completion.js",
+          "src/java/javafx-gradle-image.js",
+          "test/javafx-properties-host.js",
+          "test/javafx-completion-host.js",
+          "test/javafx-gradle-image-host.js"
         ],
         "originalProductParityVerified": false
       }
@@ -5994,8 +5995,8 @@
       "verification": {
         "state": "v0.136-installed-coverage",
         "scopeProvenance": {
-          "kind": "updated-bounded-current-audit",
-          "inheritedContainerVersion": null,
+          "kind": "preserved-prior-verification",
+          "inheritedContainerVersion": "0.136.0",
           "currentAggregate": "docs/verification.json",
           "historicalCountsAreNotRebound": true
         },
@@ -6391,8 +6392,8 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "be72da0c6b9d0ed2d3c6fd05c4300bdd63aa87d39bb7f3c6fe9b1c33b76da632",
-    "sourceManifestSha256": "0d93dc3d4e80fabae32e8770f9ea8cb595901fd8ba126f1ce3559647b9fa79d4",
+    "vsixSha256": "7ce2dcce8c1742fbc42ada8dbd8d3306c4742246c03d5c9517bd033f6ca1b715",
+    "sourceManifestSha256": "6e7589a65fb622f34f581a9cdb8f258ad4b39aa98f7c5440554f915f6fbc241d",
     "focusedNativeHosts": [
       {
         "engine": "mysql",
@@ -6406,7 +6407,7 @@
   },
   "stateChanges": [
     {
-      "id": "IDEA-046",
+      "id": "IDEA-069",
       "before": "partial",
       "after": "implemented"
     }
@@ -6414,13 +6415,13 @@
   "offline": {
     "node": "v22.23.5",
     "origin": "GitHub-hosted exact frozen source preview",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45797722795",
-    "tests": 2094,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45810752233",
+    "tests": 2110,
     "suites": 0,
-    "pass": 1881,
+    "pass": 1894,
     "fail": 0,
     "cancelled": 0,
-    "skipped": 213,
+    "skipped": 216,
     "todo": 0
   },
   "publicWorkflow": "docs/verification.json"

@@ -24,10 +24,25 @@ import java.util.concurrent.TimeUnit;
 class RocketbrainDebugProcesses {
     private static final String ADDRESS_PROPERTY = "sun.jdwp.listenerAddress";
 
-    private static String inspect(VirtualMachineDescriptor descriptor, String owner) {
+    private record Ancestry(ProcessHandle root, long start, String markerKey, String markerValue) {
+        boolean owns(ProcessHandle child) {
+            for (int depth = 0; depth < 32; depth++) {
+                var parent = child.parent().orElse(null);
+                if (parent == null || !parent.isAlive()) return false;
+                var parentStart = parent.info().startInstant().orElseThrow();
+                var childStart = child.info().startInstant().orElseThrow();
+                if (parentStart.isAfter(childStart)) return false;
+                if (parent.pid() == root.pid()) return parentStart.toEpochMilli() == start;
+                child = parent;
+            }
+            return false;
+        }
+    }
+
+    private static String inspect(VirtualMachineDescriptor descriptor, String owner, Ancestry ancestry) {
         try {
             var process = ProcessHandle.of(Long.parseLong(descriptor.id())).orElseThrow();
-            if (!process.isAlive()) return null;
+            if (!process.isAlive() || ancestry != null && !ancestry.owns(process)) return null;
             var info = process.info();
             if (!owner.equalsIgnoreCase(info.user().orElse(""))) return null;
             var binary = Path.of(info.command().orElseThrow()).getFileName().toString();
@@ -37,10 +52,12 @@ class RocketbrainDebugProcesses {
             String address;
             try {
                 address = vm.getAgentProperties().getProperty(ADDRESS_PROPERTY, "");
+                if (ancestry != null && !ancestry.markerKey().isEmpty()
+                        && !ancestry.markerValue().equals(vm.getSystemProperties().getProperty(ancestry.markerKey()))) return null;
             } finally {
                 vm.detach();
             }
-            if (!address.matches("^dt_socket:[0-9]{1,5}$")) return null;
+            if (!address.matches("^dt_socket:[0-9]{1,5}$") || ancestry != null && !ancestry.owns(process)) return null;
             String label = descriptor.displayName().split("\\s+", 2)[0];
             label = label.replaceFirst("^.*[/\\\\]", "");
             if ("Unknown".equalsIgnoreCase(label) || !label.matches("[\\p{L}\\p{N}_.$-]{1,120}")) label = binary;
@@ -50,15 +67,26 @@ class RocketbrainDebugProcesses {
         }
     }
 
-    public static void main(String[] pids) {
+    public static void main(String[] arguments) {
         System.setOut(new java.io.PrintStream(System.out, true, java.nio.charset.StandardCharsets.UTF_8));
-        var requested = new HashSet<>(java.util.List.of(pids));
         var owner = ProcessHandle.current().info().user().orElse("");
+        boolean scope = arguments.length >= 5 && arguments[0].equals("--descendant");
+        var pids = java.util.Arrays.copyOfRange(arguments, scope ? 4 : 0, arguments.length);
+        var requested = new HashSet<>(java.util.List.of(pids));
         if (owner.isBlank() || requested.size() > 2048) return;
+        Ancestry ancestry = null;
+        if (scope) {
+            var parent = ProcessHandle.of(Long.parseLong(arguments[1])).orElse(null);
+            if (parent == null || !parent.isAlive() || !owner.equalsIgnoreCase(parent.info().user().orElse(""))) return;
+            var started = parent.info().startInstant().orElse(null);
+            if (started == null) return;
+            ancestry = new Ancestry(parent, started.toEpochMilli(), arguments[2], arguments[3]);
+        }
+        var selectedAncestry = ancestry;
         var candidates = VirtualMachine.list().stream()
             .filter(item -> requested.contains(item.id()))
             .limit(32)
-            .map(item -> CompletableFuture.supplyAsync(() -> inspect(item, owner)))
+            .map(item -> CompletableFuture.supplyAsync(() -> inspect(item, owner, selectedAncestry)))
             .toList();
         CompletableFuture.allOf(candidates.toArray(CompletableFuture[]::new))
             .completeOnTimeout(null, 7, TimeUnit.SECONDS).join();
@@ -153,7 +181,7 @@ async function socketOwners(signal) {
     { signal, message: 'Windows could not verify local TCP listener ownership.' }));
 }
 
-async function queryJvm(launcher, pids, signal) {
+async function queryJvm(launcher, pids, signal, scope = []) {
   if (!pids.length) return '';
   const parent = await fs.realpath(os.tmpdir());
   const owned = await fs.mkdtemp(path.join(parent, 'rb-debug-process-'));
@@ -163,7 +191,7 @@ async function queryJvm(launcher, pids, signal) {
     await fs.writeFile(source, LOOKUP, { flag: 'wx' });
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
       !/^(JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|JDK_JAVA_OPTIONS|JDK_JAVAC_OPTIONS|CLASSPATH)$/i.test(key)));
-    return await invoke(launcher, ['--add-modules', 'jdk.attach', source, ...pids.map(String)], {
+    return await invoke(launcher, ['--add-modules', 'jdk.attach', source, ...scope, ...pids.map(String)], {
       cwd: owned, env, signal, message: 'The local JDK could not inspect active Java debug processes.'
     });
   } finally {
@@ -176,7 +204,7 @@ async function queryJvm(launcher, pids, signal) {
 }
 
 function createDebugProcessDiscovery({ javaHome, trusted } = {}) {
-  async function discover(pid, signal) {
+  async function discover(pid, signal, descendant) {
     trusted();
     if (signal?.aborted) throw Error('Java process discovery was cancelled.');
     if (!['win32','linux','darwin'].includes(process.platform)) {
@@ -190,8 +218,15 @@ function createDebugProcessDiscovery({ javaHome, trusted } = {}) {
       if (signal?.aborted) throw Error('Java process discovery was cancelled.');
       throw error;
     }
-    const pids = pid ? (owners.has(pid) ? [pid] : []) : [...owners.keys()].slice(0, listenerLimit);
-    const results = readyProcesses(await queryJvm(launcher, pids, signal), owners).slice(0, limit);
+    let pids, scope;
+    if (descendant) {
+      pids = [...owners].filter(([, ports]) => ports.has(descendant.port)).map(([id]) => id);
+      if (pids.length!==1) return [];
+      scope = ['--descendant', String(descendant.ancestorPid), descendant.marker?.key || '', descendant.marker?.value || ''];
+    } else {
+      pids = pid ? (owners.has(pid) ? [pid] : []) : [...owners.keys()].slice(0, listenerLimit);
+    }
+    const results = readyProcesses(await queryJvm(launcher, pids, signal, scope), owners).slice(0, limit);
     trusted();
     return results;
   }
@@ -216,6 +251,20 @@ function createDebugProcessDiscovery({ javaHome, trusted } = {}) {
         }
         trusted();
         return found;
+      });
+    },
+    async resolveDescendant({ ancestorPid, port, marker } = {}, cancellation) {
+      ancestorPid = processId(ancestorPid);
+      if (!validPort(port) || marker && (typeof marker.key!=='string' || !/^rocketbrain\.[a-zA-Z0-9.]{1,120}$/.test(marker.key) ||
+          typeof marker.value!=='string' || !/^[a-f0-9-]{36}$/.test(marker.value))) {
+        throw Error('Provide an exact owned JVM listener port and optional Rocketbrain launch marker.');
+      }
+      return onCancellation(cancellation, async signal => {
+        const [found] = await discover(undefined, signal, { ancestorPid, port, marker });
+        if (!found || found.port!==port) throw Error('The owned child JVM does not own the selected local JDWP listener.');
+        await waitForOwnedListener({ pid: found.pid, port, cancellation: signal, timeoutMs: 2500 });
+        trusted();
+        return { ...found, ancestorPid };
       });
     }
   };

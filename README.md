@@ -54,7 +54,9 @@ Windows의 신뢰한 로컬 작업 영역에서 **List WSL Distributions and Map
 
 **Allow Local Inline Completions for This File**은 현재 파일에 한해 커서 주변 코드를 지정한 루프백 모델에 보낼 수 있도록 합니다. Java, Kotlin, JavaScript, TypeScript, Python, SQL 파일을 지원합니다. 커서 앞 최대 1,600개와 뒤 최대 400개의 UTF-16 단위를 보내며, 제안은 VS Code에서 수락할 때 삽입됩니다. 파일을 닫거나 모델 설정을 바꾸면 허용이 만료됩니다. **Stop Local Inline Completions**로 즉시 중지할 수 있습니다.
 
-표준 `src/main/resources`의 FXML에서 Outline을 볼 수 있습니다. 컨트롤러, 이벤트 메서드, `fx:id` 필드와 같은 모듈에 있는 포함 파일·리소스는 정의로 이동할 수 있습니다. **Run or Package JavaFX Application**에서 JavaFX Maven 플러그인이 구성된 모듈을 선택해 앱을 실행하거나 `jlink` 런타임 이미지를 만들 수 있습니다. Windows x64에서는 JDK 24 이상을 연결하고 저장된 FXML에서 **Preview JavaFX FXML**을 실행하면 OpenJFX로 정적 레이아웃을 렌더링합니다. 같은 리소스 폴더의 지원되는 FXML 포함 파일과 정적 CSS를 표시하며, 원본 컨트롤러와 이벤트 선언은 수정하지 않습니다. CSS나 FXML을 저장한 후 **Refresh Preview**로 다시 그립니다.
+표준 `src/main/resources`의 FXML에서 Outline을 볼 수 있습니다. 컨트롤러, 이벤트 메서드, `fx:id` 필드와 같은 모듈에 있는 포함 파일·리소스는 정의로 이동할 수 있습니다. **Run or Package JavaFX Application**에서 JavaFX Maven 플러그인이 구성된 모듈을 선택해 앱을 실행하거나 `jlink` 런타임 이미지를 만들 수 있습니다. Windows x64에서 JDK 24 이상을 연결하고 저장된 FXML에서 **Preview JavaFX FXML**을 실행하면 OpenJFX로 정적 레이아웃과 지원되는 포함 파일·CSS를 표시합니다. 미리보기의 요소나 **Editable elements**에서 원본 문서에 고유한 `fx:id`가 있는 지원 요소를 선택합니다. 이미 지정된 텍스트, 색, 크기, 위치 등의 리터럴을 바꾸고 변경 전후 이미지를 비교한 뒤 **Apply to FXML Editor**를 선택합니다. 컨트롤러, 이벤트, CSS, 포함 파일과 바인딩은 편집 대상에서 제외됩니다. FXML 편집기에서 변경을 저장한 다음 **Refresh Preview**로 다시 그립니다.
+
+JDT가 가져온 Java 모듈의 `src/main/resources`와 `src/test/resources` FXML에서는 실제 OpenJFX 의존성에서 태그, 가져오기, 읽고 쓸 수 있는 속성과 Boolean 값을 완성합니다. 같은 비모듈 Java 프로젝트에서 저장하고 컴파일한 공개 사용자 정의 JavaFX 컨트롤도 제안합니다. 완성은 Java 클래스의 메타데이터를 읽으며 컨트롤을 실행하지 않습니다.
 
 **Audit Maven Dependencies with OSV**는 선택한 Maven 모듈의 실제 의존성 트리를 해석합니다. OSV로 전송할 패키지 이름·버전을 직접 선택하면 직접·전이 의존 경로와 조회 시각, 등록된 권고 ID를 보고서에 표시합니다. [OSV API](https://google.github.io/osv.dev/post-v1-querybatch/)
 
@@ -326,6 +328,8 @@ Java·Kotlin의 **Format Document**와 **Format Selection**은 상위 폴더와 
 Change Signature의 첫 화면에서는 매개변수 목록을 편집합니다. 기존 인자의 이름·타입은 유지하며 새 인자에는 명시적인 리터럴 기본값이 필요합니다. 평가 순서에 영향을 줄 수 있는 복잡한 호출식과 확인된 문자열·리소스 참조는 거부합니다. 이 기능들은 검토한 프로젝트 범위에 한정되며 임의 리플렉션과 외부 사용자의 계약까지 자동 증명하지 않습니다.
 
 외부 Maven 모델을 사용하는 리액터는 루트의 `.rocketbrain-maven-models.json`에 `version`을 `1`로 설정하고, `models` 배열에 각 모델의 `groupId`, `artifactId`, `version`, `sha256`을 기록합니다. 외부 부모에는 `<relativePath/>`를 사용합니다. 검토 범위는 기본 로컬 Maven 저장소에 설치한 릴리스 POM과 원격 출처 추적이 없는 기존 로컬 POM입니다. 미리보기 뒤 핀·모델·출처 기록이 바뀌면 적용을 중단합니다. [핀 파일 예제](test/fixtures/refactoring-v27-maven/.rocketbrain-maven-models.json)
+
+외부 SNAPSHOT 부모 POM이나 BOM을 사용하는 리액터는 핀 파일 형식 `version: 2`를 사용합니다. SNAPSHOT 핀마다 실제 타임스탬프가 포함된 `resolvedVersion`과 캐시의 `repositoryId`를 추가하고, 기본 SNAPSHOT POM과 타임스탬프 POM에 공통인 SHA-256을 기록합니다. 설정의 단일 스냅샷 저장소가 명시적으로 활성화되어야 합니다. Maven으로 캐시를 준비한 뒤 리액터의 `.mvn/maven.config`에 `--offline`, `-Dmaven.repo.local=<절대 경로>`, `--settings=<절대 경로>`, `--global-settings=<절대 경로>`를 한 줄씩 지정합니다. 두 설정 파일은 리액터의 `.mvn` 바로 아래에 두고, 전역 설정 파일은 빈 `<settings/>`를 사용합니다. Move 미리보기는 캐시에서 선택한 타임스탬프와 저장소 ID를 표시하며 적용 직전에 같은 POM·메타데이터·설정을 다시 확인합니다.
 
 상속·오버로드 분석과 새 이동 검사는 별도 JDK 컴파일러로 파싱·타입 연결을 검사합니다. 프로젝트 클래스·어노테이션 처리기·컴파일러 플러그인을 분석 목적으로 실행하지 않습니다. 지원하지 않는 확장이나 불완전한 클래스 경로는 거부합니다.
 

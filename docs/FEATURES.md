@@ -1,6 +1,6 @@
 # 기능별 현재 상태
 
-2026-11-26 기준 Rocketbrain 0.136.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
+2026-11-26 기준 Rocketbrain 0.138.0. IntelliJ IDEA 120개와 DataGrip 96개, 총216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
@@ -8,16 +8,16 @@
 
 | 판정 | 항목 수 |
 | --- | ---: |
-| 구현 | 180 |
-| 부분 구현 | 22 |
+| 구현 | 181 |
+| 부분 구현 | 21 |
 | 미구현 | 0 |
 | VS Code 재사용 | 12 |
 | 지원 미확인 | 0 |
 | 호스트 구조 제약 | 2 |
 
-기능표 가중 점수는 **94%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
+기능표 가중 점수는 **94.2%**다. (구현 + VS Code 재사용 + 부분 구현의 절반) ÷ 216으로 계산한다. 부분 구현 안에서 지원 범위가 늘면 각 행의 검증 기록에 반영한다.
 
-v0.136에서는 Scala 2·3의 sbt 편집과 테스트 디버깅, Kotlin Compose Desktop과 JavaFX 미리보기, Tomcat 다중 WAR 제어, 스키마 복구 상태 구분을 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 202.5점에서 203점으로 바뀌었다.
+v0.138에서는 Kotlin Multiplatform JVM 줄 중단점, Quarkus 라이브 디버깅, HTTPS Tomcat 배포, FXML 속성 편집과 Gradle 패키징, 외부 Maven SNAPSHOT 모델 추적을 추가했다. 상태가 바뀐 항목은 1개이고 가중 점수는 203점에서 203.5점으로 바뀌었다.
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |
@@ -89,7 +89,7 @@ v0.136에서는 Scala 2·3의 sbt 편집과 테스트 디버깅, Kotlin Compose 
 | IDEA-066 | IntelliJ IDEA | Quarkus·MicroProfile | 부분 구현 |
 | IDEA-067 | IntelliJ IDEA | Micronaut 개발 | 부분 구현 |
 | IDEA-068 | IntelliJ IDEA | Jakarta EE·애플리케이션 서버 배포 | 부분 구현 |
-| IDEA-069 | IntelliJ IDEA | Maven 프로젝트·목표·의존성 | 부분 구현 |
+| IDEA-069 | IntelliJ IDEA | Maven 프로젝트·목표·의존성 | 구현 |
 | IDEA-070 | IntelliJ IDEA | Gradle·Kotlin DSL·Task 탐색 | 구현 |
 | IDEA-071 | IntelliJ IDEA | 모듈·혼합 빌드·프로젝트 인덱스 | 부분 구현 |
 | IDEA-072 | IntelliJ IDEA | 증분 빌드·빌드 도구 위임 | 구현 |

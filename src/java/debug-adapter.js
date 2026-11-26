@@ -1,12 +1,24 @@
 'use strict';
 const net = require('node:net');
+const path = require('node:path');
+const { fileURLToPath } = require('node:url');
+
+function sameSource(raw, file) {
+  if (typeof raw!=='string') return false;
+  try {
+    const selected=raw.startsWith('file:') ? fileURLToPath(raw) : raw;
+    return path.isAbsolute(selected) && !path.relative(selected,file);
+  } catch {return false;}
+}
 
 // Own DAP transport: the public Java engine still owns Java/JDI semantics.
 class JavaDebugAdapter {
-  constructor(vscode, port, observe = () => {}, output, observeRequest = () => {}) {
+  constructor(vscode, port, observe = () => {}, output, observeRequest = () => {}, kotlinSourceLines) {
     this.emitter = new vscode.EventEmitter(); this.onDidSendMessage = this.emitter.event;
     this.buffer = Buffer.alloc(0); this.mutations = new Set(); this.disposed = false; this.observe = observe; this.output = output;
     this.observeRequest = observeRequest;
+    this.kotlinSourceLines=kotlinSourceLines;
+    this.vscode=vscode;
     this.socket = net.connect({ host: '127.0.0.1', port });
     this.socket.on('data', chunk => this.read(chunk));
     this.socket.on('error', error => this.fail(error));
@@ -44,6 +56,15 @@ class JavaDebugAdapter {
   handleMessage(message) {
     if (this.disposed) return;
     let outgoing = message;
+    if (this.kotlinSourceLines && message.type==='request') {
+      if (message.command==='attach') {
+        outgoing={...message,arguments:{...message.arguments,rocketbrainKotlinSourceLines:this.kotlinSourceLines}};
+      } else if (message.command==='setBreakpoints' && this.vscode.workspace.textDocuments.some(document=>
+        document.isDirty && document.uri.scheme==='file' && !document.uri.authority &&
+        sameSource(message.arguments?.source?.path,document.uri.fsPath))) {
+        outgoing={...message,arguments:{...message.arguments,sourceModified:true}};
+      }
+    }
     if (message.type === 'request' && message.command === 'setExpression') {
       const args = message.arguments || {};
       if (typeof args.expression !== 'string' || !args.expression.trim() || typeof args.value !== 'string' || !Number.isInteger(args.frameId)) {
