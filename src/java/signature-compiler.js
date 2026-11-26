@@ -1,5 +1,5 @@
 'use strict';
-const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto'),{spawn}=require('node:child_process'),yauzl=require('yauzl');
+const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto'),{spawn}=require('node:child_process'),{fileURLToPath}=require('node:url'),yauzl=require('yauzl');
 const helpers=require('./signature-compiler-sources.json');
 const {structuralQuery}=require('./structural-search');
 const {validIdentifier}=require('./file-templates');
@@ -41,7 +41,7 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
  const query=[];
  if(inspection){
   if(['diagram','check','hierarchy','attributedDependencies'].includes(inspection.kind))query.push(inspection.kind);
-  else if(['typeRename','typeRenameBinary','packageRename','packageRenameServices','innerMove'].includes(inspection.kind)&&[inspection.fqn,inspection.other].every(value=>
+  else if(['typeRename','typeRenameBinary','packageRename','packageRenameServices','packageRenameModules','innerMove'].includes(inspection.kind)&&[inspection.fqn,inspection.other].every(value=>
     typeof value==='string'&&value.length<1024&&(inspection.kind.startsWith('packageRename')||value.includes('.'))&&value.split('.').every(validIdentifier)))
    query.push(inspection.kind,inspection.fqn,inspection.other);
   else if(inspection.kind==='advisoryCalls'&&Array.isArray(inspection.targets)&&inspection.targets.length>0&&inspection.targets.length<=32){
@@ -136,8 +136,9 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
   }
   else throw Error('Use a supported compiler analysis mode and source offset.');
  }
+ const qualifiedModules=inspection?.kind==='packageRenameModules';
  const descriptors=sources.filter(source=>source.uri.toLowerCase().endsWith('/module-info.java'));
- if(namedModule!==true&&descriptors.length||namedModule===true&&(descriptors.length!==1||!Array.isArray(classpath)||classpath.length||release<9))throw Error('Compiler module inspection requires one reviewed module descriptor and no additional dependencies.');
+ if(namedModule!==true&&descriptors.length||namedModule===true&&(descriptors.length!==(qualifiedModules?2:1)||!Array.isArray(classpath)||classpath.length||release<9))throw Error(qualifiedModules?'Compiler module inspection requires exactly two reviewed source module descriptors.':'Compiler module inspection requires one reviewed module descriptor and no additional dependencies.');
  if(sources.reduce((n,s)=>n+Buffer.byteLength(s.text),0)>8*1024*1024)throw Error('Compiler source inspection exceeds8MiB.');if(!Array.isArray(classpath)||classpath.length>250)throw Error('Compiler classpath entry limit exceeded.');const snapshot=snapshotClasspath(javaHome,classpath),jarMetadata=new Map();for(const entry of snapshot.entries)if(entry.toLowerCase().endsWith('.jar'))jarMetadata.set(entry,await inspectCompilerJar(entry,manifestLimit));snapshot.validate();
  const preferred=path.resolve(storagePath||os.tmpdir());
  // Allow room for the random directory and Java helper paths under long VS Code Windows profiles.
@@ -149,15 +150,50 @@ async function analyzeJavaSources({javaHome,classpath=[],sources,release=25,stor
  fs.writeFileSync(markerFile,JSON.stringify({kind,id}),{flag:'wx'});
  const source=path.join(folder,'rocketbrain','signature','SignatureInspector.java');
  const list=path.join(folder,'sources.tsv'),cp=path.join(folder,'classpath.txt'),empty=path.join(folder,'empty-providers');
+ const stagedUris=new Map();
  const env={...process.env};for(const name of Object.keys(env))if(['JAVA_TOOL_OPTIONS','_JAVA_OPTIONS','JDK_JAVA_OPTIONS','CLASSPATH','JAVA_OPTIONS'].includes(name.toUpperCase()))delete env[name];let exited=false,child,exit;
  try{
   fs.mkdirSync(empty);
   fs.mkdirSync(path.dirname(source),{recursive:true});
   for(const [name,text]of Object.entries(helpers))fs.writeFileSync(path.join(path.dirname(source),name),text);
-  fs.writeFileSync(list,sources.map(s=>s.uri+'\t'+Buffer.from(s.text).toString('base64')).join('\n'));
+  if(qualifiedModules){
+   const moduleRoot=path.join(folder,'modules'), modules=new Set(), moduleFiles=new Set(), stagedFiles=[];
+   if(namedModule!==true)throw Error('Select a reviewed two-source-module compiler graph.');
+   for(const source of sources){
+    const {moduleName,modulePath}=source;
+    if(typeof moduleName!=='string'||moduleName.length>200||!moduleName.split('.').every(validIdentifier)||
+       typeof modulePath!=='string'||modulePath.length>400||!modulePath.endsWith('.java')||
+       !modulePath.slice(0,-5).split('/').every(part=>part==='module-info'||part==='package-info'||validIdentifier(part))){
+     throw Error('Named source modules require exact bounded relative Java paths.');
+    }
+    const file=path.join(moduleRoot,moduleName,...modulePath.split('/'));
+    const key=input=>process.platform==='win32'?input.toLowerCase():input;
+    if(stagedUris.has(key(file)))throw Error('Repeated paths in the reviewed named source modules.');
+    stagedUris.set(key(file),source.uri);
+    stagedFiles.push(file);
+    modules.add(moduleName);
+    if(modulePath==='module-info.java')moduleFiles.add(moduleName);
+    fs.mkdirSync(path.dirname(file),{recursive:true});
+    fs.writeFileSync(file,source.text,{flag:'wx'});
+   }
+   if(modules.size!==2||moduleFiles.size!==2)throw Error('Choose exactly two reviewed named source modules with main module descriptors.');
+   fs.writeFileSync(list,stagedFiles.join('\n'));
+   query.push(moduleRoot);
+  }else fs.writeFileSync(list,sources.map(s=>s.uri+'\t'+Buffer.from(s.text).toString('base64')).join('\n'));
   const effective=[];for(const [index,entry]of snapshot.entries.entries()){if(jarMetadata.get(entry)?.sanitized){const output=path.join(folder,'classpath-'+index+'.jar');await sanitizeCompilerJar(entry,output);effective.push(output);}else effective.push(entry);}fs.writeFileSync(cp,effective.join(path.delimiter));snapshot.validate();
   const output=await new Promise((resolve,reject)=>{const stdout=[];let total=0,stderr='',timer,cancel,settled=false;const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);cancel?.dispose();error?reject(error):resolve(value);};child=spawn(path.join(javaHome,'bin',process.platform==='win32'?'java.exe':'java'),['--source','25',source,cp,list,empty,String(release),...query],{cwd:folder,env,windowsHide:true,stdio:['ignore','pipe','pipe']});exit=new Promise(r=>child.once('exit',(code)=>{exited=true;r(code);}));child.stdout.on('data',b=>{total+=b.length;if(total>8*1024*1024){child.kill();finish(Error('Compiler result exceeds its size limit.'));}else stdout.push(b);});child.stderr.on('data',b=>{stderr=(stderr+b.toString('utf8')).slice(-8000);});child.once('error',e=>{exited=true;finish(e);});child.once('close',code=>code===0?finish(null,Buffer.concat(stdout).toString('utf8')):finish(Error('Read-only Java compiler inspection failed: '+stderr)));timer=setTimeout(()=>{child.kill();finish(Error('Java compiler inspection timed out.'));},45000);cancel=cancellation?.onCancellationRequested?.(()=>{child.kill();finish(Error('Compiler inspection cancelled.'));});if(cancellation?.isCancellationRequested){child.kill();finish(Error('Compiler inspection cancelled.'));}});
   if(cancellation?.isCancellationRequested)throw Error('Compiler inspection cancelled.');snapshot.validate();const report=JSON.parse(output);if(report.format!=='RocketbrainSignatureCompiler-v20'||report.processorsEnabled!==false||report.classGenerationEnabled!==false)throw Error('Invalid read-only compiler response.');
+  if(qualifiedModules){
+   const original=uri=>{
+    if(!uri)return uri;
+    const file=fileURLToPath(uri), key=process.platform==='win32'?file.toLowerCase():file;
+    const source=stagedUris.get(key);
+    if(!source)throw Error('The Java compiler attributed a file outside the reviewed named modules.');
+    return source;
+   };
+   for(const unit of report.packageRename||[])unit.uri=original(unit.uri);
+   for(const error of report.errors)error.uri=original(error.uri);
+  }
   const classes=['advisoryCalls','binaryBeanLifecycle','springResourceImports'].includes(inspection?.kind)?snapshot.entries.map(file=>({file,sha256:snapshot.files.find(row=>row.file===file)?.hash})):undefined;
   return {...report,...(classes&&{classpathEntries:classes}),classpathFingerprint:snapshot.key,validateClasspath:()=>snapshot.validate()};
  }finally{

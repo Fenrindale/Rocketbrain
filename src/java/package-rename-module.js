@@ -1,7 +1,7 @@
 'use strict';
 
 const includes = (prefix, name) => name === prefix || name.startsWith(prefix + '.');
-const candidate = (entry, prefix) => entry.role !== 'requires' && includes(prefix, entry.name);
+const candidate = (entry, prefix) => !['requires','exportsTo','opensTo'].includes(entry.role) && includes(prefix, entry.name);
 
 function matches(actual, expected) {
   return actual && ['role', 'name', 'start', 'end'].every(key => actual[key] === expected[key]);

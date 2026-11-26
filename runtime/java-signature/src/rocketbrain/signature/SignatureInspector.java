@@ -414,7 +414,46 @@ public final class SignatureInspector {
         return object("target",selected[0],"bindings",bindings);
     }
 
+    private static void inspectSourceModules(String[] args) throws Exception {
+        Path moduleRoot = Path.of(args[7]), output = moduleRoot.getParent().resolve("unused-module-output");
+        Files.createDirectory(output);
+        var compiler = ToolProvider.getSystemJavaCompiler();
+        if (compiler == null) throw new IllegalStateException("A full independent JDK is required.");
+        var diagnostics = new DiagnosticCollector<JavaFileObject>();
+        try (var standard = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
+            var files = new ForwardingJavaFileManager<StandardJavaFileManager>(standard) {
+                @Override public JavaFileObject getJavaFileForOutput(Location location, String name,
+                        JavaFileObject.Kind kind, FileObject sibling) throws IOException {
+                    throw new IOException("Class generation is disabled.");
+                }
+            };
+            var paths = Files.readAllLines(Path.of(args[1]), StandardCharsets.UTF_8).stream().map(Path::of).toList();
+            if (paths.size()>500 || paths.stream().anyMatch(path -> !path.startsWith(moduleRoot)))
+                throw new IllegalArgumentException("Use only bounded owned source module inputs.");
+            var options = List.of("-proc:none", "-implicit:none", "-Xlint:none", "-encoding", "UTF-8",
+                "-processorpath", args[2], "-classpath", args[2], "--module-source-path", moduleRoot.toString(),
+                "-d", output.toString(), "--release", args[3]);
+            var task = (JavacTask) compiler.getTask(new StringWriter(), files, diagnostics, options,
+                null, standard.getJavaFileObjectsFromPaths(paths));
+            var units = new ArrayList<CompilationUnitTree>();
+            task.parse().forEach(units::add);
+            task.analyze();
+            var problems = errors(diagnostics);
+            var report = object("format", "RocketbrainSignatureCompiler-v20", "processorsEnabled", false,
+                "classGenerationEnabled", false, "errors", problems);
+            if (problems.isEmpty()) {
+                report.put("packageRename",new PackageRenameInspector(task,args[5],args[6],true).inspect(units));
+            }
+            System.setOut(new PrintStream(System.out,false,StandardCharsets.UTF_8));
+            System.out.print(json(report));
+        }
+    }
+
     public static void main(String[] args) throws Exception {
+        if (args.length==8 && args[4].equals("packageRenameModules")) {
+            inspectSourceModules(args);
+            return;
+        }
         boolean packageServiceBindings = args.length == 7 && args[4].equals("packageRenameServices");
         boolean constructorParameter = args.length == 7 && args[4].equals("constructorParameterDelete");
         if (args.length != 4 && !(args.length == 5 && Set.of("diagram","hierarchy","attributedDependencies").contains(args[4])) &&

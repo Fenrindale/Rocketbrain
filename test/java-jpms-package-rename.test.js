@@ -4,10 +4,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { fileURLToPath } = require('node:url');
 const { test } = require('node:test');
 const { registerJavaMove } = require('../src/java/move');
-const { registerJavaRefactoring, editedText } = require('../src/java/refactoring');
+const { registerJavaRefactoring } = require('../src/java/refactoring');
+const {packageRenameHeadless} = require('./helpers/package-rename-headless');
 const { reviewClosedModule } = require('../src/java/package-module');
 const { bindModuleDescriptor, verifyModuleProjection, reconcileModuleText } = require('../src/java/package-rename-module');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
@@ -60,58 +60,6 @@ test('JPMS descriptor review binds every original visibility and service positio
     oldPackage, newPackage), /unrelated module/u);
 });
 
-function reviewHost(root, lsp, prepareRefactoring) {
-  const documents = new Map(), submitted = [];
-  const vscode = {
-    Uri: { file: uri, parse: value => uri(fileURLToPath(value)) },
-    Range: class { constructor(sl, sc, el, ec) { this.start = { line: sl, character: sc }; this.end = { line: el, character: ec }; } },
-    TextEdit: class { constructor(range, newText) { Object.assign(this, { range, newText }); } },
-    WorkspaceEdit: class {
-      entries = [];
-      renames = [];
-      set(target, edits) { this.entries.push({ target, edits }); }
-      renameFile(from, to, options) { this.renames.push({ from, to, options }); }
-    },
-    workspace: {
-      isTrusted: true,
-      get textDocuments() { return [...documents.values()]; },
-      getWorkspaceFolder(target) {
-        const relative = path.relative(root, target.fsPath);
-        if (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative)) return { uri: uri(root) };
-      },
-      async openTextDocument(target) {
-        if (documents.has(target.fsPath)) return documents.get(target.fsPath);
-        const text = await fs.readFile(target.fsPath, 'utf8');
-        const languageId = target.fsPath.endsWith('.java') ? 'java' : 'plaintext';
-        const document = { uri: target, version: 1, isClosed: false, isDirty: false, languageId, getText: () => text };
-        documents.set(target.fsPath, document);
-        if (languageId === 'java') lsp.notify('textDocument/didOpen', {
-          textDocument: { uri: target.toString(), text, version: 1, languageId }
-        });
-        return document;
-      },
-      registerTextDocumentContentProvider: () => ({ dispose() {} }),
-      async applyEdit(edit) {
-        assert.ok(edit instanceof vscode.WorkspaceEdit);
-        assert.equal(edit.renames.length, 1);
-        const [rename] = edit.renames;
-        assert.equal(rename.from.fsPath, path.join(root, sourceFolder));
-        assert.equal(rename.to.fsPath, path.join(root, targetFolder));
-        assert.deepEqual(rename.options, { overwrite: false, ignoreIfExists: false });
-        assert.equal(prepareRefactoring().isApplyingPackageRename([{ oldUri: rename.from, newUri: rename.to }]), true);
-        for (const { target, edits } of edit.entries) {
-          const text = await fs.readFile(target.fsPath, 'utf8');
-          await fs.writeFile(target.fsPath, editedText(text, edits));
-        }
-        await fs.rename(rename.from.fsPath, rename.to.fsPath);
-        submitted.push(edit);
-        return true;
-      }
-    },
-    commands: { registerCommand: () => ({ dispose() {} }) }
-  };
-  return { vscode, submitted };
-}
 
 test('stock JDT and Javac rename one JPMS package and preserve the running named module in both real Spring JDBC clients', {
   skip: !runtimeFile || !cpFile || !dbs.every(([, file]) => file), timeout: 300000
@@ -144,7 +92,7 @@ test('stock JDT and Javac rename one JPMS package and preserve the running named
       workspaceEdit: { documentChanges: true, resourceOperations: ['rename'] } } },
     initializationOptions: { bundles: [], workspaceFolders: [rootUri], settings } }, 90000);
   lsp.notify('initialized', {});
-  const { vscode, submitted } = reviewHost(root, lsp, () => refactoring);
+  const { vscode, submitted } = packageRenameHeadless(root,lsp,sourceFolder,targetFolder,() => refactoring);
   const document = await vscode.workspace.openTextDocument(uri(path.join(root, owner)));
   await until(async () => {
     const model = await lsp.request('workspace/executeCommand', { command: 'java.project.getClasspaths',
