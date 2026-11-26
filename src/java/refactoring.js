@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {inside}=require('./testing-projects');
 const {metadataFile}=require('./package-services');
+const {bootImportsPath,maxImportsBytes}=require('./package-boot-imports');
 const {namedAction,editorAnchor}=require('./extraction-actions');
 const hash=text=>crypto.createHash('sha256').update(text).digest('hex');
 const key=file=>process.platform==='win32'?path.resolve(file).toLowerCase():path.resolve(file);
@@ -76,7 +77,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   return {dispose(){if(prepareConstant===prepare)prepareConstant=undefined;}};
  }
  function removePlan(id){plans.delete(id);checkedPlans.delete(id);validators.delete(id);}
- async function previewWorkspaceEdit(workspaceEdit,{title='Java refactoring',kind='refactor',cancellation,anchorDocument,allowedResourceOperations=[],allowedResourceRenames=[],allowedServiceEdits=[],allowedBeanClassEdits=[],allowedDirectoryRename,createJavaFile,guards=[],warnings=[],validate:extraValidate,preApply,formattingEndOfLine}={}){
+ async function previewWorkspaceEdit(workspaceEdit,{title='Java refactoring',kind='refactor',cancellation,anchorDocument,allowedResourceOperations=[],allowedResourceRenames=[],allowedServiceEdits=[],allowedBeanClassEdits=[],allowedBootImportsEdits=[],allowedDirectoryRename,createJavaFile,guards=[],warnings=[],validate:extraValidate,preApply,formattingEndOfLine}={}){
   trusted();cancelled(cancellation);if(!workspaceEdit||typeof workspaceEdit!=='object'||Array.isArray(workspaceEdit))throw Error('The Java engine did not return a WorkspaceEdit.');if(Object.keys(workspaceEdit.changeAnnotations||{}).length)throw Error('Annotated refactoring conflicts require a separate review workflow.');
   const kotlinFormatting=kind==='source.format.kotlin';
   const kotlinRename=kind==='refactor.rename.kotlin';
@@ -119,8 +120,24 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    if(key(path.dirname(anchorDocument.uri.fsPath))!==key(old.fsPath))throw Error('Open a saved Java source directly in the package being renamed.');
    packagePermission={oldUri:old.toString(),newUri:next.toString()};
   }
+  const bootImportsPermissions=new Map();
+  if(!Array.isArray(allowedBootImportsEdits)||allowedBootImportsEdits.length>2||allowedBootImportsEdits.length&&!packagePermission){
+   throw Error('Spring Boot imports require a guarded Java package rename.');
+  }
+  for(const entry of allowedBootImportsEdits){
+   if(!entry||!/^[a-f0-9]{64}$/.test(entry.beforeSha256)||!/^[a-f0-9]{64}$/.test(entry.afterSha256)||entry.beforeSha256===entry.afterSha256){
+    throw Error('Spring Boot imports require both exact reviewed byte hashes.');
+   }
+   const uri=sourceUri(entry.uri,{resource:true}),id=key(uri.fsPath);
+   const owner=vscode.workspace.getWorkspaceFolder(anchorDocument.uri),folder=vscode.workspace.getWorkspaceFolder(uri);
+   if(key(owner.uri.fsPath)!==key(folder.uri.fsPath)||!bootImportsPath(uri.fsPath)||bootImportsPermissions.has(id)||
+      fs.statSync(uri.fsPath).size>maxImportsBytes||hash(fs.readFileSync(uri.fsPath))!==entry.beforeSha256){
+    throw Error('Invalid, duplicate or stale Spring Boot imports permission.');
+   }
+   bootImportsPermissions.set(id,{...entry,uri:uri.toString()});
+  }
   const edits=new Map(),versions=new Map(),resources=[],resourceKeys=new Set();let resourceSeen=false;
-  function addText(value,changes,version){if(!Array.isArray(changes))throw Error('Invalid Java refactoring text edits.');if(changes.some(change=>change.annotationId))throw Error('Annotated refactoring conflicts require a separate review workflow.');const candidate=typeof value==='string'?vscode.Uri.parse(value):value,id=candidate&&key(candidate.fsPath),permission=servicePermissions.get(id)||beanPermissions.get(id),uri=sourceUri(value,{resource:!!permission&&permission.uri===candidate.toString(),kotlinFormatting,kotlinRename,kotlinMixedRename}),saved=edits.get(id);edits.set(id,{uri,edits:[...(saved?.edits||[]),...structuredClone(changes)]});if(version!==undefined&&version!==null){if(versions.has(id)&&versions.get(id)!==version)throw Error('Conflicting Java document versions.');versions.set(id,version);}}
+  function addText(value,changes,version){if(!Array.isArray(changes))throw Error('Invalid Java refactoring text edits.');if(changes.some(change=>change.annotationId))throw Error('Annotated refactoring conflicts require a separate review workflow.');const candidate=typeof value==='string'?vscode.Uri.parse(value):value,id=candidate&&key(candidate.fsPath),permission=servicePermissions.get(id)||beanPermissions.get(id)||bootImportsPermissions.get(id),uri=sourceUri(value,{resource:!!permission&&permission.uri===candidate.toString(),kotlinFormatting,kotlinRename,kotlinMixedRename}),saved=edits.get(id);edits.set(id,{uri,edits:[...(saved?.edits||[]),...structuredClone(changes)]});if(version!==undefined&&version!==null){if(versions.has(id)&&versions.get(id)!==version)throw Error('Conflicting Java document versions.');versions.set(id,version);}}
   for(const [uri,changes]of Object.entries(workspaceEdit.changes||{}))addText(uri,changes);
   for(const change of workspaceEdit.documentChanges||[]){
    if(change.textDocument&&Array.isArray(change.edits)){if(resourceSeen)throw Error('Text edits following file operations require a separate review workflow.');addText(change.textDocument.uri,change.edits,change.textDocument.version);continue;}
@@ -160,6 +177,9 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
     [...beanPermissions.keys()].some(id=>resourceKeys.has(id)||!edits.get(id)?.edits.length))){
    throw Error('Every Spring XML permission must match text edits in the reviewed Java type rename.');
   }
+  if([...bootImportsPermissions.keys()].some(id=>!edits.get(id)?.edits.length)){
+   throw Error('Every reviewed Spring Boot imports resource must have its exact edits.');
+  }
   let creation;
   if(createJavaFile!==undefined){
    if(kind!=='refactor.extract.interface'||!anchor||resources.length||!edits.get(key(anchor.document.uri.fsPath))?.edits.length||
@@ -184,14 +204,15 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    const doc=await vscode.workspace.openTextDocument(uri),before=doc.getText(),disk=fs.readFileSync(uri.fsPath);
    size+=Buffer.byteLength(before);count+=changes.length;if(size>8*1024*1024||count>5000)throw Error('Refactoring review exceeds its source or edit limit.');
    const id=key(uri.fsPath),expected=versions.get(id);if(expected!==undefined&&expected!==doc.version)throw Error('The Java engine returned edits for an older document version.');
-   const resource=resources.find(value=>key(vscode.Uri.parse(value.uri).fsPath)===id),service=servicePermissions.get(id),bean=beanPermissions.get(id);
+   const resource=resources.find(value=>key(vscode.Uri.parse(value.uri).fsPath)===id),service=servicePermissions.get(id),bean=beanPermissions.get(id),boot=bootImportsPermissions.get(id);
    if(resource&&doc.isDirty)throw Error('Save the Java source before moving or deleting its file.');if(service&&doc.isDirty)throw Error('Save the service descriptor before applying Package Move.');
    if(resource?.resourceSha256){let decoded;try{decoded=new TextDecoder('utf-8',{fatal:true}).decode(disk);}catch{throw Error('Reviewed resource renames require plain UTF-8 text.');}if(changes.length||before!==decoded||hash(disk)!==resource.resourceSha256)throw Error('A reviewed resource buffer or exact byte hash changed.');}
    const edited=resource?.kind==='delete'?'':editedText(before,changes),eol=!guard&&formattingEndOfLine;
    const after=eol?edited.replace(/\r?\n/g,eol==='crlf'?'\r\n':'\n'):edited;
    if(service&&(!disk.equals(Buffer.from(before))||hash(disk)!==service.beforeSha256||hash(after)!==service.afterSha256))throw Error('A service descriptor buffer or its exact reviewed edit changed.');
    if(bean&&(doc.isDirty||!disk.equals(Buffer.from(before))||hash(disk)!==bean.beforeSha256||hash(after)!==bean.afterSha256))throw Error('A Spring XML buffer or its exact reviewed edit changed.');
-   return {uri:uri.toString(),version:doc.version,hash:hash(before),diskHash:hash(disk),before,after,edits:changes,...(eol?{formattingEndOfLine:eol}:{}),...(kotlinFormatting?{kotlinFormatting:true}:{}),...(kotlinRename?{kotlinRename:true}:{}),...(kotlinMixedRename?{kotlinMixedRename:true}:{}),...(resource?{resourceOperation:resource.kind,newUri:resource.newUri,...(resource.resourceSha256?{resourceSha256:resource.resourceSha256}:{})}:{}),...(service?{serviceDescriptor:true}:{}),...(bean?{beanClassReference:true}:{}),...(guard?{guard:true}:{})};
+   if(boot&&(doc.isDirty||!disk.equals(Buffer.from(before))||hash(disk)!==boot.beforeSha256||hash(after)!==boot.afterSha256))throw Error('A Spring Boot imports buffer or its exact reviewed edit changed.');
+   return {uri:uri.toString(),version:doc.version,hash:hash(before),diskHash:hash(disk),before,after,edits:changes,...(eol?{formattingEndOfLine:eol}:{}),...(kotlinFormatting?{kotlinFormatting:true}:{}),...(kotlinRename?{kotlinRename:true}:{}),...(kotlinMixedRename?{kotlinMixedRename:true}:{}),...(resource?{resourceOperation:resource.kind,newUri:resource.newUri,...(resource.resourceSha256?{resourceSha256:resource.resourceSha256}:{})}:{}),...(service?{serviceDescriptor:true}:{}),...(bean?{beanClassReference:true}:{}),...(boot?{bootImportsReference:true}:{}),...(guard?{guard:true}:{})};
   }
   function captureDiskGuard(uri,expected){
    if(kind!=='refactor.rename.java.type'||!/^[a-f0-9]{64}$/.test(expected.diskHash)||!/^[a-f0-9]{64}$/.test(expected.hash)){
@@ -240,7 +261,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    }
   }
  }
- function reviewedUri(saved,value=saved.uri){return sourceUri(value,{guard:!!saved.guard,resource:!!saved.resourceSha256||!!saved.serviceDescriptor||!!saved.beanClassReference,kotlinFormatting:!!saved.kotlinFormatting,kotlinRename:!!saved.kotlinRename,kotlinMixedRename:!!saved.kotlinMixedRename});}
+ function reviewedUri(saved,value=saved.uri){return sourceUri(value,{guard:!!saved.guard,resource:!!saved.resourceSha256||!!saved.serviceDescriptor||!!saved.beanClassReference||!!saved.bootImportsReference,kotlinFormatting:!!saved.kotlinFormatting,kotlinRename:!!saved.kotlinRename,kotlinMixedRename:!!saved.kotlinMixedRename});}
  function checkDiskGuard(saved,uri,diskHash=hash(fs.readFileSync(uri.fsPath))){
   const fileKey=key(uri.fsPath);
   const changedBuffer=(vscode.workspace.textDocuments||[]).some(doc=>!doc.isClosed&&doc.uri.scheme==='file'&&
@@ -248,7 +269,7 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
   if(diskHash!==saved.diskHash||changedBuffer)throw Error('A reviewed Java type rename dependency changed after review. Preview again.');
  }
  async function validate(id,cancellation){trusted();cancelled(cancellation);const plan=plans.get(id);if(!plan||Date.now()>plan.expiresAt)throw Error('The Java refactoring review expired. Preview it again.');const custom=validators.get(id)?.validate;if(custom)await custom(cancellation);trusted();cancelled(cancellation);const checked=[];for(const saved of [...plan.documents,...plan.guardSnapshots]){if(saved.created)continue;const uri=reviewedUri(saved),doc=saved.binary||saved.diskGuard?null:await vscode.workspace.openTextDocument(uri);checked.push({saved,doc,uri});cancelled(cancellation);}checkSnapshots(checked);checkResources(plan);checkedPlans.set(id,checked);return {state:'fresh',id,documents:plan.documents.length,resourceOperations:plan.resourceOperations.length};}
- function checkSnapshots(checked){trusted();for(const {saved,doc,uri}of checked){reviewedUri(saved,uri);if(saved.binary){if((vscode.workspace.textDocuments||[]).some(value=>!value.isClosed&&key(value.uri.fsPath)===key(uri.fsPath))||JSON.stringify(binaryIdentity(uri.fsPath))!==JSON.stringify(saved.identity)||hash(fs.readFileSync(uri.fsPath))!==saved.diskHash)throw Error('A reviewed binary resource or text buffer changed after review.');continue;}if(saved.diskGuard){checkDiskGuard(saved,uri);continue;}if(doc.isClosed||doc.version!==saved.version||hash(doc.getText())!==saved.hash||hash(fs.readFileSync(uri.fsPath))!==saved.diskHash||((saved.resourceOperation||saved.serviceDescriptor||saved.beanClassReference)&&doc.isDirty))throw Error('A refactoring source file changed after review. Preview again.');}}
+ function checkSnapshots(checked){trusted();for(const {saved,doc,uri}of checked){reviewedUri(saved,uri);if(saved.binary){if((vscode.workspace.textDocuments||[]).some(value=>!value.isClosed&&key(value.uri.fsPath)===key(uri.fsPath))||JSON.stringify(binaryIdentity(uri.fsPath))!==JSON.stringify(saved.identity)||hash(fs.readFileSync(uri.fsPath))!==saved.diskHash)throw Error('A reviewed binary resource or text buffer changed after review.');continue;}if(saved.diskGuard){checkDiskGuard(saved,uri);continue;}if(doc.isClosed||doc.version!==saved.version||hash(doc.getText())!==saved.hash||hash(fs.readFileSync(uri.fsPath))!==saved.diskHash||((saved.resourceOperation||saved.serviceDescriptor||saved.beanClassReference||saved.bootImportsReference)&&doc.isDirty))throw Error('A refactoring source file changed after review. Preview again.');}}
  function runFinalGuard(id,cancellation) {
   const guard=validators.get(id)?.preApply;
   if(guard){const value=guard(cancellation);if(value?.then)throw Error('The final refactoring guard must be synchronous.');}
@@ -321,11 +342,11 @@ function registerJavaRefactoring(context,vscode,{request}={}) {
    resourceOperations:structuredClone(plan.resourceOperations),savedToDisk:false,
    resourceOperationsSavedToDisk:plan.resourceOperations.length?(applied?true:'unknown'):false,atomicAcrossExternalWriters:false};
  }
- const provider={provideTextDocumentContent(uri){const parts=uri.path.split('/').filter(Boolean),plan=plans.get(parts[0]),file=plan?.documents[Number(parts[1])],before=/^before\.(java|kt|xml)$/.test(parts[2]);return file?(file.binary?'Opaque binary resource: '+file.bytes+' bytes; SHA-256 '+file.resourceSha256+(before?' (source)':' (same bytes at destination)'):(before?file.before:file.after)):'This refactoring review expired.';}};subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('rocketbrain-java-refactor',provider));
+ const provider={provideTextDocumentContent(uri){const parts=uri.path.split('/').filter(Boolean),plan=plans.get(parts[0]),file=plan?.documents[Number(parts[1])],before=/^before\.(java|kt|xml|imports)$/.test(parts[2]);return file?(file.binary?'Opaque binary resource: '+file.bytes+' bytes; SHA-256 '+file.resourceSha256+(before?' (source)':' (same bytes at destination)'):(before?file.before:file.after)):'This refactoring review expired.';}};subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('rocketbrain-java-refactor',provider));
  async function review(plan){
   await validate(plan.id);plan=plans.get(plan.id);
   for(let index=0;index<plan.documents.length;index++){
-   const file=plan.documents[index];if(file.binary)continue;const extension=file.beanClassReference?'xml':file.kotlinFormatting||file.kotlinRename||file.kotlinMixedRename&&file.uri.endsWith('.kt')?'kt':'java';
+   const file=plan.documents[index];if(file.binary)continue;const extension=file.bootImportsReference?'imports':file.beanClassReference?'xml':file.kotlinFormatting||file.kotlinRename||file.kotlinMixedRename&&file.uri.endsWith('.kt')?'kt':'java';
    await vscode.commands.executeCommand('vscode.diff',
     vscode.Uri.parse('rocketbrain-java-refactor:/'+plan.id+'/'+index+'/before.'+extension),
     vscode.Uri.parse('rocketbrain-java-refactor:/'+plan.id+'/'+index+'/after.'+extension),

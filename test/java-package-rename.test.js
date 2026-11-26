@@ -9,15 +9,17 @@ const { test } = require('node:test');
 const { registerJavaMove } = require('../src/java/move');
 const { registerJavaRefactoring, editedText } = require('../src/java/refactoring');
 const { reconciledEngineEdits } = require('../src/java/java-package-rename');
+const { planBootImports } = require('../src/java/package-boot-imports');
 const { resolveLaunch, serverSettings } = require('../src/java/runtime');
 const { rangeAt } = require('../src/spring/java');
 const { StdioLsp, until } = require('./helpers/stdio-lsp');
-const { springJdbcClasspath } = require('./helpers/instance-inline-fixture');
 const { originalPackage, renamedPackage, ownerPath, sourceFolder, targetFolder, clientPath, unrelated,
-  sources, populatePackageRename, runPackageSpring } = require('./helpers/java-package-rename-fixture');
+  populatePackageRename, runPackageSpring, fixtureSources, bootProvider, bootFiles, bootText, packageClasspath } =
+  require('./helpers/java-package-rename-fixture');
 
 const runtimeFile = process.env.ROCKETBRAIN_JAVA_TEST_CONFIG;
 const cpFile = process.env.ROCKETBRAIN_PACKAGE_RENAME_CLASSPATH;
+const withBoot = process.env.ROCKETBRAIN_PACKAGE_RENAME_BOOT_IMPORTS === '1';
 const dbs = ['mysql', 'mariadb'].map(engine => [engine, process.env['ROCKETBRAIN_PACKAGE_RENAME_' + engine.toUpperCase() + '_CONFIG']]);
 const read = async file => JSON.parse(await fs.readFile(file, 'utf8'));
 const uri = file => ({ scheme: 'file', fsPath: file, toString: () => pathToFileURL(file).href });
@@ -39,6 +41,30 @@ test('JDT import reordering is equivalent only when the package and all code tok
   edits.changes[address] = [];
   edits.documentChanges = [{ kind: 'rename', oldUri: address, newUri: address }];
   assert.throws(() => reconciledEngineEdits(edits, fixtures, expected, originalPackage, renamedPackage, new Map()), /file operations/);
+});
+
+test('Spring Boot imports allow exact top-level registration edits and preserve literal bytes outside the candidate', () => {
+  const root = path.resolve('test-output', 'boot-package-policy');
+  const owner = path.join(root, bootProvider);
+  const { createHash } = require('node:crypto');
+  const source = (file, text) => ({ file, text, version: 1, uri: uri(file).toString(),
+    diskHash: createHash('sha256').update(text).digest('hex') });
+  const candidates = [
+    source(owner, fixtureSources(true).get(bootProvider)),
+    source(path.join(root, bootFiles[0]), bootText(0, false))
+  ];
+  const moved = new Map([[key(owner), { packageName: originalPackage }]]);
+  const plan = inputs => planBootImports({ sources: inputs, moved, projectRoot: root, oldPackage: originalPackage, newPackage: renamedPackage });
+  const accepted = plan(candidates);
+  assert.equal(accepted.registrations, 1);
+  assert.equal(accepted.allowedAnnotations.get(key(owner)).size, 2);
+  assert.equal(editedText(candidates[1].text, accepted.entries[0].edits), bootText(0, true));
+  assert.throws(() => plan([candidates[0], source(candidates[1].file, candidates[1].text + renamedPackage + '.LedgerAutoConfiguration\r\n')]), /duplicate/u);
+  assert.throws(() => plan([candidates[0], source(candidates[1].file, originalPackage + '.Unknown\n')]), /does not identify/u);
+  assert.throws(() => plan([candidates[0], source(candidates[1].file, originalPackage + '.LedgerAutoConfiguration$Inner\n')]), /top-level/u);
+  assert.throws(() => plan([candidates[0], source(candidates[1].file, '\uFEFF' + candidates[1].text)]), /plain UTF-8/u);
+  assert.throws(() => plan([source(owner, candidates[0].text.replace('import org.springframework.boot.autoconfigure.AutoConfiguration;',
+    'import fixture.fake.AutoConfiguration;')), candidates[1]]), /exact public top-level/u);
 });
 
 function host(root, lsp, suppresses) {
@@ -94,7 +120,8 @@ test('pinned JDT reviews a nonexistent Java package sibling and both actual Spri
 }, async t => {
   const parent = await fs.realpath(os.tmpdir()), owned = await fs.mkdtemp(path.join(parent, 'rb-package-rename-'));
   const root = path.join(owned, 'project');
-  const runtime = await read(runtimeFile), cp = await springJdbcClasspath(cpFile, 'mysql');
+  const runtime = await read(runtimeFile), cp = await packageClasspath(cpFile, 'mysql', withBoot);
+  const sources = fixtureSources(withBoot);
   const lsp = new StdioLsp(resolveLaunch({ ...runtime, storagePath: path.join(owned, 'jdt') }));
   let refactoring, move;
   t.after(async () => {
@@ -106,11 +133,11 @@ test('pinned JDT reviews a nonexistent Java package sibling and both actual Spri
     assert.match(path.basename(owned), /^rb-package-rename-/u);
     await fs.rm(owned, { recursive: true, force: true, maxRetries: 8, retryDelay: 200 });
   });
-  await populatePackageRename(root, cp);
+  await populatePackageRename(root, cp, { withBoot });
   const data = await Promise.all(dbs.map(async ([engine, file]) => [engine, await read(file)]));
   const run = async (renamed) => Promise.all(data.map(async ([engine, database]) =>
     runPackageSpring({ javaHome: runtime.javaHome, root, database, engine, classpathFile: cpFile,
-      classes: await fs.mkdtemp(path.join(owned, 'classes-')), renamed })));
+      classes: await fs.mkdtemp(path.join(owned, 'classes-')), renamed, withBoot })));
   const original = await run(false);
 
   const rootUri = uri(root).toString();
@@ -151,8 +178,17 @@ test('pinned JDT reviews a nonexistent Java package sibling and both actual Spri
   assert.ok(requests[0].value.documentChanges.some(change => change.edits.some(edit => edit.newText === 'fixture.settlement.detail')));
   assert.equal(plan.resourceOperations.length, 1);
   assert.equal(plan.resourceOperations[0].directory, true);
-  assert.equal(plan.packageRename.movedFiles, 2);
-  assert.equal(plan.packageRename.editedFiles, 4);
+  assert.equal(plan.packageRename.movedFiles, withBoot ? 3 : 2);
+  assert.equal(plan.packageRename.editedFiles, withBoot ? 7 : 4);
+  if (withBoot) {
+    assert.deepEqual(plan.packageRename.bootImports, { files: 2, registrations: 2 });
+    for (const [index, relative] of bootFiles.entries()) {
+      const change = plan.documents.find(file => file.uri === uri(path.join(root, relative)).toString());
+      assert.equal(change.bootImportsReference, true);
+      assert.equal(change.before, bootText(index, false));
+      assert.equal(change.after, bootText(index, true));
+    }
+  }
   assert.ok(plan.packageRename.bindings > 10);
   assert.equal(plan.packageRename.supplemented, 0);
   assert.equal(applied.length, 0);
@@ -166,6 +202,16 @@ test('pinned JDT reviews a nonexistent Java package sibling and both actual Spri
   await assert.rejects(refactoring.apply(plan.id), /descriptor changed after review/u);
   await fs.writeFile(caller, sources.get(clientPath));
   assert.equal(applied.length, 0);
+  if (withBoot) {
+    const registry = path.join(root, bootFiles[0]);
+    await fs.appendFile(registry, '# changed after review\r\n');
+    await assert.rejects(refactoring.apply(plan.id), /descriptor changed after review/u);
+    await fs.writeFile(registry, bootText(0, false));
+    const replacement = registry.replace(/\.imports$/u, '.replacements');
+    await fs.writeFile(replacement, originalPackage + '.LedgerAutoConfiguration=' + renamedPackage + '.LedgerAutoConfiguration\n', { flag: 'wx' });
+    await assert.rejects(refactoring.apply(plan.id), /registration resource set changed/u);
+    await fs.unlink(replacement);
+  }
 
   assert.equal((await refactoring.apply(plan.id)).state, 'applied');
   assert.equal(applied.length, 1);
@@ -176,12 +222,16 @@ test('pinned JDT reviews a nonexistent Java package sibling and both actual Spri
   assert.ok(next.includes('fixture.billing.marker'));
   assert.ok(next.includes('fixture.billings.Other'));
   assert.ok(next.includes('import static fixture.settlement.Ledger.TAG;'));
-  assert.ok(next.includes('new fixture.settlement.Ledger()'));
+  if (withBoot) {
+    for (const [index, relative] of bootFiles.entries()) assert.equal(await fs.readFile(path.join(root, relative), 'utf8'), bootText(index, true));
+  } else assert.ok(next.includes('new fixture.settlement.Ledger()'));
   const rebuilt = await run(true);
   assert.deepEqual(rebuilt, original);
   const receipt = { ...plan.packageRename, actualJdtFolderRequest: true, prospectiveJavac: true, singleDirectoryRename: true, suppressesDuplicateJdtRename: true,
     untouchedSameSpellingVariable: true, untouchedPackagePrefix: true, previewKeptTargetAbsent: true,
-    lateTargetRefused: true, changedSourceRefused: true, resourcesRefused: true, results: rebuilt };
+    lateTargetRefused: true, changedSourceRefused: true, resourcesRefused: true,
+    ...(withBoot && { bootDescriptorDriftRefused: true, bootReplacementAddedRefused: true, registrationBytesExact: true }),
+    results: rebuilt };
   if (process.env.ROCKETBRAIN_PACKAGE_RENAME_RECEIPT) await fs.writeFile(process.env.ROCKETBRAIN_PACKAGE_RENAME_RECEIPT,
     JSON.stringify(receipt, null, 2) + '\n');
 });

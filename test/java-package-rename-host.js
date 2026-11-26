@@ -5,11 +5,11 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { until } = require('./helpers/stdio-lsp');
-const { springJdbcClasspath } = require('./helpers/instance-inline-fixture');
-const { ownerPath, sourceFolder, targetFolder, clientPath, unrelated, sources, populatePackageRename, runPackageSpring } =
+const { ownerPath, sourceFolder, targetFolder, clientPath, unrelated, fixtureSources, populatePackageRename, runPackageSpring,
+  bootFiles, bootText, packageClasspath } =
   require('./helpers/java-package-rename-fixture');
 
-async function runJavaPackageRenameChecks(api, vscode, checks) {
+async function runJavaPackageRenameChecks(api, vscode, checks, { withBoot = false } = {}) {
   const workspace = await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath);
   const spring = JSON.parse(await fs.readFile(process.env.ROCKETBRAIN_SPRING_PROJECT_CONFIG, 'utf8'));
   const owner = JSON.parse(await fs.readFile(path.join(path.dirname(spring.dbConfigPath), 'owner.json'), 'utf8'));
@@ -30,11 +30,12 @@ async function runJavaPackageRenameChecks(api, vscode, checks) {
   }
   let projectUri;
   try {
-    await populatePackageRename(root, await springJdbcClasspath(classpathFile, spring.dbEngine));
+    const sources = fixtureSources(withBoot);
+    await populatePackageRename(root, await packageClasspath(classpathFile, spring.dbEngine, withBoot), { withBoot });
     await api.java.start();
     const javaHome = api.java.getState().javaHome;
     const run = async renamed => runPackageSpring({ javaHome, root, database, engine: spring.dbEngine,
-      classpathFile, classes: await fs.mkdtemp(path.join(compile, 'classes-')), renamed });
+      classpathFile, classes: await fs.mkdtemp(path.join(compile, 'classes-')), renamed, withBoot });
     const original = await run(false);
     const descriptor = vscode.Uri.file(path.join(root, '.project')).toString();
     await api.java.executeWorkspaceCommand('java.project.changeImportedProjects', [descriptor], [], []).catch(() => {});
@@ -48,9 +49,17 @@ async function runJavaPackageRenameChecks(api, vscode, checks) {
     }, 100000);
     assert.ok((await vscode.commands.getCommands(true)).includes('rocketbrain.java.renamePackage'));
     await assert.rejects(api.java.move.prepareRenamePackage(java, 'Billing'), /exists or collides by case/u);
+    if (withBoot) {
+      const registry = path.join(root, bootFiles[0]);
+      const stale = await api.java.move.prepareRenamePackage(java, 'settlement');
+      await fs.appendFile(registry, '# changed after review\r\n');
+      try { await assert.rejects(api.java.refactoring.apply(stale.id), /changed after review/u); }
+      finally { await fs.writeFile(registry, bootText(0, false)); }
+      await until(async () => (await open(registry)).getText() === bootText(0, false), 10000);
+    }
     const plan = await api.java.move.prepareRenamePackage(java, 'settlement');
-    assert.equal(plan.packageRename.movedFiles, 2);
-    assert.equal(plan.packageRename.editedFiles, 4);
+    assert.equal(plan.packageRename.movedFiles, withBoot ? 3 : 2);
+    assert.equal(plan.packageRename.editedFiles, withBoot ? 7 : 4);
     assert.equal(plan.resourceOperations.length, 1);
     assert.equal(plan.resourceOperations[0].directory, true);
     assert.equal(plan.resourceOperations[0].newUri, vscode.Uri.file(next).toString());
@@ -61,6 +70,18 @@ async function runJavaPackageRenameChecks(api, vscode, checks) {
       const virtual = await vscode.workspace.openTextDocument(
         vscode.Uri.parse('rocketbrain-java-refactor:/' + plan.id + '/' + callerIndex + '/' + side + '.java'));
       assert.equal(virtual.getText().replace(/\r\n/gu, '\n'), plan.documents[callerIndex][side].replace(/\r\n/gu, '\n'));
+    }
+    if (withBoot) {
+      assert.deepEqual(plan.packageRename.bootImports, { files: 2, registrations: 2 });
+      for (const [index, relative] of bootFiles.entries()) {
+        const slot = plan.documents.findIndex(change => path.relative(path.join(root, relative), vscode.Uri.parse(change.uri).fsPath) === '');
+        assert.ok(slot >= 0);
+        for (const side of ['before', 'after']) {
+          const virtual = await vscode.workspace.openTextDocument(
+            vscode.Uri.parse('rocketbrain-java-refactor:/' + plan.id + '/' + slot + '/' + side + '.imports'));
+          assert.equal(virtual.getText(), bootText(index, side === 'after'));
+        }
+      }
     }
 
     const fileAfter = file => inDirectory(old, file) ? path.join(next, path.relative(old, file)) : file;
@@ -91,10 +112,14 @@ async function runJavaPackageRenameChecks(api, vscode, checks) {
     assert.equal(await fs.readFile(path.join(root, unrelated), 'utf8'), sources.get(unrelated));
     const final = await run(true);
     assert.deepEqual(final, original);
+    if (withBoot) {
+      for (const [index, relative] of bootFiles.entries()) assert.equal(await fs.readFile(path.join(root, relative), 'utf8'), bootText(index, true));
+      checks.push('Spring Boot imports are exact, participate in native Undo and Redo, and still load the renamed bean factory.');
+    }
     checks.push('JDT and Javac reviewed main/test callers and nested packages with one native directory rename and text edit.');
     checks.push('The directory and edits undo and redo together. Saved Java sources preserve the Spring bean and JDBC result.');
     return { ...plan.packageRename, nativeWorkspaceEdit: true, nativeDirectoryUndo: true, nativeDirectoryRedo: true,
-      lateTargetRefused: true, spring: final };
+      lateTargetRefused: true, spring: final, ...(withBoot && { bootDriftRefused: true, bootImportsUndoRedo: true }) };
   } finally {
     try {
       for (const document of vscode.workspace.textDocuments.filter(doc => doc.uri.scheme === 'file' && inDirectory(root, doc.uri.fsPath))) {
@@ -117,4 +142,7 @@ async function runJavaPackageRenameChecks(api, vscode, checks) {
   }
 }
 
-module.exports = { runJavaPackageRenameChecks };
+const runJavaPackageBootImportsChecks = (api, vscode, checks) =>
+  runJavaPackageRenameChecks(api, vscode, checks, { withBoot: true });
+
+module.exports = { runJavaPackageRenameChecks, runJavaPackageBootImportsChecks };
