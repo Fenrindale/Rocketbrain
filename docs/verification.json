@@ -1,48 +1,53 @@
 {
-  "version": "0.174.0",
-  "verifiedAt": "2026-11-26T21:01:51.718Z",
+  "version": "0.176.0",
+  "verifiedAt": "2026-11-27T00:40:10.806Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.174.0.vsix",
-    "sha256": "8a310965507a6db05fd31319e01d59d00499c62a4f532bdcebfdaa0430d1b2e3",
-    "bytes": 4750520,
+    "name": "rocketbrain-0.176.0.vsix",
+    "sha256": "35eb3096065e526fb019aa1d580649f7d59bf120a87f2a556ed4594049965127",
+    "bytes": 4754722,
     "files": 39
   },
   "source": {
-    "frozenPublicInputs": 3169,
-    "inputVectorSha256": "ce4e4219bbfa5f3523bdfccd204c688b25171dda7f9badb568821524c2e0d487",
+    "frozenPublicInputs": 3172,
+    "inputVectorSha256": "ee069f24a0fd052de609aa2af1f313024832fb16dcb038dac187ea25db0713e8",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
-    "node": "v22.23.5",
-    "origin": "GitHub-hosted exact frozen source preview",
-    "head": "ff97ed85e0ee339d0c937e047998562a57dd8106",
-    "run": 45894666479,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45894666479",
-    "tests": 2290,
+    "origin": "GitHub-hosted exact source preview; external-runtime tests may skip",
+    "head": "519500a7d1dc2d1ef1fe4a95bdd54d904ad81745",
+    "run": 45917739766,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45917739766",
+    "tests": 2304,
     "suites": 0,
-    "pass": 2037,
+    "pass": 2051,
     "fail": 0,
     "cancelled": 0,
     "skipped": 253,
     "todo": 0
   },
-  "focusedPackagedNative": [
-    {
-      "engine": "mysql",
-      "database": "8.4.13",
-      "groupCount": 0,
-      "groups": []
-    },
-    {
-      "engine": "mariadb",
-      "database": "11.4.8-MariaDB",
-      "groupCount": 0,
-      "groups": []
-    }
-  ],
-  "vendorRuntime": {
+  "focusedLocalOffline": {
+    "node": "v24.22.3",
+    "sourceCommit": "519500a7d1dc2d1ef1fe4a95bdd54d904ad81745",
+    "tests": 51,
+    "suites": 0,
+    "pass": 48,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 3,
+    "todo": 0
+  },
+  "optionalLocalRuntimeDiagnostic": {
+    "sourceCommit": "7db143653db3c2dbd0192f3d3e59862d4b988eca",
+    "baselineCheck": "test/jpa-observer.test.js and its observer runtime are unchanged across the release.",
+    "observation": "The locally installed JDK enabled a preexisting assertion whose expected capabilities omit springProviderTrace. The separate standard GitHub suite leaves optional JDK configurations unset."
+  },
+  "focusedPackagedNative": [],
+  "vendorRuntime": {},
+  "inheritedRuntimeEvidence": {
     "mappedSchemaViews": {
+      "version": "0.174.0",
+      "commit": "507b62750c7c989e8f2ca1f81b9a09f4a85d51e9",
       "scope": "Spring JDBC and real MySQL/MariaDB, explicit same-table mapped column rename, selected and unselected dependent views, retained values, stale/tampered refusal and fresh-session recovery.",
       "packageSource": "ff97ed85e0ee339d0c937e047998562a57dd8106",
       "logSha256": "dc85659edaa29ca482ae87dc5a2de08225c74d5175810322142beb2f03af0486",
@@ -113,19 +118,28 @@
     }
   },
   "newlyVerified": {
+    "DG-082": {
+      "scope": "Saved-snapshot comparison and saved origin profile capture with a mocked catalog; target role, stale target refusal and route cleanup.",
+      "verification": "offline"
+    },
     "DG-083": {
-      "scope": "실제 Spring JDBC와 MySQL·MariaDB에서 컬럼 이름 및 뷰 참조를 함께 변경했다. 필요한 뷰가 선택에서 빠지면 적용 전에 거부했으며, 포함하지 않은 컬럼의 값과 영향 없는 뷰를 유지했다. 새 세션에서 원래 컬럼과 뷰를 복구했다.",
-      "runtimeGroups": [
-        "mappedSchemaViews"
-      ]
+      "scope": "Selected editable additive SQL and guarded mapped NEW/OLD trigger review, phase SQL and recovery journal replay with mock MySQL and MariaDB catalogs.",
+      "verification": "offline"
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
-    "sourceCorrespondences": 737,
-    "sourceConfidence": "inferred",
     "archiveEntries": 39,
-    "archiveConfidence": "observed"
+    "archiveConfidence": "observed",
+    "staticReview": {
+      "product": "DataGrip 2026.3",
+      "build": "263.7307.216",
+      "method": "Offline analysis of installed classes and driver descriptors with Craft Anything CLI 0.6.1",
+      "schemaComparison": "The inspected workflow uses selected object correspondence, generates a script preview, and can pass the reviewed script to an editor or a single target connection.",
+      "cloudAuth": "The inspected AWS explorer builds data sources and the installed MySQL/MariaDB recipes reference optional AWS wrappers and Cloud SQL socket factories. Vendor login and external driver token refresh were not observed.",
+      "originalExecutionObserved": false,
+      "vendorRuntimeExecutedThisCycle": false
+    }
   },
   "hostedRuntime": {
     "kotlinIosSimulatorDebug": {
@@ -219,12 +233,14 @@
     "stateChanges": []
   },
   "limits": [
-    "216개 기능의 기존 가중치를 유지했다.",
-    "매핑한 컬럼과 뷰는 같은 스키마에서 검토한다. 기존 이름을 읽는 뷰에는 새 이름을 참조하는 정의가 필요하다. 뷰의 출력 이름·소유자·보안 설정은 유지한다.",
-    "별도 MySQL·MariaDB 서버 사이의 원자적 DDL과 원본 제품 전체 창 배치는 현재 서버 및 VS Code 호스트의 구조 제약을 받는다."
+    "기존 216개 항목의 점수와 판정 기준을 유지했다.",
+    "이번 변경에서 실제 Spring·MySQL·MariaDB·클라우드 서버에는 접속하지 않았다.",
+    "트리거 재바인딩은 같은 스키마의 관찰한 정적 NEW·OLD 참조를 다룬다. 동적 SQL·루틴·종속 뷰의 동시 변경과 별도 서버 원자적 DDL은 범위 밖이다.",
+    "원본 전체 작업창 배치에는 VS Code 확장 호스트 제약이 있다."
   ],
   "next": [
-    "승인된 AWS RDS MySQL IAM과 Azure MySQL Entra 테스트 환경에서 DG-012의 실제 공급자 인증을 검증"
+    "일반 테스트에서 누락되는 대상·권한·SQL 모드와 실제 서버 결과를 후속 검증으로 확인",
+    "승인된 AWS RDS MySQL IAM과 Azure MySQL Entra 환경의 실제 인증 검증"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
