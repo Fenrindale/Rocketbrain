@@ -39,9 +39,9 @@ VS Code 1.145.3에 0.179.0 최종 VSIX를 설치해 버튼과 메뉴 항목 8곳
 
 ### 입력 경로
 
-키 바인딩 선언과 실제 편집기 입력은 별도로 확인한다. 선택형 Rocketbrain 키보드 프로필에는 52개 규칙이 있고, 일반 SQL 실행은 기본 `Ctrl+Enter`를 쓴다. 줄 끝의 세미콜론 직후에는 그 줄의 문장이 선택된다. 같은 줄의 다음 문장이 있으면 원래 선택 동작을 유지한다. Java가 Starting인 동안의 첫 Ctrl+클릭은 별도 미해결 항목으로 남아 있다. [SQL 문장 선택](../src/sql.js) · [키보드 프로필](context-actions.md#keyboard-profile)
+키 바인딩 선언과 실제 편집기 입력은 별도로 확인한다. 선택형 Rocketbrain 키보드 프로필에는 52개 규칙이 있고, 일반 SQL 실행은 기본 `Ctrl+Enter`를 쓴다. 줄 끝의 세미콜론 직후에는 그 줄의 문장이 선택된다. 같은 줄의 다음 문장이 있으면 원래 선택 동작을 유지한다. [SQL 문장 선택](../src/sql.js) · [키보드 프로필](context-actions.md#keyboard-profile)
 
-설치본의 단축키 규칙 68개와 연결된 명령 60개가 등록됐다. 실제 입력은 Java 준비 뒤 `Ctrl+클릭`, `F12`, 선택형 `Ctrl+Shift+F9, D`, SQL의 `Ctrl+Enter`와 선택형 `Ctrl+Shift+F10, R`, 결과 셀의 `Shift+F10`을 사용했다. 마지막 실행에서 모두 동작했다. 같은 VSIX의 앞선 실행 한 번에서는 준비 뒤 `F12`를 다시 눌러야 했다. [설치 검증](verification.json)
+설치본의 단축키 규칙 68개와 연결된 명령 60개가 등록됐다. 실제 입력은 Java 준비 뒤 `Ctrl+클릭`, `F12`, 선택형 `Ctrl+Shift+F9, D`, SQL의 `Ctrl+Enter`와 선택형 `Ctrl+Shift+F10, R`, 결과 셀의 `Shift+F10`을 사용했다. 추가 시험에서는 기본 설정의 `Ctrl+E`로 최근 파일, `Ctrl+Shift+A`로 통합 검색, `Ctrl+K` 후 `Ctrl+Shift+A`로 Java Context Actions를 열었다. 같은 VSIX의 앞선 실행 한 번에서는 준비 뒤 `F12`를 다시 눌러야 했다. [설치 검증](verification.json)
 
 ## Java 정의 이동
 
@@ -59,6 +59,8 @@ Ctrl+클릭과 F12는 같은 정의 이동 기능을 제공한다. 구현 목록
 
 0.177.1의 Spring·JPA 공급자는 일반적인 `receiver.method(...)`의 메서드 이름에서 해당 워크스페이스 분석을 기다리지 않는다. 어노테이션 값, Spring Data의 메서드 선언과 JPQL 위치는 기존 분석을 거친다. 시작과 공급자 회귀 검사 21개가 통과했다. 대규모 프로젝트에서의 응답 시간은 후속 실제 입력 시험에 남겼다. [위치 판정](../src/java/definition-position.js) · [공급자 회귀 시험](../test/java-definition-position.test.js)
 
+0.179.0의 새 프로필 세 곳에서 `Starting` 표시 중 Ctrl+클릭을 한 번 눌렀다. 두 번은 메서드에 포인터를 약 700ms 두었고 한 번은 바로 클릭했다. 세 번 모두 추가 입력 없이 `Ready`에서 App.java의 호출에서 Greeter.java의 선언으로 이동했다. 이 시험은 같은 Maven 예제를 사용했다. [설치 검증](verification.json)
+
 ## DataGrip 샘플 콘솔
 
 별도 VS Code 1.145.3에 0.177.0 VSIX를 설치했다. 상태 표시줄의 DataGrip을 누르고 팔레트에서 Open SQL Console을 실행했다. 샘플 `SELECT * FROM projects;` 안에 커서를 두고 실제 Ctrl+Enter를 눌렀을 때 Query Results에 3행이 나왔고 Database 트리에서 projects가 보였다. 같은 콘솔의 세미콜론 바로 뒤에서는 결과가 나오지 않았다. 문장 선택 함수는 그 위치에서 뒤따르는 설명 주석을 반환했다. 이번 입력 시험은 로컬 샘플에서 진행했다. [문장 선택](../src/sql.js) · [콘솔과 결과 표시](../src/database-workbench.js)
@@ -67,7 +69,7 @@ Ctrl+클릭과 F12는 같은 정의 이동 기능을 제공한다. 구현 목록
 
 | 우선순위 | 항목 | 확인한 사용자 경로 | 남은 수정·검증 |
 | --- | --- | --- | --- |
-| P0 | IDEA-002 · IDEA-015 · IDEA-071 | 0.177.1에서 설치 진입점, 시작 중 정의 공급자 요청, Ready 뒤 실제 Ctrl+클릭과 F12를 확인했다. | Starting에서 누른 실제 Ctrl+클릭은 이동하지 않았다. 프로젝트가 준비되기 전의 마우스 입력을 검증 범위에 남겼다. |
+| P0 | IDEA-002 · IDEA-015 · IDEA-071 | 0.179.0의 Maven 예제에서 Starting 중 실제 Ctrl+클릭으로 준비가 끝난 뒤 선언을 열었다. | 빌드 규모와 초기 상태를 넓혀 첫 입력을 시험한다. [설치 검증](verification.json) |
 | P0 | IDEA-015 · IDEA-053 · IDEA-059 | 0.177.0의 Spring/JPA Java 정의 공급자가 일반 호출에서도 초기 분석을 기다릴 수 있다. 0.177.1의 위치 판정은 해당 대기를 줄이고 기존 Spring/JPA 위치를 보존한다. | 일반 Java 메서드와 지원 Spring/JPA 위치에서 처음 열 때의 응답 시간과 목적지를 검증한다. |
 | P0 | DG-031 · DG-034 · DG-035 | 카탈로그가 있는 조건에서 일반 SQL을 열었을 때 문제 목록이 비어 있었고, 편집 이벤트 뒤에는 WHERE 누락과 열 이름 진단이 나왔다. | 연 직후에 편집 없이 진단이 나타나는 경로를 검증한다. [문서 열기 처리](../src/db/sql-vscode.js) |
 | P0 | DG-027 · DG-028 · DG-029 · DG-030 · DG-033 · DG-034 · DG-037 · DG-039 · DG-047 | 전용 프로필 콘솔과 프로필에 묶은 SQL 파일은 실행 연결을 가진다. 공용 활성 카탈로그를 사용하는 의미 분석 경로에서는 제외된다. | 정확히 연결된 프로필 단위의 완성·정의·진단을 제공하고 동명 객체가 서로 다른 스키마에 있을 때 목적지를 검증한다. [SQL 분석](../src/db/sql-vscode.js) |

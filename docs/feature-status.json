@@ -529,7 +529,7 @@
       "status": "implemented",
       "label": "구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "JDT의 선언·타입·구현·가장 가까운 상위 메서드를 소스에서 연다. 여러 대상은 이름·위치로 선택하고 JDK 소스를 정확한 범위로 표시한다. Kotlin은 컴파일러가 확인한 타입별 확장 함수 선언을 연다. Java Projects에서 엔진 설치와 시작 상태를 확인한다. 독립 Java 엔진의 초기 프로젝트 준비 신호에 정의 이동 요청을 연결한다. Java·Kotlin 소스 우클릭 Navigate에서 정의와 관련 탐색을 연다. 준비된 Java 편집기에서 실제 Ctrl+클릭·F12와 선택형 Java 탐색 단축키를 재검증했다. 시작 중 첫 마우스 입력은 후속 검증 범위다.",
+      "scope": "JDT의 선언·타입·구현·가장 가까운 상위 메서드를 소스에서 연다. 여러 대상은 이름·위치로 선택하고 JDK 소스를 정확한 범위로 표시한다. Kotlin은 컴파일러가 확인한 타입별 확장 함수 선언을 연다. Java Projects에서 엔진 설치와 시작 상태를 확인한다. 독립 Java 엔진의 초기 프로젝트 준비 신호에 정의 이동 요청을 연결한다. Java·Kotlin 소스 우클릭 Navigate에서 정의와 관련 탐색을 연다. 준비된 Java 편집기에서 실제 Ctrl+클릭·F12와 선택형 Java 탐색 단축키를 재검증했다. Maven 예제의 새 프로필 세 곳에서 Starting에 보낸 첫 Ctrl+클릭이 Ready 뒤 선언을 열었다.",
       "remaining": [],
       "verification": {
         "state": "v0.177.1-navigation-ui",
@@ -548,7 +548,12 @@
         "version": "0.179.0",
         "evidence": "docs/ui-reachability-audit.md",
         "state": "installed-input-observed",
-        "observedAction": "Java definition"
+        "observedAction": "Java definition",
+        "startupInput": {
+          "observed": "Ctrl+Click",
+          "stateAtInput": "Starting",
+          "successfulTrials": 3
+        }
       }
     },
     {
