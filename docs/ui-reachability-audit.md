@@ -1,6 +1,6 @@
 # 설치 후 화면과 기능 진입점 점검
 
-2026-11-27 기준 Rocketbrain 0.177.0 설치 패키지와 216개 기능표를 대조했다. 각 행은 화면, 팔레트, 단축키, VS Code 기본 UI 또는 별도 실행 경로를 기록한다. 마지막 열의 검증은 기능표에 보존된 이력이며, 이번에 실제 입력을 재현한 범위는 아래에 따로 적는다. 명령은 팔레트에서 `Rocketbrain:`을 앞에 붙여 검색할 수 있다.
+2026-11-27 기준 Rocketbrain 0.179.0 설치 패키지와 216개 기능표를 대조했다. 각 행은 화면, 팔레트, 단축키, VS Code 기본 UI 또는 별도 실행 경로를 기록한다. 마지막 열은 이전 버전의 검증 이력을 포함한다. 현재 설치 패키지에서 확인한 버튼과 입력은 아래의 v0.179 절에 기록한다. 명령은 팔레트에서 `Rocketbrain:`을 앞에 붙여 검색할 수 있다.
 
 0.177.0의 [배포 소스](https://github.com/Fenrindale/Rocketbrain/tree/ff17d43aba142984c7ff917b184dbfd2ada6ab14), [확장 메뉴 정의](../package.json), [기능별 판정](feature-status.json), [설치 검증 요약](verification.json)을 근거로 삼았다. Craft Anything CLI로 확인한 0.177.0 패키지는 39개 파일을 담고 있다.
 
@@ -28,16 +28,20 @@ Craft Anything CLI로 로컬 IntelliJ IDEA 2026.3과 DataGrip 2026.3을 별도 �
 | 기준 영역 | Rocketbrain 작업 화면 | 배치한 조작 |
 | --- | --- | --- |
 | IntelliJ 소스와 리팩터링 | Java 파일 우클릭 | Code와 Analyze 메뉴, 기존 Refactor의 서명·이름·추출·이동·안전 삭제 |
-| IntelliJ Project·Build·Run·Testing | 왼쪽 Project 폴더, Java Projects의 뷰 메뉴와 실행 구성 행 | 폴더에 새 Java 파일, 빌드와 프로젝트 검사, 실행 구성과 테스트 작업 |
+| IntelliJ Project·Build·Run·Testing | 왼쪽 Project 헤더와 폴더 행, Java Projects의 뷰 메뉴와 실행 구성 행 | 헤더의 + 또는 선택 폴더에 새 Java 파일, 빌드와 프로젝트 검사, 실행 구성과 테스트 작업 |
 | IntelliJ Spring·Persistence·Debugger | Spring & JPA Analysis와 디버깅 도구막대 | Bean 의존성 그래프 버튼, 런타임·JPA 메뉴, 단계 이동과 값 검사 |
-| DataGrip Database Explorer | 왼쪽 Database·Schema Catalog·Database Connections | 선택 개체의 참조 복사, 원문·카탈로그·스키마 작업 |
+| DataGrip Database Explorer | 왼쪽 Database·Schema Catalog·Database Connections | 선택 개체의 참조 복사, 원문·카탈로그·스키마 작업, Database Connections 헤더의 프로필 편집 |
 | DataGrip SQL 콘솔과 결과 | SQL 편집기 상단·우클릭과 하단 Query Results | 현재 SQL 분석, 연결된 콘솔의 실행·검토 메뉴, 결과를 만든 SQL 열기와 저장 쿼리 |
 
 팔레트 경로만 있는 항목은 배치 검증을 받지 않은 상태다. 표의 영역이 전역 메뉴 바인 경우 VS Code가 공개한 편집기·뷰 메뉴에 조작을 연결하고 위치 차이를 남긴다. 조건부 개체와 데이터베이스 작업은 해당 상태가 있는 설치 환경에서 실제 버튼과 결과를 확인해야 배치 검증에 포함한다. [VS Code 메뉴 기여 지점](https://code.visualstudio.com/api/references/contribution-points#contributes.menus)
 
+VS Code 1.145.3에 0.179.0 최종 VSIX를 설치해 버튼과 메뉴 항목 8곳을 직접 눌렀다. Java 편집기의 Live Template, Project 헤더와 폴더 행의 새 파일 템플릿, Spring 헤더의 Bean 그래프, Database 헤더의 SQL 콘솔, SQL 편집기의 분석과 저장 쿼리, 하단 결과의 Show Result SQL이 각각 해당 화면을 열었다. 테이블의 이름 복사 메뉴는 표시를 확인했다. SQL 분석은 연결 안내를 표시했고, 쿼리 실행과 그리드는 로컬 SQLite 데모를 사용했다. 새 MySQL·MariaDB 연결 전용 버튼은 이 설치 시험에서 누르지 않았다. [설치 검증](verification.json)
+
 ### 입력 경로
 
 키 바인딩 선언과 실제 편집기 입력은 별도로 확인한다. 선택형 Rocketbrain 키보드 프로필에는 52개 규칙이 있고, 일반 SQL 실행은 기본 `Ctrl+Enter`를 쓴다. 줄 끝의 세미콜론 직후에는 그 줄의 문장이 선택된다. 같은 줄의 다음 문장이 있으면 원래 선택 동작을 유지한다. Java가 Starting인 동안의 첫 Ctrl+클릭은 별도 미해결 항목으로 남아 있다. [SQL 문장 선택](../src/sql.js) · [키보드 프로필](context-actions.md#keyboard-profile)
+
+설치본의 단축키 규칙 68개와 연결된 명령 60개가 등록됐다. 실제 입력은 Java 준비 뒤 `Ctrl+클릭`, `F12`, 선택형 `Ctrl+Shift+F9, D`, SQL의 `Ctrl+Enter`와 선택형 `Ctrl+Shift+F10, R`, 결과 셀의 `Shift+F10`을 사용했다. 마지막 실행에서 모두 동작했다. 같은 VSIX의 앞선 실행 한 번에서는 준비 뒤 `F12`를 다시 눌러야 했다. [설치 검증](verification.json)
 
 ## Java 정의 이동
 
@@ -67,7 +71,7 @@ Ctrl+클릭과 F12는 같은 정의 이동 기능을 제공한다. 구현 목록
 | P0 | IDEA-015 · IDEA-053 · IDEA-059 | 0.177.0의 Spring/JPA Java 정의 공급자가 일반 호출에서도 초기 분석을 기다릴 수 있다. 0.177.1의 위치 판정은 해당 대기를 줄이고 기존 Spring/JPA 위치를 보존한다. | 일반 Java 메서드와 지원 Spring/JPA 위치에서 처음 열 때의 응답 시간과 목적지를 검증한다. |
 | P0 | DG-031 · DG-034 · DG-035 | 카탈로그가 있는 조건에서 일반 SQL을 열었을 때 문제 목록이 비어 있었고, 편집 이벤트 뒤에는 WHERE 누락과 열 이름 진단이 나왔다. | 연 직후에 편집 없이 진단이 나타나는 경로를 검증한다. [문서 열기 처리](../src/db/sql-vscode.js) |
 | P0 | DG-027 · DG-028 · DG-029 · DG-030 · DG-033 · DG-034 · DG-037 · DG-039 · DG-047 | 전용 프로필 콘솔과 프로필에 묶은 SQL 파일은 실행 연결을 가진다. 공용 활성 카탈로그를 사용하는 의미 분석 경로에서는 제외된다. | 정확히 연결된 프로필 단위의 완성·정의·진단을 제공하고 동명 객체가 서로 다른 스키마에 있을 때 목적지를 검증한다. [SQL 분석](../src/db/sql-vscode.js) |
-| P0 | DG-044 · DG-096 | 오프라인 데모에서 세미콜론 바로 뒤에 커서를 두고 Ctrl+Enter를 누르자 뒤따르는 주석 범위를 선택해 쿼리를 실행하지 않았다. | 문장 구분 기호 바로 뒤에서도 사용자에게 보이는 문장이 실행되도록 하고, 다음 문장과 주석 경계를 검증한다. [문장 위치 처리](../src/sql.js) |
+| 확인 | DG-044 · DG-096 | 0.179.0 설치본에서 세미콜론 바로 뒤에 커서를 두고 Ctrl+Enter를 눌러 SQLite 결과 3행을 확인했다. | 같은 줄의 다음 문장과 다음 줄의 주석 경계는 회귀 검사로 확인했다. [문장 위치 처리](../src/sql.js) · [설치 검증](verification.json) |
 | P1 | IDEA-065 · IDEA-070 | Feign 안내의 Spring Endpoints와 Gradle 안내의 Discover Build Tasks 표기가 실제 팔레트 이름과 다르다. Choose Build Task는 목록을 채우고 Run Build Task가 실제 선택을 받는다. | 처음 보는 사용자가 설명과 동일한 명령으로 진입할 수 있게 이름과 동작을 맞춘다. [Feign 안내](spring-feign-contracts.md) · [Gradle 처리](../src/java/workbench.js) |
 | P1 | IDEA-076 · IDEA-077 · IDEA-084 · IDEA-113 | 여백·Variables·Testing의 기본 동작과 팔레트의 확장 기능이 나뉜다. IntelliJ 모드의 테스트 탐색은 Java Projects 더 보기 메뉴에 있다. 키보드 프로필은 별도 선택이다. | 설치 직후 테스트 런타임을 찾고, 실제 Variables 메뉴에서 필드 중단을 설정하며, 기본 입력과 프로필 입력을 함께 검증한다. |
 | P1 | DG-001 · DG-006 · DG-012 · DG-039 · DG-044 · DG-062 · DG-096 | 빠른 연결과 저장 프로필 설정이 두 경로다. SQL 정의 공급자·실행·결과 그리드에 개별 검증 이력이 있다. | 빈 연결 화면 안내를 보강하고 한 세션에서 SQL 열기, Ctrl+클릭, Ctrl+Enter, 결과 이동을 연속으로 재현한다. |

@@ -1,21 +1,21 @@
 {
-  "version": "0.178.0",
-  "verifiedAt": "2026-11-27T05:12:48.180Z",
+  "version": "0.179.0",
+  "verifiedAt": "2026-11-27T05:38:10.519Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.178.0.vsix",
-    "bytes": 4765318,
-    "sha256": "c4152e5d49aa24f242a3364dc9b332119824978c350eafef5a7ce2ec340762a9",
+    "name": "rocketbrain-0.179.0.vsix",
+    "bytes": 4770727,
+    "sha256": "dd7eb1fd329c591220ea88853484b845238d89646aa50618f1f091161204aef3",
     "files": 39
   },
   "localOffline": {
     "origin": "GitHub-hosted exact source preview; external-runtime tests may skip",
-    "head": "68219a6fa352becafa034b7006c1f6decc8f99d0",
-    "run": 45944092071,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45944092071",
-    "tests": 2316,
+    "head": "80e42c90f95c3bb49a7d4fee8e809bd80b918aab",
+    "run": 45946503900,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45946503900",
+    "tests": 2319,
     "suites": 0,
-    "pass": 2063,
+    "pass": 2066,
     "fail": 0,
     "cancelled": 0,
     "skipped": 253,
@@ -23,78 +23,132 @@
   },
   "focusedPolish": {
     "nativeVsCode": {
-      "sourceCommit": "68219a6fa352becafa034b7006c1f6decc8f99d0",
+      "sourceCommit": "80e42c90f95c3bb49a7d4fee8e809bd80b918aab",
       "version": "1.145.3",
-      "vsixSha256": "c4152e5d49aa24f242a3364dc9b332119824978c350eafef5a7ce2ec340762a9",
+      "vsixSha256": "dd7eb1fd329c591220ea88853484b845238d89646aa50618f1f091161204aef3",
       "steps": [
         {
-          "area": "Java",
-          "action": "Native toolbars",
-          "editor": [
-            "Add Java Run Configuration",
-            "Run Java Configuration",
-            "Debug Java Configuration"
-          ],
-          "editorPlacement": "Editor title actions above the Java file",
-          "projectView": [
-            "Build Java Project",
-            "Discover Java Tests"
-          ],
-          "projectPlacement": "Header of Java Projects in the side bar"
+          "area": "Java input",
+          "input": "Ctrl+Click",
+          "destination": "Greeter.java via native editor",
+          "ready": true
         },
         {
-          "area": "Java",
-          "action": "Clicked Run Java Configuration on editor toolbar",
-          "observed": "Empty state opens Java Run Configurations with Java and Spring setup actions",
-          "launchedRuntime": false
+          "area": "Java input",
+          "input": "F12",
+          "destination": "Greeter.java via native editor",
+          "ready": true,
+          "attempts": 1
         },
         {
-          "area": "Java",
-          "action": "Right-clicked owned Java editor",
-          "submenus": [
-            "Navigate",
-            "Refactor",
-            "Java Tests"
-          ],
-          "navigateEntry": "Go to Code Target"
+          "area": "Java input",
+          "input": "Ctrl+Shift+F9, D",
+          "via": "workspace Keyboard Profile enabled",
+          "destination": "Greeter.java via native editor",
+          "ready": true
+        },
+        {
+          "area": "Java editor",
+          "placement": "Code context menu",
+          "action": "Insert Java Live Template",
+          "destination": "Java Live Templates picker",
+          "clicked": true
+        },
+        {
+          "area": "Project Explorer",
+          "placement": "view header + button",
+          "action": "New Java File from Template",
+          "destination": "Java File Template · Source Root picker",
+          "clicked": true
+        },
+        {
+          "area": "Project Explorer",
+          "placement": "folder row context menu",
+          "action": "New Java File from Template",
+          "destination": "Java File Template · Source Root picker",
+          "clicked": true
+        },
+        {
+          "area": "Spring & JPA Analysis",
+          "placement": "view header toolbar",
+          "action": "Show Spring Bean Dependency Graph",
+          "destination": "Spring Bean Dependencies webview",
+          "clicked": true
         },
         {
           "area": "Database",
-          "action": "Clicked Add Database Connection on Database toolbar",
-          "observed": "New database connection editor",
-          "openedNetworkConnection": false
+          "placement": "Database view header",
+          "action": "Open SQL Console",
+          "destination": "native editor with sample SQL",
+          "clicked": true
         },
         {
-          "area": "Database",
-          "action": "Clicked Open SQL Console on Database toolbar",
-          "placement": "Database view header in the side bar",
-          "observed": "SQL editor contains sample SELECT"
-        },
-        {
-          "area": "SQL editor",
-          "action": "Clicked Run Selected SQL or Current Statement on editor toolbar",
-          "placement": "Editor title actions above the SQL file",
-          "visibleRows": 3,
-          "dataSource": "Only the local SQLite demo"
+          "area": "SQL input",
+          "input": "Ctrl+Enter",
+          "caret": "immediately after the ; on its own line, with a trailing comment on a later line",
+          "destination": "Query Results containing three SQLite sample rows"
         },
         {
           "area": "Query Results",
-          "action": "Right-clicked a second-row cell, clicked View Record, returned to Grid",
-          "placement": "Result panel below the SQL editor",
-          "menu": [
-            "Copy Cell",
-            "Copy Row",
-            "View Record"
-          ],
-          "recordRow": 2
+          "input": "Shift+F10",
+          "placement": "focused second-row grid cell",
+          "action": "clicked View Record from the keyboard-opened menu",
+          "destination": "second row record view then restored Grid"
+        },
+        {
+          "area": "Database Explorer",
+          "placement": "table row context menu",
+          "action": "Copy Qualified Database Name",
+          "visible": true,
+          "clipboardWriteExercised": false
+        },
+        {
+          "area": "SQL editor",
+          "placement": "editor title toolbar",
+          "action": "Analyze Current SQL Document",
+          "destination": "SQL analysis output",
+          "clicked": true
+        },
+        {
+          "area": "SQL editor",
+          "placement": "Query context menu",
+          "action": "Saved SQL Queries",
+          "destination": "empty state message",
+          "clicked": true
+        },
+        {
+          "area": "Query Results",
+          "placement": "bottom result toolbar",
+          "action": "Show Result SQL",
+          "destination": "read-only Captured query SQL region in the result panel",
+          "clicked": true
+        },
+        {
+          "area": "SQL input",
+          "input": "Ctrl+Shift+F10, R",
+          "via": "workspace Keyboard Profile enabled",
+          "destination": "Query Results containing distinct marker 2080"
         }
       ],
+      "clickCount": 8,
       "actualDatabaseConnections": 0,
-      "receiptSha256": "153208a826122578c951ae953685f1df36610f1d49dbc6f01aecdd737ee157c8"
-    },
-    "results": {
-      "testsPassed": 28,
-      "scope": "Actual Chromium rendering, toolbar, cell context menu, staged edit entry and stale target refusal."
+      "inputCoverage": {
+        "physicalInputs": [
+          "Ctrl+Click",
+          "F12",
+          "Ctrl+Shift+F9, D",
+          "Ctrl+Enter",
+          "Shift+F10",
+          "Ctrl+Shift+F10, R"
+        ],
+        "installedOptInRules": 52,
+        "declaredRules": 68,
+        "registeredTargets": 60,
+        "javaStartingFirstClickVerified": false,
+        "allRulesPhysicallyVerified": false,
+        "readyF12EarlierRunRequiredRetry": true
+      },
+      "receiptSha256": "5677ef3852f2c6a00a73d99d903148d2bd6c7f63221a7408e54e3a31b84f793c"
     }
   },
   "uiAudit": {
@@ -102,20 +156,34 @@
     "rows": 216,
     "placementRowsExpanded": [
       "IDEA-001",
+      "IDEA-009",
+      "IDEA-014",
       "IDEA-015",
-      "IDEA-019",
-      "IDEA-065",
+      "IDEA-020",
+      "IDEA-024",
+      "IDEA-026",
+      "IDEA-028",
+      "IDEA-029",
+      "IDEA-030",
+      "IDEA-054",
+      "IDEA-057",
+      "IDEA-062",
       "IDEA-070",
       "IDEA-073",
+      "IDEA-079",
       "IDEA-084",
-      "IDEA-086",
+      "IDEA-085",
       "DG-001",
+      "DG-023",
+      "DG-031",
+      "DG-039",
       "DG-044",
       "DG-047",
-      "DG-048",
-      "DG-062",
-      "DG-067",
-      "DG-069",
+      "DG-051",
+      "DG-053",
+      "DG-056",
+      "DG-075",
+      "DG-082",
       "DG-095",
       "DG-096"
     ]
@@ -194,13 +262,38 @@
     }
   },
   "previousPolish": {
-    "version": "0.177.1",
-    "publicEvidence": "https://github.com/Fenrindale/Rocketbrain/blob/7b3461656fe6112bdb9af07a6a00777845570416/docs/verification.json"
+    "version": "0.178.0",
+    "publicEvidence": "https://github.com/Fenrindale/Rocketbrain/blob/31ce065c7851270efcac0c2f97acb4b04b48bd02/docs/verification.json"
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
+    "referenceWindows": [
+      {
+        "product": "IntelliJ IDEA",
+        "version": "2026.3",
+        "build": "263.7307.200",
+        "captured": "main workbench of a synthetic project",
+        "observed": [
+          "Current File / Run / Debug",
+          "Project header / New",
+          "Project tree"
+        ]
+      },
+      {
+        "product": "DataGrip",
+        "version": "2026.3",
+        "build": "263.7307.216",
+        "captured": "main workbench without a database connection",
+        "observed": [
+          "Database Explorer toolbar",
+          "Data sources",
+          "Files tool window"
+        ]
+      }
+    ],
     "archiveEntries": 39,
-    "archiveConfidence": "observed"
+    "archiveConfidence": "observed",
+    "archiveContradictions": 0
   },
   "hostedRuntime": {
     "kotlinIosSimulatorDebug": {
@@ -294,12 +387,13 @@
     "stateChanges": []
   },
   "limits": [
-    "상단 버튼은 VS Code의 편집기 도구막대에 배치했다.",
-    "실제 입력 검증은 Java 예제와 로컬 SQLite 샘플을 사용했다."
+    "IDE 전체 제목 줄과 도구 창 도킹은 VS Code 호스트가 관리한다.",
+    "설치 시험은 샘플 Maven 프로젝트와 로컬 SQLite 데모를 사용했다.",
+    "Java Starting 중 첫 마우스 입력과 새 MySQL·MariaDB 전용 조건별 조작은 후속 시험 범위다."
   ],
   "next": [
-    "같은 위치에서 연결 프로필과 실제 데이터베이스 작업의 조건별 메뉴를 검증",
-    "배치 감사에 남은 편집기 첫 입력, SQL 문장 경계와 최초 파일 진단을 점검"
+    "Java Starting 상태의 첫 정의 이동과 키보드 프로필의 상태별 충돌을 검증",
+    "실제 MySQL과 MariaDB 연결에서 새로 배치한 컨텍스트 메뉴·상단 도구를 검증"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
