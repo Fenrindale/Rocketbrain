@@ -4,6 +4,7 @@ const { createHash } = require('node:crypto');
 const { analyzeSpring, definitionsAt } = require('./model');
 const { registerBeanGraph } = require('./bean-graph-vscode');
 const { registerAutowiringFix } = require('./autowiring-fix-vscode');
+const { isPlainQualifiedCall } = require('../java/definition-position');
 
 function registerSemanticSpring(vscode, context, output) {
   const subscriptions = [], diagnosticCollection = vscode.languages.createDiagnosticCollection('rocketbrain-spring');
@@ -74,7 +75,11 @@ function registerSemanticSpring(vscode, context, output) {
   }
   async function definitions(uri, position) { return definitionsAt(await analyze(), typeof uri === 'string' ? uri : uri.toString(), position); }
   subscriptions.push(vscode.languages.registerDefinitionProvider({ scheme: 'file', language: 'java' }, {
-    async provideDefinition(document, position, token) { const locations = await definitions(document.uri, position); return token.isCancellationRequested ? [] : locations.map(item => new vscode.Location(vscode.Uri.parse(item.uri), range(item.range))); }
+    async provideDefinition(document, position, token) {
+      if (token.isCancellationRequested || isPlainQualifiedCall(document, position)) return [];
+      const locations = await definitions(document.uri, position);
+      return token.isCancellationRequested ? [] : locations.map(item => new vscode.Location(vscode.Uri.parse(item.uri), range(item.range)));
+    }
   }));
   subscriptions.push(vscode.languages.registerHoverProvider({ scheme: 'file', language: 'java' }, {
     async provideHover(document, position, token) {

@@ -37,4 +37,21 @@ function registerJavaAutostart(vscode,start,reportError) {
   }};
 }
 
-module.exports = {registerJavaAutostart};
+function registerJavaDefinitionStartup(vscode, { start, provider, isAvailable }) {
+  return vscode.languages.registerDefinitionProvider({ scheme: 'file', language: 'java' }, {
+    async provideDefinition(document, position, token) {
+      if (token.isCancellationRequested || !isAvailable() || provider(document)) return;
+      const version = document.version;
+      try {
+        await start();
+      } catch {
+        // Java startup already publishes the failure and recovery action in its status item.
+        return;
+      }
+      if (token.isCancellationRequested || document.isClosed || document.version !== version || !isAvailable()) return;
+      return provider(document)?.provideDefinition(document, position, token);
+    }
+  });
+}
+
+module.exports = {registerJavaAutostart, registerJavaDefinitionStartup};

@@ -2,7 +2,7 @@
 
 const assert=require('node:assert/strict');
 const {test}=require('node:test');
-const {registerJavaAutostart}=require('../src/java/startup');
+const {registerJavaAutostart, registerJavaDefinitionStartup}=require('../src/java/startup');
 
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
@@ -64,4 +64,52 @@ test('opening a local Java document starts support and explicit commands remain 
     callback({languageId:'java',uri:{scheme:'file'}});
     assert.equal(starts,2);
   } finally {registered.dispose();}
+});
+
+test('native definition requested during startup delegates once to the real provider', async () => {
+  const document = { version: 1 };
+  const position = { line: 2, character: 10 };
+  const token = { isCancellationRequested: false };
+  const target = { uri: 'file:///Greeter.java' };
+  let definition, real, complete;
+  let ready = false, starts = 0;
+  const starting = new Promise(resolve => { complete = resolve; });
+  registerJavaDefinitionStartup({ languages: {
+    registerDefinitionProvider(selector, provider) {
+      assert.deepEqual(selector, { scheme: 'file', language: 'java' });
+      definition = provider.provideDefinition;
+    }
+  } }, {
+    start: async () => { starts++; await starting; ready = true; },
+    provider: () => ready && real,
+    isAvailable: () => true
+  });
+  const request = definition(document, position, token);
+  assert.equal(starts, 1);
+  real = { provideDefinition(...args) {
+    assert.deepEqual(args, [document, position, token]);
+    return target;
+  } };
+  complete();
+  assert.equal(await request, target);
+  assert.equal(await definition(document, position, token), undefined);
+  assert.equal(starts, 1);
+});
+
+test('native definition abandons requests when setup is missing or source changes during startup', async () => {
+  const document = { version: 1 };
+  const token = { isCancellationRequested: false };
+  let definition, ready, allowed = false, starts = 0;
+  registerJavaDefinitionStartup({ languages: {
+    registerDefinitionProvider(_selector, provider) { definition = provider.provideDefinition; }
+  } }, {
+    start: async () => { starts++; document.version++; ready = true; },
+    provider: () => ready && { provideDefinition: assert.fail },
+    isAvailable: () => allowed
+  });
+  assert.equal(await definition(document, {}, token), undefined);
+  assert.equal(starts, 0);
+  allowed = true;
+  assert.equal(await definition(document, {}, token), undefined);
+  assert.equal(starts, 1);
 });

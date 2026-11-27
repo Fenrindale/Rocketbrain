@@ -10,7 +10,7 @@ const { resolveNullChecks, nullCheckUpdates } = require('./null-checks');
 const { configureNullChecks } = require('./null-checks-vscode');
 const { hash, indexScope, indexStorage, readGeneration } = require('./workspace-index');
 const { registerWorkspaceIndex } = require('./workspace-index-vscode');
-const { registerJavaAutostart } = require('./startup');
+const { registerJavaAutostart, registerJavaDefinitionStartup } = require('./startup');
 
 function registerJavaFeatures(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain Java', { log: true });
@@ -26,6 +26,7 @@ function registerJavaFeatures(context, vscode) {
     state = { ...state, state: next, message };
     status.text = `$(coffee) Rocketbrain Java · ${next === 'running' ? 'Ready' : next === 'starting' ? 'Starting' : next === 'configuration-required' ? 'Setup' : next}`;
     status.tooltip = message; status.show(); output.appendLine(`${next}: ${message}`);
+    void vscode.commands.executeCommand('setContext', 'rocketbrain.javaEngineState', next);
   }
   const serial = action => { const run = pending.then(() => action(), () => action()); pending = run.catch(() => {}); return run; };
   function readNullChecks(config) {
@@ -427,6 +428,15 @@ function registerJavaFeatures(context, vscode) {
   }));
   subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (!configuring && ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome', 'extractInterface.replaceUsages', 'staticImport.favorites', 'annotationProcessing.gradleEnabled', 'annotationProcessing.lombokJar'].some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) void api.restart().catch(error => output.appendLine(error.message)); }));
   update('stopped', 'Java server is stopped.');
+  subscriptions.push(registerJavaDefinitionStartup(vscode, {
+    start: api.start,
+    provider: document => client?.getFeature('textDocument/definition')?.getProvider(document),
+    isAvailable: () => {
+      if (disposed || containerOwner || state.state === 'error' || !vscode.workspace.isTrusted) return false;
+      const config = vscode.workspace.getConfiguration('rocketbrain.java');
+      return config.get('enabled', true) && Boolean(config.get('javaHome') && config.get('serverPath'));
+    }
+  }));
   subscriptions.push(registerJavaAutostart(vscode,api.start,error=>output.appendLine(error.message)));
   return api;
 }

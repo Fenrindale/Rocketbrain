@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const { analyzeJPA, completionsAt, definitionsAt, compareCatalog } = require('./model');
+const { isPlainQualifiedCall } = require('../java/definition-position');
 
 function derivedQueryHover(query) {
   const {predicateGroups,order,parameters} = query.derivedAnalysis || {};
@@ -146,7 +147,7 @@ function registerJPAFeatures(context, vscode, { catalog, output } = {}) {
   }, '.'));
   subscriptions.push(vscode.languages.registerDefinitionProvider(selector, {
     async provideDefinition(document, position, token) {
-      if (!config().get('enabled', true)) return [];
+      if (token.isCancellationRequested || !config().get('enabled', true) || isPlainQualifiedCall(document, position)) return [];
       const current = await snapshot(); if (token.isCancellationRequested) return [];
       return definitionsAt(current, document.uri.toString(), position).filter(item => item.uri && item.range).map(item => new vscode.Location(vscode.Uri.parse(item.uri), range(item.range)));
     }

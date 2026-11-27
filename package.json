@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.177.0",
+  "version": "0.177.1",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -1631,6 +1631,26 @@
     },
     "viewsWelcome": [
       {
+        "view": "rocketbrain.javaProjects",
+        "contents": "Install the Java engine to use Ctrl+Click, Go to Definition, and project navigation.\n[Install Java Engine](command:rocketbrain.java.installEngine)",
+        "when": "workspaceFolderCount > 0 && isWorkspaceTrusted && config.rocketbrain.java.enabled && (rocketbrain.javaEngineState == configuration-required || !config.rocketbrain.java.javaHome || !config.rocketbrain.java.serverPath)"
+      },
+      {
+        "view": "rocketbrain.javaProjects",
+        "contents": "Java navigation is starting. You can open source files while the project is loading.",
+        "when": "rocketbrain.javaEngineState == starting"
+      },
+      {
+        "view": "rocketbrain.javaProjects",
+        "contents": "The Java engine could not start.\n[Open Java Support](command:rocketbrain.javaSupport)",
+        "when": "rocketbrain.javaEngineState == error"
+      },
+      {
+        "view": "rocketbrain.javaProjects",
+        "contents": "Java navigation requires a trusted project.\n[Manage Workspace Trust](command:workbench.trust.manage)",
+        "when": "workspaceFolderCount > 0 && !isWorkspaceTrusted"
+      },
+      {
         "view": "rocketbrain.schemaCatalog",
         "contents": "[Choose Catalog Schemas](command:rocketbrain.schemaCatalog.select)",
         "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted"
@@ -1716,6 +1736,7 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.java.installEngine", "when": "view == rocketbrain.javaProjects && workspaceFolderCount > 0 && isWorkspaceTrusted && config.rocketbrain.java.enabled && rocketbrain.javaEngineState == configuration-required", "group": "setup" },
         { "command": "rocketbrain.showQueryResults", "when": "view == rocketbrain.databases && rocketbrain.workspaceMode == datagrip", "group": "navigation@3" },
         { "command": "rocketbrain.java.testing.discover", "when": "view == rocketbrain.javaProjects && rocketbrain.workspaceMode == intellij && isWorkspaceTrusted", "group": "test" },
         { "command": "rocketbrain.contextActions.results", "when": "view == rocketbrain.results", "group": "navigation@2" },
