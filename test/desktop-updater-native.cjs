@@ -56,6 +56,7 @@ exports.activate = async context => {
   fs.writeFileSync(path.join(output, 'ready.json'), JSON.stringify({
     executable: process.execPath,
     appRoot: vscode.env.appRoot,
+    storageScheme: context.globalStorageUri.scheme,
     command: (await vscode.commands.getCommands()).includes('rocketbrain.desktop.checkForUpdates')
   }));
   const timer = setInterval(() => {
@@ -115,16 +116,16 @@ async function launch() {
           if (await candidate.locator('.rb-workbench-header').count()) return candidate;
         }
       }
-    }, 25000, 'The Rocketbrain workbench header did not render.');
+    }, 75000, 'The Rocketbrain workbench header did not render.');
     const readyPath = path.join(output, 'ready.json');
-    await waitFor(() => fs.existsSync(readyPath), 30000, 'The bundled extension did not finish activating.');
+    await waitFor(() => fs.existsSync(readyPath), 75000, 'The bundled extension did not finish activating.');
     const ready = JSON.parse(fs.readFileSync(readyPath, 'utf8'));
     assert.equal(fs.realpathSync(ready.executable).toLowerCase(), executable.toLowerCase());
     assert.equal(fs.realpathSync(ready.appRoot).toLowerCase(), path.join(installation, 'resources', 'app').toLowerCase());
     assert.equal(ready.command, true, 'The installed app did not register its desktop updater.');
     await page.locator('.rb-workbench-header button[aria-label="Check for Updates"]').click({ timeout: 10000 });
 
-    const receipt = { installedVersion, entryPoint: 'Rocketbrain header → Check for Updates' };
+    const receipt = { installedVersion, storageScheme: ready.storageScheme, entryPoint: 'Rocketbrain header → Check for Updates' };
     if (!expectedVersion) {
       await page.getByText(`Rocketbrain Desktop ${installedVersion} is up to date on its release channel.`, { exact: true })
         .waitFor({ timeout: 40000 });

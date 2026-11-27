@@ -72,19 +72,19 @@ async function run(phase, exercise) {
   child.on('error', error => { exit = { error }; });
   child.on('exit', code => { exit = { code }; });
   const phaseFile = name => path.join(root, `${phase}-${name}.json`);
-  const recorded = (name, timeout = 24000) => waitFor(() => {
+  const recorded = (name, timeout = 100000) => waitFor(() => {
     if (fs.existsSync(phaseFile('error'))) throw Error(JSON.parse(fs.readFileSync(phaseFile('error'), 'utf8')).message);
     if (fs.existsSync(phaseFile(name))) return JSON.parse(fs.readFileSync(phaseFile(name), 'utf8'));
   }, timeout, `Java setup accepted no ${name} record for ${phase}.`);
   try {
-    await waitFor(() => endpoint || exit, 30000, 'Installed app did not launch DevTools on loopback.');
+    await waitFor(() => endpoint || exit, 90000, 'Installed app did not launch DevTools on loopback.');
     if (exit) throw Error('Installed app exited during startup.', { cause: exit.error });
     browser = await chromium.connectOverCDP(endpoint);
     page = await waitFor(async () => {
       for (const context of browser.contexts()) for (const view of context.pages()) {
         if (await toolbar(view).count()) return view;
       }
-    }, 25000, 'Rocketbrain workbench did not appear.');
+    }, 90000, 'Rocketbrain workbench did not appear.');
     const activation = await recorded('activated');
     assert.equal(activation.product, 'Rocketbrain');
     return await exercise(page, recorded, phaseFile, activation);

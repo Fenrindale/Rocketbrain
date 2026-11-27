@@ -11,7 +11,8 @@ const checkCommand = 'rocketbrain.desktop.checkForUpdates';
 
 async function installedDesktop(context, vscode) {
   if (process.platform !== 'win32' || process.arch !== 'x64' || vscode.env.remoteName || !vscode.env.appRoot) return;
-  if (context.globalStorageUri?.scheme !== 'file') return;
+  const storage = context.globalStorageUri?.scheme === 'file' ? context.globalStorageUri.fsPath : context.globalStoragePath;
+  if (typeof storage !== 'string' || !path.isAbsolute(storage)) return;
   try {
     const root = await fsp.realpath(vscode.env.appRoot);
     const resources = path.dirname(root);
@@ -29,7 +30,7 @@ async function installedDesktop(context, vscode) {
     ]);
     if (bundledPath.toLowerCase() !== loadedPath.toLowerCase() ||
         executable.toLowerCase() !== path.join(directory, 'Rocketbrain.exe').toLowerCase()) return;
-    return { version: desktop.version, directory };
+    return { version: desktop.version, directory, storage };
   } catch {
     return undefined;
   }
@@ -104,7 +105,7 @@ async function registerDesktopUpdater(context, vscode) {
   const { version } = installed;
 
   const updater = makeUpdater();
-  const directory = path.join(context.globalStorageUri.fsPath, 'desktop-updates');
+  const directory = path.join(installed.storage, 'desktop-updates');
   let running = false;
   context.subscriptions.push(vscode.commands.registerCommand(checkCommand, async () => {
     if (running) {
