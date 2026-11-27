@@ -18,6 +18,8 @@
 !/architecture/product-policy.json
 !/docs/
 !/docs/**
+!/desktop/
+!/desktop/**
 !/media/
 !/media/**
 !/themes/

@@ -8,8 +8,10 @@ const modes = {
 };
 
 async function registerWorkspaceMode(context, vscode) {
+  const desktop = ['Rocketbrain', 'Rocketbrain Desktop'].includes(vscode.env?.appName);
   const saved = context.workspaceState.get(modeKey);
-  let current = typeof saved === 'string' && Object.hasOwn(modes, saved) ? saved : 'all';
+  const defaultMode = desktop ? 'intellij' : 'all';
+  let current = typeof saved === 'string' && Object.hasOwn(modes, saved) ? saved : defaultMode;
   let pending = Promise.resolve();
   const items = new Map();
 
@@ -34,13 +36,16 @@ async function registerWorkspaceMode(context, vscode) {
           current = mode;
           updateStatus();
         }
-        if (view) await vscode.commands.executeCommand(`${view}.focus`);
+        if (desktop && mode === 'datagrip') {
+          await vscode.commands.executeCommand('rocketbrain.showQueryResults');
+          await vscode.commands.executeCommand('rocketbrain.databases.focus');
+        } else if (view) await vscode.commands.executeCommand(`${view}.focus`);
       });
       pending = change.catch(() => {});
       return change;
     }));
 
-    if (view) {
+    if (view && !desktop) {
       const item = vscode.window.createStatusBarItem(command, vscode.StatusBarAlignment.Left, 55 - items.size);
       item.name = `Rocketbrain: ${label} Mode`;
       item.command = command;

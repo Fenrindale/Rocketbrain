@@ -80,6 +80,35 @@ test('remembered modes are restored without moving focus and invalid values show
   }
 });
 
+test('standalone default and mode buttons use the project and database workspaces', async () => {
+  const h = host();
+  h.vscode.env = { appName: 'Rocketbrain' };
+  await registerWorkspaceMode(h.context, h.vscode);
+  assert.equal(h.items.size, 0);
+  assert.deepEqual(h.calls, [['setContext', modeKey, 'intellij']]);
+
+  await h.run(datagripCommand);
+  assert.equal(h.state.get(modeKey), 'datagrip');
+  await h.run(intellijCommand);
+  assert.equal(h.state.get(modeKey), 'intellij');
+  assert.deepEqual(h.calls, [
+    ['setContext', modeKey, 'intellij'],
+    ['setContext', modeKey, 'datagrip'],
+    ['rocketbrain.showQueryResults'],
+    ['rocketbrain.databases.focus'],
+    ['setContext', modeKey, 'intellij'],
+    ['rocketbrain.project.focus']
+  ]);
+});
+
+test('standalone restores saved workspace modes', async () => {
+  const h = host(new Map([[modeKey, 'datagrip']]));
+  h.vscode.env = { appName: 'Rocketbrain Desktop' };
+  await registerWorkspaceMode(h.context, h.vscode);
+  assert.equal(h.items.size, 0);
+  assert.deepEqual(h.calls, [['setContext', modeKey, 'datagrip']]);
+});
+
 test('rapid selections and a failed workspace write do not overwrite the latest mode', async () => {
   const state = new Map();
   const writes = [];

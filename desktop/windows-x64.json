@@ -1,0 +1,15 @@
+{
+  "version": "0.1.0-preview.1",
+  "installerFileVersion": "0.1.0.1",
+  "platform": "win32-x64",
+  "extensionId": "rocketbrain-local.rocketbrain",
+  "extensionVersion": "0.179.1",
+  "source": {
+    "codeOssTag": "1.143.1",
+    "codeOssCommit": "e646868227c3e3a9e3f24277c8c7220be42c0be7",
+    "vscodiumTag": "1.143.17232",
+    "vscodiumCommit": "ca7f7b44b5e5c3faa663f6cdc043998f71936653",
+    "archive": "VSCodium-win32-x64-1.143.17232.zip",
+    "sha256": "a1090868af8ac0ac04c22d79fdd02246fa115a78daf38a741d8db06df1753c1d"
+  }
+}

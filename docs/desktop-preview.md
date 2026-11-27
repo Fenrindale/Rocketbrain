@@ -1,0 +1,24 @@
+# Rocketbrain Desktop Preview
+
+Rocketbrain Desktop 0.1.0-preview.1은 Windows x64용 독립 설치 시제품이다. Code OSS 1.143.1 기반의 VSCodium 1.143.17232 배포본에 Rocketbrain 작업창 패치와 Rocketbrain 0.179.1 확장을 내장한다. 별도의 VS Code 설치 없이 실행할 수 있다. [Code OSS 소스](https://github.com/microsoft/vscode/tree/1.143.1) · [기반 배포본](https://github.com/VSCodium/vscodium/releases/tag/1.143.17232)
+
+## 설치와 실행
+
+1. `RocketbrainDesktop-0.1.0-preview.1-win32-x64-setup.exe`를 실행하고 설치 위치를 선택한다. 설치 후 시작 메뉴에서 **Rocketbrain Desktop**을 열 수 있다.
+2. Java 작업 공간을 열고 상단 **Java Mode**를 누른다. Java 엔진 설정이 필요한 경우 **Java Projects** 뷰의 설정 경로를 사용한다. 상단의 **Run Java**와 **Debug Java**는 현재 Rocketbrain 실행 구성을 사용한다.
+3. 상단 **Database Mode**를 누르면 왼쪽 **Database**와 하단 **Query Results**가 열린다. 신규 연결은 Database 헤더에서 추가하고, 상단에서 **Open SQL Console**을 누른 뒤 `Ctrl+Enter`로 SQL을 실행한다.
+4. 편집이 허용된 테이블의 미리보기에서 셀 변경을 준비하고 검토 후 적용한다. 수동 트랜잭션을 연 세션에서는 커밋 후 변경이 저장된다.
+
+모드 선택은 작업 공간별로 저장된다. 독립 앱은 별도의 사용자 데이터 폴더와 설치 경로를 사용한다. 이번 Windows 설치 프로그램은 코드 서명을 포함하지 않으며 자동 업데이트를 제공하지 않는다.
+
+## 소스와 패키지 재현
+
+`desktop/windows-x64.json`에 기준 버전, 공식 Windows x64 아카이브의 SHA-256과 Rocketbrain 확장 버전을 고정한다. `desktop/workbench/rocketbrainTitlebar.ts`는 상단에 작업을 등록하는 Code OSS 소스다. 패치 스크립트는 기준 작업창 파일의 SHA-256을 확인한 뒤 같은 메뉴 등록 코드를 배포본에 적용한다. `--source`로 지정한 Code OSS 소스 체크아웃에도 등록 코드를 적용할 수 있다.
+
+의존성을 설치한 저장소에서 `node scripts/package.js`로 VSIX를 만든다. 고정된 [기반 ZIP](https://github.com/VSCodium/vscodium/releases/tag/1.143.17232)과 Inno Setup 컴파일러를 준비하고 PowerShell 7.2 이상에서 실행한다.
+
+```powershell
+./scripts/package-desktop.ps1 -BaseArchive $BaseZip -ExtensionVsix ./rocketbrain-0.179.1.vsix -Compiler $Iscc -OutputDirectory $Output
+```
+
+설치 프로그램과 패키지 검증 기록이 지정한 출력 폴더에 생성된다. 배포본은 Code OSS와 번들 구성 요소의 라이선스 고지를 포함한다.
