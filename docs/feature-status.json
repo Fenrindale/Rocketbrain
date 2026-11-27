@@ -1,5 +1,5 @@
 {
-  "version": "0.179.0",
+  "version": "0.179.1",
   "asOf": "2026-11-27",
   "total": 216,
   "fullProductParityVerified": false,
@@ -44,67 +44,21 @@
   },
   "changedFeatures": [
     "IDEA-001",
-    "IDEA-009",
-    "IDEA-014",
     "IDEA-015",
-    "IDEA-020",
-    "IDEA-024",
-    "IDEA-026",
-    "IDEA-028",
-    "IDEA-029",
-    "IDEA-030",
-    "IDEA-054",
-    "IDEA-057",
-    "IDEA-062",
-    "IDEA-070",
     "IDEA-073",
-    "IDEA-079",
-    "IDEA-084",
-    "IDEA-085",
-    "DG-001",
-    "DG-023",
-    "DG-031",
-    "DG-039",
     "DG-044",
-    "DG-047",
-    "DG-051",
-    "DG-053",
-    "DG-056",
-    "DG-075",
-    "DG-082",
+    "DG-048",
+    "DG-062",
     "DG-095",
     "DG-096"
   ],
   "expandedFeatures": [
     "IDEA-001",
-    "IDEA-009",
-    "IDEA-014",
     "IDEA-015",
-    "IDEA-020",
-    "IDEA-024",
-    "IDEA-026",
-    "IDEA-028",
-    "IDEA-029",
-    "IDEA-030",
-    "IDEA-054",
-    "IDEA-057",
-    "IDEA-062",
-    "IDEA-070",
     "IDEA-073",
-    "IDEA-079",
-    "IDEA-084",
-    "IDEA-085",
-    "DG-001",
-    "DG-023",
-    "DG-031",
-    "DG-039",
     "DG-044",
-    "DG-047",
-    "DG-051",
-    "DG-053",
-    "DG-056",
-    "DG-075",
-    "DG-082",
+    "DG-048",
+    "DG-062",
     "DG-095",
     "DG-096"
   ],
@@ -139,6 +93,11 @@
         "version": "0.179.0",
         "evidence": "docs/ui-reachability-audit.md",
         "state": "declared-placement"
+      },
+      "desktopPreview": {
+        "version": "0.1.0-preview.1",
+        "scope": "독립 앱의 전역 상단 도구 모음에서 Java·DB 모드를 선택한다. Java Projects와 DB 탐색기 및 하단 결과를 선택한 모드에서 연다.",
+        "evidence": "docs/desktop-preview-verification.json"
       }
     },
     {
@@ -554,6 +513,11 @@
           "stateAtInput": "Starting",
           "successfulTrials": 3
         }
+      },
+      "desktopPreview": {
+        "version": "0.1.0-preview.1",
+        "scope": "설치된 독립 앱의 Maven 예제에서 실제 Ctrl+클릭으로 Greeter.java의 메서드 선언을 열었다.",
+        "evidence": "docs/desktop-preview-verification.json"
       }
     },
     {
@@ -2285,6 +2249,11 @@
         "version": "0.179.0",
         "evidence": "docs/ui-reachability-audit.md",
         "state": "declared-placement"
+      },
+      "desktopPreview": {
+        "version": "0.1.0-preview.1",
+        "scope": "상단 Run Java와 Debug Java를 직접 눌러 실행 및 실제 JVM 중단점에서 정지·재개를 확인했다.",
+        "evidence": "docs/desktop-preview-verification.json"
       }
     },
     {
@@ -4976,6 +4945,11 @@
         "evidence": "docs/ui-reachability-audit.md",
         "state": "installed-input-observed",
         "observedAction": "SQL default input"
+      },
+      "desktopPreview": {
+        "version": "0.1.0-preview.1",
+        "scope": "독립 앱에서 두 실제 DB에 각각 연결하고 세미콜론 바로 뒤 Ctrl+Enter로 SQL 결과를 열었다.",
+        "evidence": "docs/desktop-preview-verification.json"
       }
     },
     {
@@ -5101,6 +5075,11 @@
       "uiPlacement": {
         "version": "0.178.0",
         "evidence": "docs/ui-reachability-audit.md"
+      },
+      "desktopPreview": {
+        "version": "0.1.0-preview.1",
+        "scope": "독립 앱 하단 그리드 커밋 전후의 결과를 별도 연결로 대조했다.",
+        "evidence": "docs/desktop-preview-verification.json"
       }
     },
     {
@@ -5549,6 +5528,11 @@
       "uiPlacement": {
         "version": "0.178.0",
         "evidence": "docs/ui-reachability-audit.md"
+      },
+      "desktopPreview": {
+        "version": "0.1.0-preview.1",
+        "scope": "독립 앱의 하단 그리드에서 셀 편집, SQL 검토, 적용, 커밋과 저장값을 확인했다.",
+        "evidence": "docs/desktop-preview-verification.json"
       }
     },
     {
@@ -6556,6 +6540,11 @@
         "version": "0.179.0",
         "evidence": "docs/ui-reachability-audit.md",
         "state": "declared-placement"
+      },
+      "desktopPreview": {
+        "version": "0.1.0-preview.1",
+        "scope": "독립 앱의 상단 DB 모드 버튼을 눌러 왼쪽 Database 탐색기와 하단 Query Results를 열었다.",
+        "evidence": "docs/desktop-preview-verification.json"
       }
     },
     {
@@ -6598,23 +6587,30 @@
         "evidence": "docs/ui-reachability-audit.md",
         "state": "installed-input-observed",
         "observedAction": "Show Result SQL"
+      },
+      "desktopPreview": {
+        "version": "0.1.0-preview.1",
+        "scope": "상단 SQL 콘솔, 편집기의 Ctrl+Enter와 하단 결과 그리드를 설치본에서 연속으로 조작했다.",
+        "evidence": "docs/desktop-preview-verification.json"
       }
     }
   ],
   "stateChanges": [],
   "publicWorkflow": "docs/verification.json",
   "localVerification": {
-    "vsixSha256": "dd7eb1fd329c591220ea88853484b845238d89646aa50618f1f091161204aef3",
-    "focusedNativeHosts": []
+    "vsixSha256": "b9c7ec88941309217b4299e75f8a8df6e57c27ccda11bd611febfecb76e225ff",
+    "focusedNativeHosts": [
+      "Rocketbrain Desktop on Windows x64"
+    ]
   },
   "offline": {
     "origin": "GitHub-hosted exact source preview; external-runtime tests may skip",
-    "head": "80e42c90f95c3bb49a7d4fee8e809bd80b918aab",
-    "run": 45946503900,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45946503900",
-    "tests": 2319,
+    "head": "afea60960e3d4f71420992b553ac166dc2bdcc16",
+    "run": 45948967944,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45948967944",
+    "tests": 2323,
     "suites": 0,
-    "pass": 2066,
+    "pass": 2070,
     "fail": 0,
     "cancelled": 0,
     "skipped": 253,
@@ -6624,5 +6620,14 @@
     "path": "docs/ui-reachability-audit.md",
     "rows": 216,
     "placementVerification": "Only listed installed input and click evidence counts; a palette entry is not placement evidence."
+  },
+  "desktopPreview": {
+    "version": "0.1.0-preview.1",
+    "platform": "win32-x64",
+    "evidence": "docs/desktop-preview-verification.json",
+    "host": "Code OSS 1.143.1 via VSCodium 1.143.17232",
+    "status": "installed-workflows-verified",
+    "priorExtensionEvidence": "docs/verification.json",
+    "comparisonWeightsChanged": false
   }
 }

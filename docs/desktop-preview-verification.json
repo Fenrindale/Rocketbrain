@@ -1,0 +1,126 @@
+{
+  "desktopVersion": "0.1.0-preview.1",
+  "platform": "win32-x64",
+  "baseArchiveSha256": "a1090868af8ac0ac04c22d79fdd02246fa115a78daf38a741d8db06df1753c1d",
+  "codeOssCommit": "e646868227c3e3a9e3f24277c8c7220be42c0be7",
+  "workbenchSha256": "114702af5aebe7c58d43be0bfe52c086aaae8ca34a2331248b27c5ab40f01ef8",
+  "extensionVersion": "0.179.1",
+  "extensionVsixSha256": "b9c7ec88941309217b4299e75f8a8df6e57c27ccda11bd611febfecb76e225ff",
+  "installerFile": "RocketbrainDesktop-0.1.0-preview.1-win32-x64-setup.exe",
+  "installerSha256": "6c576bdf3af8ad571ae001ed3ce70097e96a62b8894aeae8c144b3761c9fdb19",
+  "installerBytes": 218571497,
+  "verifiedAt": "2026-11-27T06:03:18.323Z",
+  "source": {
+    "codeOssTag": "1.143.1",
+    "codeOssCommit": "e646868227c3e3a9e3f24277c8c7220be42c0be7",
+    "vscodiumTag": "1.143.17232",
+    "vscodiumCommit": "ca7f7b44b5e5c3faa663f6cdc043998f71936653",
+    "archive": "VSCodium-win32-x64-1.143.17232.zip",
+    "sha256": "a1090868af8ac0ac04c22d79fdd02246fa115a78daf38a741d8db06df1753c1d"
+  },
+  "installation": {
+    "profile": "isolated Windows x64 user installation",
+    "exitCode": 0,
+    "restartRequired": false,
+    "signed": false,
+    "executableSha256": "38ed869b89c23e7bb17844d43caa359a50d770e330aee945f6b9d3b6ff620a91",
+    "installedWorkbenchSha256": "114702af5aebe7c58d43be0bfe52c086aaae8ca34a2331248b27c5ab40f01ef8",
+    "builtInExtension": true,
+    "installedExtensionSha256": "ebabb42b912df995af919339fdd17f37da61bf1fece601265806ad28e6b5f658"
+  },
+  "nativeVerification": {
+    "driver": "test/desktop-native-host.cjs",
+    "steps": [
+      {
+        "action": "Window toolbar → Java Mode",
+        "result": "Java Projects visible"
+      },
+      {
+        "action": "Java editor → Ctrl+Click",
+        "result": "Greeter.java declaration opened from App.java"
+      },
+      {
+        "action": "Window toolbar → Run Java",
+        "result": "Fixture JVM printed its greeting and exited"
+      },
+      {
+        "action": "Window toolbar → Debug Java",
+        "result": "Owned Java debug session stopped at breakpoint, resumed and exited"
+      },
+      {
+        "action": "Window toolbar → Database Mode",
+        "result": "Database Explorer and bottom Query Results visible"
+      },
+      {
+        "action": "SQL console → Ctrl+Enter",
+        "result": "Observed marker 31807 in the bottom panel after the statement terminator"
+      },
+      {
+        "action": "Database Explorer → bottom result grid edit",
+        "result": "Staged cell, reviewed UPDATE, applied, committed and read back by separate SQL client"
+      }
+    ],
+    "databaseTrials": [
+      {
+        "name": "MariaDB",
+        "version": "11.4.8-MariaDB",
+        "receiptSha256": "1d42b24532025b1680e3770347089a1244c8dc1721ee7a2112475b69de46dabc",
+        "appliedUpdateHiddenBeforeCommit": true,
+        "independentReadAfterCommit": true,
+        "peerRowUnchanged": true,
+        "ownedFixtureStopped": true
+      },
+      {
+        "name": "MySQL",
+        "version": "8.4.13",
+        "receiptSha256": "fb8c6b067a728e2ca952815d90d62fc8b0e362b978a4dba234ad0d01f7135c5d",
+        "appliedUpdateHiddenBeforeCommit": true,
+        "independentReadAfterCommit": true,
+        "peerRowUnchanged": true,
+        "ownedFixtureStopped": true
+      }
+    ],
+    "java": "Owned Maven sample with JDT LS and Java Debug Adapter"
+  },
+  "craftAnything": {
+    "channel": "Craft Anything CLI",
+    "vsixFiles": 39,
+    "archiveContradictions": 0,
+    "archiveReceiptSha256": "7b8fbb4dd4e9fd4e5670305de5c8e356b10cd855425137c425b8a8f01b1b2e95",
+    "installedWindow": {
+      "title": "sample - Rocketbrain",
+      "width": 1435,
+      "height": 901,
+      "receiptSha256": "bdde1331c47a2fe658b6f778ce1f22d96a40237d4350c946ab70aec4c622761a"
+    }
+  },
+  "sourceChecks": {
+    "head": "afea60960e3d4f71420992b553ac166dc2bdcc16",
+    "run": 45948967944,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45948967944",
+    "summary": {
+      "tests": 2323,
+      "suites": 0,
+      "pass": 2070,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 253,
+      "todo": 0
+    },
+    "matchingBundledVsixFiles": 39
+  },
+  "platformCoverage": [
+    "win32-x64"
+  ],
+  "limits": [
+    "Prototype uses a pinned VSCodium-built Code OSS distribution with the Rocketbrain workbench source contribution.",
+    "The Windows installer has no code signature or automatic updates.",
+    "The Java run and debug checks used a Maven sample and the configured JDK, JDT LS and Java Debug Adapter.",
+    "The previous 216-row extension score is independent of desktop preview coverage."
+  ],
+  "progress": {
+    "weightedPoints": 213,
+    "referencePercent": 98.6,
+    "targetWeightedPoints": 216
+  }
+}
