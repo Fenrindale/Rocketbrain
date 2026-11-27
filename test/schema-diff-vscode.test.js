@@ -44,11 +44,57 @@ test('two saved snapshots compare and produce selected editable SQL without a da
  assert.match(h.api.reviewText(report.id),/Compared saved snapshots/);
  assert.doesNotMatch(h.api.reviewText(report.id),/Review Selected Schema Rebuild/);
  assert.equal(opened[1].language,'sql');
+ assert.match(opened[1].content,/^-- Editable migration draft\n-- Captured target "target_app"/u);
  assert.match(opened[1].content,/ALTER TABLE `target_app`\.`people` ADD COLUMN `selected_note`/);
  assert.doesNotMatch(opened[1].content,/origin_app|other_note/);
  const selected=report.changes.find(change=>change.object==='selected_note');
  await assert.rejects(h.api.plan(report.id,[selected.id]),/connected target/);
  await assert.rejects(h.api.planRebuild(report.id,['people'],{changeIds:[selected.id]}),/connected target/);
+});
+
+test('additive selection explains transitive prerequisites and keeps choices while editing',async t=>{
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'rocketbrain-saved-prerequisites-'));
+ t.after(()=>fs.rmSync(temp,{recursive:true,force:true}));
+ const target=fixture({database:'target_app'});
+ const raw=addColumn(addColumn(addColumn(fixture({database:'origin_app'}),'prefix'),'note'),'unrelated');
+ raw.tables[0].indexes.push({name:'note_idx',unique:false,primaryKey:false,type:'BTREE',comment:'',
+  columns:[{name:'note',ordinal:1,prefixLength:null,collation:'A'}]});
+ const origin=require('../src/db/schema-diff').normalizeSnapshot(raw,{verifyFingerprint:false});
+ const files=[target,origin].map((snapshot,index)=>{
+  const fsPath=path.join(temp,index+'.json');
+  fs.writeFileSync(fsPath,JSON.stringify(snapshot));
+  return [{scheme:'file',fsPath}];
+ });
+ const h=host(()=>assert.fail('The draft should not connect to a database.'));
+ t.after(()=>h.api.dispose());
+ const documents=[];
+ let selections=0,notices=0;
+ h.vscode.Uri={parse:value=>({path:new URL(value).pathname})};
+ h.vscode.workspace.openTextDocument=async value=>value;
+ h.vscode.window.showTextDocument=async value=>{documents.push(value);};
+ h.vscode.window.showOpenDialog=async ()=>files.shift();
+ h.vscode.window.showErrorMessage=async error=>assert.fail(error);
+ h.vscode.window.showQuickPick=async (items,options)=>{
+  assert.equal(options.matchOnDescription,true);
+  assert.equal(options.matchOnDetail,true);
+  const index=items.find(item=>item.label==='people.note_idx');
+  assert.equal(index.description,'Add index');
+  assert.equal(index.detail,'Requires people.note');
+  assert.deepEqual(items.filter(item=>item.picked).map(item=>item.label),selections++?['people.note_idx']:[]);
+  return [index];
+ };
+ h.vscode.window.showWarningMessage=async (message,include,edit)=>{
+  assert.match(message,/people\.note, people\.prefix/u);
+  assert.equal(include,'Include Required Changes');
+  assert.equal(edit,'Edit Selection');
+  return notices++?include:edit;
+ };
+ await h.commands.get('rocketbrain.schema.compareSavedSnapshots')();
+ assert.equal(selections,2);
+ assert.equal(notices,2);
+ const draft=documents.at(-1).content;
+ assert.match(draft,/ADD COLUMN `prefix`[\s\S]*ADD COLUMN `note`[\s\S]*ADD KEY `note_idx`/u);
+ assert.doesNotMatch(draft,/unrelated/u);
 });
 
 test('an editable SQL draft leaves the retained migration document and application untouched',async t=>{
@@ -69,10 +115,61 @@ test('an editable SQL draft leaves the retained migration document and applicati
  await h.commands.get('rocketbrain.schema.openMigrationDraft')();
  assert.equal(captures,2);
  assert.equal(prepares,1);
- assert.deepEqual(opened,[{language:'sql',content:plan.sql+'\n'}]);
+ assert.equal(opened.length,1);
+ assert.equal(opened[0].language,'sql');
+ assert.match(opened[0].content,/^-- Editable migration draft\n-- Captured target "one" .+ "local" port 3306\n/u);
+ assert.ok(opened[0].content.endsWith(plan.sql+'\n'));
  opened[0].content='ALTER TABLE other_table ADD COLUMN unexpected INT;';
  const reviewText=h.providers.get('rocketbrain-schema-compare').provideTextDocumentContent({path:'/'+plan.id+'/migration.sql'});
  assert.equal(reviewText,plan.sql);
+});
+
+test('apply picker and confirmation distinguish same-named schemas by captured server',async t=>{
+ const {planMigration,normalizeSnapshot}=require('../src/db/schema-diff');
+ const makeTarget=hostname=>{
+  const raw=fixture({database:'app'});
+  raw.server.hostname=hostname;
+  return normalizeSnapshot(raw,{verifyFingerprint:false});
+ };
+ let active=makeTarget('north-db');
+ const applied=[];
+ const h=host(async()=>active,{prepare:async request=>({
+  plan:planMigration(request.current,request.desired,request),
+  reviewId:request.current.server.hostname,expiresAt:Date.now()+10000,connectionEpoch:2
+ }),apply:async request=>{
+  applied.push(request.reviewId);
+  return {state:'applied',database:'app',completed:1,notRun:0,steps:[]};
+ }});
+ t.after(()=>h.api.dispose());
+ h.vscode.Uri={parse:value=>({path:new URL(value).pathname})};
+ h.vscode.workspace.openTextDocument=async value=>value;
+ h.vscode.window.showTextDocument=async ()=>{};
+ h.vscode.window.showErrorMessage=async error=>assert.fail(error);
+ h.vscode.ProgressLocation={Notification:3};
+ h.vscode.window.withProgress=async (_,run)=>run();
+ for(const server of ['north-db','south-db']){
+  active=makeTarget(server);
+  const desired=addColumn(structuredClone(active),'note');
+  const comparison=await h.api.compare(desired);
+  await h.api.plan(comparison.id,[comparison.changes.find(item=>item.object==='note').id]);
+ }
+ h.vscode.window.showQuickPick=async (items,options)=>{
+  assert.equal(options.matchOnDetail,true);
+  assert.equal(items.length,2);
+  assert.equal(items[0].label,items[1].label);
+  assert.match(items[0].description,/"south-db" port 3306/u);
+  assert.match(items[1].description,/"north-db" port 3306/u);
+  assert.match(items[0].detail,/people\.note/u);
+  return items[0];
+ };
+ h.vscode.window.showWarningMessage=async (message,options,action)=>{
+  assert.match(message,/"app" on mysql .+ "south-db" port 3306/u);
+  assert.equal(options.modal,true);
+  assert.match(options.detail,/commit independently/u);
+  return action;
+ };
+ assert.equal((await h.commands.get('rocketbrain.schema.applyMigration')()).state,'applied');
+ assert.deepEqual(applied,['south-db']);
 });
 
 test('a saved origin profile plans SQL for the reviewed active target and refuses target drift',async t=>{
@@ -93,8 +190,8 @@ test('a saved origin profile plans SQL for the reviewed active target and refuse
  t.after(()=>h.api.dispose());
  h.vscode.Uri={parse:value=>({path:new URL(value).pathname})};
  h.vscode.workspace.openTextDocument=async input=>input;
- h.vscode.window.showTextDocument=async input=>{opened.push(input.path);};
- h.vscode.window.showInformationMessage=async()=>{};
+ h.vscode.window.showTextDocument=async input=>{opened.push(input.path||input);};
+ h.vscode.window.showInformationMessage=async(_message,action)=>action;
  h.vscode.window.showErrorMessage=async message=>{errors.push(message);};
  h.vscode.window.showQuickPick=async (items,{title})=>{
   assert.equal(title,'Select Changes for Migration SQL Review');
@@ -108,6 +205,8 @@ test('a saved origin profile plans SQL for the reviewed active target and refuse
  assert.doesNotMatch(plan.sql,/origin_app/);
  assert.match(h.api.reviewText(opened[0].split('/')[1]),/Origin profile: "Design profile"/);
  assert.match(opened[1],/\/migration\.sql$/);
+ assert.equal(opened[2].language,'sql');
+ assert.match(opened[2].content,/^-- Editable migration draft/u);
  assert.deepEqual(errors,[]);
 
  changeDuringOrigin=true;

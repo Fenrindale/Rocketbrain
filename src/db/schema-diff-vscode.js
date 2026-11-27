@@ -9,6 +9,32 @@ const rebuildChangeLabels={
  'add-index':'Add index','drop-index':'Drop index','change-index':'Change index',
  'change-foreignKeys':'Change foreign keys','change-view':'Change view definition'
 };
+const editMigrationSelection='Edit Selection';
+const includeRequiredChanges='Include Required Changes';
+const openEditableDraft='Open Editable SQL Draft';
+
+function migrationChangeName(change){
+ return change.kind==='create-table'?change.table:change.table+'.'+change.object;
+}
+
+function singleLine(value){
+ return JSON.stringify(value).replace(/[\u0085\u2028\u2029]/g,character=>'\\u'+character.charCodeAt(0).toString(16).padStart(4,'0'));
+}
+
+function migrationServer(server){
+ return server.dialect+' '+singleLine(server.version)+' · '+singleLine(server.hostname)+' port '+server.port;
+}
+
+function migrationTarget(database,server){
+ return singleLine(database)+' on '+migrationServer(server);
+}
+
+function migrationChoice(plan){
+ const names=plan.steps.slice(0,2).map(migrationChangeName);
+ return {label:plan.database+' · '+plan.steps.length+' selected change(s)',description:migrationServer(plan.currentServer),
+  detail:names.join(', ')+(plan.steps.length>names.length?' and '+(plan.steps.length-names.length)+' more':'')+' · '+plan.createdAt,
+  id:plan.id};
+}
 
 function registerSchemaComparison(context,vscode,{capture,chooseOrigin,prepare,apply:applyPrepared,discard,prepareRebuild,applyRebuild:applyPreparedRebuild,recoverRebuild:recoverPrepared,listRecoveries:readRecoveries,discardRebuild}={}){
  const comparisons=new Map(),plans=new Map(),applications=new Map(),rebuildApplications=new Map(),reports=new Map(),controllers=new Set(),operations=new Set(),subscriptions=[];let closed=false;
@@ -97,7 +123,8 @@ function registerSchemaComparison(context,vscode,{capture,chooseOrigin,prepare,a
   const value=comparisons.get(comparisonId);if(!value)return 'Schema comparison expired.';const report=value.report;
   const rebuildIds=new Set(!prepareRebuild||report.reviewOnly||report.savedSnapshots?[]:report.changes.filter(change=>
    isSelectableRebuildChange(change,value.current,value.desired)).map(change=>change.id));
-  return ['# Schema comparison',`Current: ${report.currentDatabase} · ${report.currentServer.dialect} ${report.currentServer.version}`,`Desired: ${report.desiredDatabase} · ${report.desiredServer.dialect} ${report.desiredServer.version}`,
+  return ['# Schema comparison','Target '+migrationTarget(report.currentDatabase,report.currentServer),
+   'Origin '+migrationTarget(report.desiredDatabase,report.desiredServer),
    ...comparisonOptionLines(report),
    ...(report.savedSnapshots?['', 'Compared saved snapshots. Selected additive SQL opens as an editable draft. Connect to the target and compare again to prepare managed application.']:[]),
    ...(report.originProfileName?['', 'Origin profile: '+JSON.stringify(report.originProfileName)+'. Changes are planned for the captured target.']:[]),
@@ -195,14 +222,44 @@ function registerSchemaComparison(context,vscode,{capture,chooseOrigin,prepare,a
  async function chooseMigrationChanges(report,title){
   const selectable=report.changes.filter(change=>change.selectable);
   if(!selectable.length)return [];
-  const selected=await vscode.window.showQuickPick(selectable.map(change=>({
-   label:change.kind+' · '+change.table+'.'+change.object,changeId:change.id
-  })),{title,canPickMany:true});
-  return selected?.map(item=>item.changeId)||[];
+  const byId=new Map(report.changes.map(change=>[change.id,change]));
+  const choices=selectable.map(change=>({
+   label:migrationChangeName(change),description:rebuildChangeLabels[change.kind]||'Create table',changeId:change.id,
+   detail:change.dependencies.length?'Requires '+change.dependencies.map(id=>migrationChangeName(byId.get(id))).join(', '):undefined
+  }));
+  let picked=new Set();
+  for(;;){
+   trusted();
+   const selected=await vscode.window.showQuickPick(choices.map(choice=>({...choice,picked:picked.has(choice.changeId)})),{
+    title,canPickMany:true,matchOnDescription:true,matchOnDetail:true,
+    placeHolder:'Target '+migrationTarget(report.currentDatabase,report.currentServer)
+   });
+   trusted();
+   if(!selected?.length)return [];
+   picked=new Set(selected.map(item=>item.changeId));
+   const complete=new Set(picked);
+   for(const id of complete)for(const dependency of byId.get(id).dependencies)complete.add(dependency);
+   const missing=[...complete].filter(id=>!picked.has(id));
+   if(!missing.length)return [...picked];
+   const unavailable=missing.some(id=>!byId.get(id).selectable);
+   const tooMany=complete.size>engine.LIMITS.selectedChanges;
+   const canInclude=!unavailable&&!tooMany;
+   const names=missing.slice(0,4).map(id=>migrationChangeName(byId.get(id)));
+   const summary=names.join(', ')+(missing.length>names.length?' and '+(missing.length-names.length)+' more':'');
+   const extra=unavailable?' A required change needs a separate migration.':tooMany?
+    ' Select no more than '+engine.LIMITS.selectedChanges+' changes including prerequisites.':'';
+   const response=await vscode.window.showWarningMessage('This selection requires '+summary+'.'+extra,
+    ...(canInclude?[includeRequiredChanges]:[]),editMigrationSelection);
+   trusted();
+   if(response===includeRequiredChanges&&canInclude)return [...complete];
+   if(response!==editMigrationSelection)return [];
+  }
  }
  async function openMigrationDraft(plan){
   trusted();
-  const document=await vscode.workspace.openTextDocument({language:'sql',content:plan.sql+'\n'});
+  const content=['-- Editable migration draft','-- Captured target '+migrationTarget(plan.database,plan.currentServer),
+   '-- Check the connection before running this SQL. Managed Apply uses its saved review.','',plan.sql,''].join('\n');
+  const document=await vscode.workspace.openTextDocument({language:'sql',content});
   trusted();
   await vscode.window.showTextDocument(document,{preview:false});
  }
@@ -226,7 +283,11 @@ function registerSchemaComparison(context,vscode,{capture,chooseOrigin,prepare,a
   if(!report.summary.selectable){await vscode.window.showInformationMessage('No supported additive SQL candidates. Review the comparison for changed or destructive definitions.');return report;}
   const selected=await chooseMigrationChanges(report,'Select Changes for Migration SQL Review');if(!selected.length)return report;
   const migration=await api.plan(report.id,selected),review=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-compare:/'+migration.id+'/migration.sql'));await vscode.window.showTextDocument(review,{preview:false});
-  await vscode.window.showInformationMessage(prepare?'Review the selected SQL, then use Apply Reviewed Schema Migration. Each DDL can commit independently.':'Migration SQL is a review plan. Revalidate the current schema before explicit execution; DDL steps are not one transaction.');return migration;
+  const action=await vscode.window.showInformationMessage(
+   prepare?'Review the selected SQL and its target before applying. Each DDL can commit independently.':
+    'Migration SQL is a review plan. Revalidate the current schema before explicit execution.',openEditableDraft);
+  if(action===openEditableDraft)await openMigrationDraft(migration);
+  return migration;
  }
  async function compareOriginProfile(){
   trusted();
@@ -266,11 +327,9 @@ function registerSchemaComparison(context,vscode,{capture,chooseOrigin,prepare,a
  command('rocketbrain.schema.compareOriginProfile',compareOriginProfile);
  command('rocketbrain.schema.openMigrationDraft',async()=>{
   trusted();
-  const choices=[...plans.values()].filter(plan=>plan.format==='RocketbrainSchemaMigrationPlan').map(plan=>({
-   label:plan.database+' · '+plan.steps.length+' selected step(s)',description:plan.createdAt,id:plan.id
-  }));
+  const choices=[...plans.values()].filter(plan=>plan.format==='RocketbrainSchemaMigrationPlan').reverse().map(migrationChoice);
   if(!choices.length)throw Error('Create a selected schema migration review first.');
-  const selected=await vscode.window.showQuickPick(choices,{title:'Open Editable Migration SQL Draft'});
+  const selected=await vscode.window.showQuickPick(choices,{title:'Open Editable Migration SQL Draft',matchOnDescription:true,matchOnDetail:true});
   if(!selected)return;
   const plan=plans.get(selected.id);
   if(!plan)throw Error('The selected migration review is unavailable.');
@@ -297,7 +356,28 @@ function registerSchemaComparison(context,vscode,{capture,chooseOrigin,prepare,a
   if(selected)return openStoredDiff(selected.comparisonId,selected.objectId);
  });
  command('rocketbrain.schema.validateMigration',async()=>{trusted();const items=[...plans.values()].filter(p=>p.format==='RocketbrainSchemaMigrationPlan');if(!items.length)throw new Error('Create a selected schema migration review first.');const selected=await vscode.window.showQuickPick(items.map(p=>({label:p.database+' · '+p.steps.length+' step(s)',description:p.createdAt,plan:p})),{title:'Revalidate Migration Review'});if(!selected)return;const result=await api.validate(selected.plan.id);await vscode.window.showInformationMessage('Current schema still matches this migration review. Exported SQL does not enforce this check at later execution.');return result;});
- command('rocketbrain.schema.applyMigration',async()=>{trusted();const choices=[...plans.values()].filter(p=>applications.has(p.id)).map(p=>({label:p.database+' · '+p.steps.length+' selected step(s)',description:p.createdAt,plan:p}));if(!choices.length)throw new Error('Create a selected migration review first.');const selected=await vscode.window.showQuickPick(choices,{title:'Apply Reviewed Schema Migration'});if(!selected)return;const document=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-compare:/'+selected.plan.id+'/migration.sql'));await vscode.window.showTextDocument(document,{preview:false});const accepted=await vscode.window.showWarningMessage('Apply this reviewed SQL? Each schema statement can commit implicitly. Earlier successful steps remain when a later one fails; automatic retry and rollback are unavailable.',{modal:true},'Apply Reviewed Schema');if(accepted!=='Apply Reviewed Schema')return;trusted();const report=await vscode.window.withProgress({title:'Applying reviewed schema changes',location:vscode.ProgressLocation.Notification,cancellable:true},(_progress,cancellation)=>api.apply(selected.plan.id,{allowImplicitCommit:true,cancellation}));const outcome=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-compare:/'+report.id+'/application.md'));await vscode.window.showTextDocument(outcome,{preview:false});return report;});
+ command('rocketbrain.schema.applyMigration',async()=>{
+  trusted();
+  const choices=[...plans.values()].filter(plan=>applications.has(plan.id)).reverse().map(migrationChoice);
+  if(!choices.length)throw Error('Create a selected migration review first.');
+  const selected=await vscode.window.showQuickPick(choices,{title:'Apply Reviewed Schema Migration',matchOnDescription:true,matchOnDetail:true});
+  if(!selected)return;
+  trusted();
+  const plan=plans.get(selected.id);
+  if(!plan||!applications.has(selected.id))throw Error('The selected migration review is unavailable.');
+  const document=await vscode.workspace.openTextDocument(vscode.Uri.parse('rocketbrain-schema-compare:/'+plan.id+'/migration.sql'));
+  trusted();
+  await vscode.window.showTextDocument(document,{preview:false});
+  const accepted=await vscode.window.showWarningMessage(
+   'Apply '+plan.steps.length+' reviewed change(s) to '+migrationTarget(plan.database,plan.currentServer)+'?',
+   {modal:true,detail:'Each DDL statement can commit independently. Earlier successful steps remain when a later step fails.'},
+   'Apply Reviewed Schema');
+  if(accepted!=='Apply Reviewed Schema')return;
+  trusted();
+  const report=await vscode.window.withProgress({title:'Applying reviewed schema changes',location:vscode.ProgressLocation.Notification,
+   cancellable:true},(_progress,cancellation)=>api.apply(plan.id,{allowImplicitCommit:true,cancellation}));
+  return outcome(report);
+ });
  async function reviewRebuildTarget(comparisonId,current,desired,tables,selectedChanges,{mapTriggerColumns=false}={}){
   const conversion=require('./schema-conversion-vscode');
   const columnMappings=await conversion.chooseColumnMappings(vscode,current,desired,tables);
