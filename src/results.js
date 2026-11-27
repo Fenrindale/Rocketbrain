@@ -9,6 +9,7 @@ const { analyzeResult, numericColumns } = require('./db/result-analysis');
 const { mapResult, mapColumns } = require('./db/result-map');
 const { compareDatasets: compareCaptures, selectDatasetChanges } = require('./db/dataset-comparison');
 const tabActions = new Set(['closeResult', 'renameResult', 'setResultPin']);
+const tsvField = value => spreadsheetText(value).replace(/[\t\r\n]/gu, ' ');
 function resultName(value) {
   if (typeof value !== 'string' || value.length > 80 || /[\x00-\x1f\x7f]/.test(value)) {
     throw Error('Enter a result name of at most 80 characters without line breaks or control characters.');
@@ -49,7 +50,8 @@ class ResultsView {
 <button id="return-source-row" type="button" hidden>Back to Source Row</button>
 <section id="script-result-sets" aria-label="Captured results" hidden><label><span id="script-result-label">Statement result</span> <select id="script-result-selection"></select></label><button id="open-script-statement" type="button">Open Captured Statement</button></section>
 <div id="message" role="status" aria-live="polite">Run SQL from the editor with Ctrl+Enter.</div>
-<section id="result-layout" aria-label="Result view options" hidden><div id="result-row-navigation" hidden><button id="result-row-previous">Previous Row</button><span id="result-row-status" role="status"></span><button id="result-row-next">Next Row</button></div><button id="result-columns" aria-expanded="false">Columns</button></section>
+<section id="result-layout" aria-label="Result view options" hidden><div id="result-row-navigation" hidden><button id="result-row-previous">Previous Row</button><span id="result-row-status" role="status"></span><button id="result-row-next">Next Row</button></div><button id="result-columns" aria-expanded="false">Columns</button><div id="result-cell-tools" role="group" aria-label="Selected cell actions" hidden><button id="copy-cell" type="button" disabled>Copy Cell</button><button id="copy-row" type="button" title="Copy the captured row in query order, including hidden columns" disabled>Copy Row</button><button id="view-cell-record" type="button" disabled>View Record</button><button id="edit-selected-cell" type="button" hidden>Edit Cell</button></div></section>
+<div id="result-cell-menu" role="menu" aria-label="Result cell actions" hidden></div>
 <section id="result-column-panel" aria-label="Result columns" hidden><div id="result-column-list"></div><button id="result-column-reset">Reset Columns</button></section>
 <form id="insert-export" hidden><label>Table <input id="export-table" required maxlength="64" autocomplete="off" spellcheck="false"></label><label>Schema <input id="export-schema" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Optional"></label><label>Columns <input id="export-columns" autocomplete="off" spellcheck="false" placeholder="Optional JSON array in query order"></label><button type="submit">Save INSERT Script</button><button id="export-cancel" type="button">Cancel</button></form>
 <section id="browse-tools" aria-label="Server table browsing" hidden><div class="browse-navigation"><button id="page-previous">Previous Page</button><span id="page-label"></span><button id="page-next">Next Page</button><label id="continuous-scroll-choice" hidden><input id="continuous-scroll" type="checkbox"> Continuous scroll</label><label>Rows <select id="page-size" aria-label="Rows per page"><option>25</option><option>50</option><option>100</option><option selected>200</option><option>500</option></select></label><button id="browse-options" aria-expanded="false">Sort and Filter</button></div><form id="browse-form" hidden><div><strong>Sort columns</strong><div id="sort-rules"></div><button id="add-sort" type="button">Add Sort</button></div><div id="sort-presets" class="browse-actions" hidden><label>Saved sort <select id="saved-sort" aria-label="Saved sort"></select></label><button id="load-sort" type="button">Load Sort</button><button id="save-sort" type="button">Save Applied Sort</button><button id="remove-sort" type="button">Remove Saved Sort</button></div><div id="filter-presets" class="browse-actions" hidden><label>Saved filter <select id="saved-filter" aria-label="Saved filter"></select></label><button id="load-filter" type="button">Load Filter</button><button id="save-filter" type="button">Save Applied Filters</button><button id="remove-filter" type="button">Remove Saved Filter</button></div><div id="column-search" class="browse-rule"><label>Search column <select id="browse-search-column"></select></label><input id="browse-search-text" aria-label="Column search value" type="text" autocomplete="off" spellcheck="false"><button id="browse-search-add" type="button">Add Search Rule</button></div><div><strong>Filters (top-level conditions all match)</strong><div id="filter-rules"></div><div class="browse-actions"><button id="add-filter" type="button">Add Filter</button><button id="add-filter-group" type="button">Add Filter Group</button></div></div><div class="browse-actions"><button id="apply-browse" type="submit">Apply Sort and Filters</button><button id="clear-browse" type="button">Clear Sort and Filters</button></div></form><div id="browse-status" role="status"></div></section>
@@ -184,6 +186,8 @@ class ResultsView {
         await v.workspace.fs.writeFile(target, data);
       } else if (msg.type === 'copy') {
         await this.copyResult(record);
+      } else if (msg.type === 'copySelection' && this.view === view && this.activeResult() === record) {
+        await this.copySelection(record, msg);
       }
       } catch (error) {if(['chooseImportFile','chooseXlsxFile'].includes(msg?.type))this.editState(msg.id,{editError:error.message||String(error),editResponseId:msg.requestId});v.window.showErrorMessage(`Rocketbrain: ${error instanceof Error ? error.message : String(error)}`); }
     }));
@@ -233,10 +237,20 @@ class ResultsView {
   }
   async copyResult(record) {
     if (!this.exportable(record)) throw Error('Select completed result rows and apply or discard drafts before copying.');
-    const clean = value => spreadsheetText(value).replace(/[\t\r\n]/gu, ' ');
     await this.vscode.env.clipboard.writeText([record.result.columns, ...record.result.rows]
-      .map(row => row.map(clean).join('\t')).join('\n'));
+      .map(row => row.map(tsvField).join('\t')).join('\n'));
     return { resultId: record.id };
+  }
+  async copySelection(record, { revision, row, column }) {
+    if (!this.exportable(record) || !Number.isSafeInteger(revision) || record.chart?.revision !== revision) {
+      throw Error('The captured result changed. Select the cell or row again after resolving any drafts.');
+    }
+    if (!Number.isSafeInteger(row) || row < 0 || row >= record.result.rows.length ||
+        (column !== undefined && (!Number.isSafeInteger(column) || column < 0 || column >= record.result.columns.length))) {
+      throw Error('Choose a cell or row from the captured result.');
+    }
+    const values = record.result.rows[row];
+    await this.vscode.env.clipboard.writeText(column === undefined ? values.map(tsvField).join('\t') : spreadsheetText(values[column]));
   }
   async returnToQuery(id = this.activeResult()?.id) {
     const record = this.history.find(item => item.id === id && !item.closing);

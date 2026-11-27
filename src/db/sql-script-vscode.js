@@ -3,6 +3,7 @@ const crypto=require('node:crypto');
 const { createParameterPresets, presetSignature } = require('./parameter-presets');
 const { clientStatementAt, selectedClientStatement } = require('./sql-format-script');
 const { LIMITS } = require('./sql-script');
+const { sqlEditorForAction } = require('./sql-editor-target');
 const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
 
 function registerSqlScripts(context,vscode,{database,analysisOnly=()=>false}={}) {
@@ -268,8 +269,9 @@ function registerSqlScripts(context,vscode,{database,analysisOnly=()=>false}={})
     if (removed) for (const [reviewId, review] of reviews) if (review.preset?.id === id) discardPresetReview(reviewId);
     return removed;
   }
-  async function command(reviewOnly=false,current){
+  async function command(reviewOnly=false,current,resource){
     try{
+      sqlEditorForAction(vscode, resource);
       const { editor, description } = await prepareActive(current);
       if (!description && current?.selection) return {useDirectSelection:true};
       const matches = api.matchingPresets(description.id);
@@ -314,7 +316,7 @@ function registerSqlScripts(context,vscode,{database,analysisOnly=()=>false}={})
       return {resultId:report.resultId,state:report.state,completed:report.completed,failed:report.failed,notRun:report.notRun};
     }catch(error){if(!closed)await vscode.window.showErrorMessage('Rocketbrain SQL: '+error.message);}
   }
-  subscriptions.push(vscode.commands.registerCommand('rocketbrain.sql.runScript',()=>command(false)),vscode.commands.registerCommand('rocketbrain.sql.reviewScript',()=>command(true)),vscode.commands.registerCommand('rocketbrain.sql.runWithParameters',()=>command(false)),vscode.commands.registerCommand('rocketbrain.sql.openScriptResult',async selection=>{
+  subscriptions.push(vscode.commands.registerCommand('rocketbrain.sql.runScript',()=>command(false)),vscode.commands.registerCommand('rocketbrain.sql.reviewScript',resource=>command(true,undefined,resource)),vscode.commands.registerCommand('rocketbrain.sql.runWithParameters',()=>command(false)),vscode.commands.registerCommand('rocketbrain.sql.openScriptResult',async selection=>{
     if (selection !== undefined) return api.openStatement(selection?.resultId,selection?.index,selection?.resultSet);
     const choices=[];for(const [id,cached]of runs)for(const statement of cached.report.statements)for(const result of capturedStatements(statement))choices.push({...result,label:'Run '+id+' · '+result.label,id});
     const selected=await vscode.window.showQuickPick(choices,{title:'Open retained statement result · no SQL rerun'});if(selected)return api.openStatement(selected.id,selected.index,selected.resultSet);

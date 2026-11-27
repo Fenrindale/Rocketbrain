@@ -18,6 +18,8 @@ An independent VS Code workbench for Java/Spring and MySQL/MariaDB. Support is d
 
 VS Code 하단 상태 표시줄에서 **IntelliJ IDEA**를 누르면 Rocketbrain 사이드바에 프로젝트, Java, Spring·JPA 도구가 표시됩니다. **DataGrip**을 누르면 DB 연결과 스키마 탐색, SQL 콘솔 및 결과 보기로 전환합니다. 선택한 모드에는 체크가 표시되고 워크스페이스별로 기억됩니다. 처음에는 모든 도구가 표시되며, 명령 팔레트의 **Rocketbrain: Show All Tools**로 같은 화면에 돌아갈 수 있습니다. 전환 중 열린 편집기, 연결과 SQL 결과는 유지됩니다.
 
+Java 파일 상단에는 실행 구성, 실행, 디버그, 파일 구조 버튼이 있습니다. **Java Projects**의 상단에서 빌드와 테스트 탐색을 시작하고, 소스에서 우클릭하면 탐색·리팩터링·테스트 메뉴가 열립니다. DataGrip 모드에서는 왼쪽 **Database** 상단에서 연결과 콘솔을 열고, SQL 파일 상단에서 실행과 결과로 이동합니다. 하단 결과 그리드에서 셀을 선택하면 셀·행 복사와 레코드 보기를 사용할 수 있습니다. [화면 배치와 진입점 검수](docs/ui-reachability-audit.md)
+
 **Search Everywhere**는 파일, 워크스페이스 기호, 명령, 설정 키와 로컬 Git 브랜치·커밋을 함께 검색합니다. `#`, `>`, `@`, `%`는 각각 기호, 명령, 설정, Git으로 좁히고 `$`는 활성 MySQL·MariaDB 스키마의 객체를 검색합니다. Git 결과는 선택한 리비전을 읽기 전용으로 보여줍니다. 설정 검색에는 키와 공개 설정 설명을 사용합니다.
 
 **Keyboard Profile**에서 Java·Spring, SQL·결과 화면, 디버거, Git 단축키 52개와 확인 가능한 충돌을 검토합니다. 적용할 항목은 내보낸 JSONC에서 골라 VS Code 사용자 단축키에 직접 추가합니다. [Context Actions와 키보드 프로필](docs/context-actions.md#keyboard-profile)

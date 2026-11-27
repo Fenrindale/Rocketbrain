@@ -234,6 +234,10 @@ async function promptProfileCredentials(vscode, record) {
 function registerConnectionProfiles(context,vscode,{database,createService=config=>new MysqlService(config,{reportActivity:database.activityLog?.createReporter()})}){
  const manager=createConnectionProfiles({state:context.workspaceState,secrets:context.secrets,connect:database.connectMysql,disconnect:database.disconnectMysql,getActiveProfile:database.activeConnectionProfile,isTrusted:()=>vscode.workspace.isTrusted,createService,openProfileConsole:database.openProfileConsole,hasProfileConsole:database.hasProfileConsole,getJavaHome:()=>vscode.workspace.getConfiguration?.('rocketbrain.java')?.get('javaHome')}),editors=new Map(),subscriptions=[];let closed=false;
  const events=new vscode.EventEmitter();
+ function publishProfiles() {
+  void vscode.commands.executeCommand?.('setContext', 'rocketbrain.hasDatabaseProfiles', manager.list().length > 0);
+  events.fire();
+ }
  database.setDatasetProfileSource?.(manager.datasetProfileSource);
  const listSessions = database.profileSessionList || (() => []);
  const tree = createProfileTree(vscode, { changes: events.event, listProfiles: manager.list,
@@ -371,7 +375,8 @@ function registerConnectionProfiles(context,vscode,{database,createService=confi
   return result;
  });
  if(database.onDidChangeProfileSessions)subscriptions.push(database.onDidChangeProfileSessions(()=>events.fire()));
- subscriptions.push(manager.onDidChange(()=>events.fire()),database.onDidChangeDatabase(()=>events.fire()),vscode.window.registerTreeDataProvider('rocketbrain.connections',tree));
+ subscriptions.push(manager.onDidChange(publishProfiles),database.onDidChangeDatabase(()=>events.fire()),vscode.window.registerTreeDataProvider('rocketbrain.connections',tree));
+ publishProfiles();
  const api={...manager,openEditor,handle,chooseSchemaComparisonOrigin,closeEditor(id){editors.get(id)?.panel.dispose();},editors:()=>[...editors.keys()],tree,async dispose(){if(closed)return;closed=true;for(const {panel}of editors.values())panel.dispose();editors.clear();await manager.dispose();for(const s of subscriptions)s.dispose();events.dispose();}};context.subscriptions.push(api);return api;
 }
 module.exports={connectionHtml,registerConnectionProfiles,promptProfileCredentials,reviewAzureMysqlProfile};

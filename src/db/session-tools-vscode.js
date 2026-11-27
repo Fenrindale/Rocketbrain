@@ -3,6 +3,7 @@
 const { createSavedQueries, queryName, queryText, queryTags, queryBinding, assertQueryTarget } = require('./saved-queries');
 const { levels } = require('./transaction-isolation');
 const { registerQueryHistory } = require('./query-history-vscode');
+const { sqlEditorForAction } = require('./sql-editor-target');
 
 function registerDbSessionTools(context, vscode, { database }) {
   let closed = false;
@@ -39,8 +40,8 @@ function registerDbSessionTools(context, vscode, { database }) {
     catch (error) { return error.message; }
   }
 
-  async function saveCommand() {
-    const source = editorSource(vscode.window.activeTextEditor);
+  async function saveCommand(resource) {
+    const source = editorSource(sqlEditorForAction(vscode, resource));
     const name = await vscode.window.showInputBox({
       title: 'Save SQL Query', prompt: 'Saves the SQL text you selected in this workspace. Check the text for private literals.',
       validateInput: validateName, ignoreFocusOut: true
@@ -132,9 +133,9 @@ function registerDbSessionTools(context, vscode, { database }) {
     }
   }
 
-  async function isolationCommand() {
+  async function isolationCommand(resource) {
     trusted();
-    const document = vscode.window.activeTextEditor?.document;
+    const document = sqlEditorForAction(vscode, resource)?.document;
     const observed = await database.inspectConsoleIsolation(document);
     trusted();
     if (observed.inTransaction || observed.outcomeUnknown) throw new Error('Resolve any active or uncertain transaction before changing isolation.');
@@ -149,8 +150,8 @@ function registerDbSessionTools(context, vscode, { database }) {
     return state;
   }
 
-  const command = (id, action) => vscode.commands.registerCommand(id, async () => {
-    try { return await action(); }
+  const command = (id, action) => vscode.commands.registerCommand(id, async (...args) => {
+    try { return await action(...args); }
     catch (error) { if (!closed) await vscode.window.showErrorMessage('Rocketbrain Database: ' + error.message); }
   });
   subscriptions.push(

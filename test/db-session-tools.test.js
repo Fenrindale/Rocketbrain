@@ -73,10 +73,12 @@ test('session command wiring anchors the picker, captures selected SQL and stops
   const commands = new Map();
   const calls = [];
   const errors = [];
-  const document = { languageId: 'sql', version: 1, isClosed: false };
+  const resource = path => ({ scheme: 'file', toString: () => 'file:///' + path });
+  const document = { languageId: 'sql', version: 1, isClosed: false, uri: resource('active.sql') };
   const editor = { document };
   let updateWhileNaming = false;
   const vscode = {
+    Uri: { isUri: value => value?.scheme === 'file' },
     workspace: { isTrusted: true, workspaceFolders: [{}] },
     window: {
       activeTextEditor: editor,
@@ -113,9 +115,9 @@ test('session command wiring anchors the picker, captures selected SQL and stops
     openSavedQuery(sql, destination) { calls.push({ sql, destination }); }
   };
   const api = registerDbSessionTools({ workspaceState }, vscode, { database });
-  await commands.get('rocketbrain.sql.saveQuery')();
+  await commands.get('rocketbrain.sql.saveQuery')(resource('active.sql'));
   await commands.get('rocketbrain.sql.savedQueries')();
-  await commands.get('rocketbrain.setTransactionIsolation')();
+  await commands.get('rocketbrain.setTransactionIsolation')(resource('active.sql'));
   assert.deepEqual(calls, [
     { sql: 'SELECT 42;', destination: { connectionEpoch: 2, label: 'test database' } },
     { level: 'READ COMMITTED' }
@@ -123,6 +125,9 @@ test('session command wiring anchors the picker, captures selected SQL and stops
   updateWhileNaming = true;
   await commands.get('rocketbrain.sql.saveQuery')();
   assert.match(errors[0], /editor changed/);
+  await commands.get('rocketbrain.setTransactionIsolation')(resource('inactive.sql'));
+  assert.match(errors[1], /Activate this SQL editor/);
+  assert.equal(calls.length, 2);
   assert.equal(api.listSavedQueries().length, 1);
   await api.dispose();
   assert.equal(commands.size, 0);

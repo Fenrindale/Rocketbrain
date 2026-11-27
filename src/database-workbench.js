@@ -15,6 +15,7 @@ const { logicalKey, scopeKey, logicalEdges } = require('./db/schema-erd');
 const { tableLayoutConnectionKey } = require('./db/result-layouts');
 const { createMetadataCache, observeCatalogIdentity } = require('./db/metadata-cache');
 const { runCatalogOperation } = require('./db/catalog-refresh');
+const { sqlEditorForAction } = require('./db/sql-editor-target');
 const demoHistoryKey = require('node:crypto').createHash('sha256').update('rocketbrain:sqlite-demo').digest('hex');
 
 async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree, isVirtualSqlPreview = () => false, analysisOnlySql = () => false) {
@@ -145,6 +146,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   function streamFor(db){let manager=streamManagers.get(db);if(!manager){manager=new(require('./db/import-stream').StreamImporter)(db,{onStateChange:()=>{reconcileStreamTransactions();updateStatus();}});streamManagers.set(db,manager);}return manager;}
   async function closeDatabaseResources(db){const manager=streamManagers.get(db);if(manager){await manager.dispose();streamManagers.delete(db);}await db.dispose();}
   async function refreshAfterSchemaAttempt(db,epoch,report){if(state.disposed||db!==state.db||epoch!==state.epoch)return;state.metadata=null;state.schema=[];schemaTree.refresh();connectionEvents.fire({epoch,mysql:true,metadata:null});try{await refreshSchema();if(report)report.metadataRefresh={state:'refreshed'};}catch{if(report)report.metadataRefresh={state:'failed',message:'Refresh database metadata explicitly before further schema work.'};}}
+  const previousToolbar = new Map();
   function updateStatus() {
     const document = currentDocument(), dedicated = isProfileConsole(document);
     const binding = existingBinding(document);
@@ -163,6 +165,21 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     void vscode.commands.executeCommand('setContext', 'rocketbrain.offlineMetadataActive', Boolean(state.offlineMetadata));
     void vscode.commands.executeCommand('setContext', 'rocketbrain.profileConsole', dedicated);
     void vscode.commands.executeCommand('setContext', 'rocketbrain.sqlRunning', state.running.size > 0);
+    const action = sqlActionContext(document);
+    const sessionActions = Boolean(action?.run && vscode.workspace.isTrusted &&
+      (dedicated ? session : state.mysql) && !session?.needsReconnect && !session?.outcomeUnknown);
+    const toolbar = {
+      sqlToolbarRunnable: Boolean(action?.run),
+      sqlToolbarActiveCatalog: Boolean(action?.live),
+      sqlToolbarIdleSession: sessionActions && !session?.inTransaction,
+      sqlToolbarPendingTransaction: sessionActions && Boolean(session?.inTransaction),
+      sqlToolbarCanCancel: Boolean(action?.edit && vscode.workspace.isTrusted && session && state.running.has(binding.id))
+    };
+    for (const [key, value] of Object.entries(toolbar)) {
+      if (previousToolbar.get(key) === value) continue;
+      previousToolbar.set(key, value);
+      void vscode.commands.executeCommand('setContext', 'rocketbrain.' + key, value);
+    }
     publishProfileSessions();
   }
   const command = (id, action) => context.subscriptions.push(vscode.commands.registerCommand(id, async (...args) => {
@@ -428,8 +445,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     updateStatus();
     return bound;
   }
-  async function sessionAction(action) {
-    const document = currentDocument();
+  async function sessionAction(action, resource) {
+    const document = sqlEditorForAction(vscode, resource)?.document;
     if (!state.mysql && !isProfileConsole(document)) throw new Error('Connect to MySQL or MariaDB to use console transactions.');
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before using a database.');
     const binding = await bindInteractive(document);
@@ -460,7 +477,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before using a database.');
     if (state.running.has(id) || state.connecting.has(id)) throw new Error('Cancel or finish the query in this console first.');
     state.running.add(id);
-    publishProfileSessions();
+    updateStatus();
     try { return await action(id, consoleDatabase(id)); }
     finally { state.running.delete(id); updateStatus(); }
   }
@@ -943,7 +960,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const editor = await openSql(sql); await results.show();
     await vscode.window.showTextDocument(editor.document, { viewColumn: editor.viewColumn, preserveFocus: false });
   });
-  command('rocketbrain.openSharedConsole', () => openSharedConsole(currentDocument()));
+  command('rocketbrain.openSharedConsole', resource => openSharedConsole(sqlEditorForAction(vscode, resource)?.document));
   command('rocketbrain.focusQueryResults', () => results.focus());
   command('rocketbrain.focusQueryEditor', () => results.returnToQuery());
   command('rocketbrain.showQueryResults', () => results.show());
@@ -952,8 +969,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     if (!vscode.workspace.isTrusted) throw Error('Trust the workspace before copying a result from Context Actions.');
     return results.copyResult(results.requireActionTarget(expected));
   });
-  command('rocketbrain.runQuery', async () => {
-    const editor = vscode.window.activeTextEditor;
+  command('rocketbrain.runQuery', async resource => {
+    const editor = sqlEditorForAction(vscode, resource);
     if (sqlDrafts.isRecovered(editor?.document)) {
       void vscode.window.showInformationMessage('This is an offline SQL draft. Copy the reviewed text to a console connected to the intended database.');
       return;
@@ -977,9 +994,12 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     }
     return runSql(selectedSql(editor, {allowProfile:true}), editor.document,{userQuery:true});
   });
-  command('rocketbrain.openTable', async name => {
+  command('rocketbrain.openTable', async target => {
     if (state.offlineMetadata) throw Error('Connect to preview table rows while using cached metadata.');
-    if (typeof name !== 'string' || !state.schema.some(table => table.name === name)) return;
+    const name = typeof target === 'string' ? target : target?.table?.name;
+    const table = typeof name === 'string' && state.schema.find(item => item.name === name);
+    if (!table) return;
+    if (typeof target !== 'string' && target.table !== table) throw Error('The catalog changed. Choose the table again.');
     const quoted = state.mysql ? '`' + name.replace(/`/g, '``') + '`' : '"' + name.replace(/"/g, '""') + '"';
     const sql = `SELECT * FROM ${quoted} LIMIT ${state.mysql ? 200 : 100};`; const editor = await openSql(sql);
     if (state.mysql) {
@@ -1038,11 +1058,11 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     finally { state.candidates.delete(next); }
   };
   command('rocketbrain.useDemo', useDemo); command('rocketbrain.disconnect', useDemo);
-  command('rocketbrain.beginTransaction', () => sessionAction((id, db) => db.begin({ sessionId: id })));
-  command('rocketbrain.commit', () => sessionAction((id, db) => db.commit({ sessionId: id })));
-  command('rocketbrain.rollback', () => sessionAction((id, db) => db.rollback({ sessionId: id })));
-  command('rocketbrain.cancelQuery', async () => {
-    const binding = existingBinding();
+  command('rocketbrain.beginTransaction', resource => sessionAction((id, db) => db.begin({ sessionId: id }), resource));
+  command('rocketbrain.commit', resource => sessionAction((id, db) => db.commit({ sessionId: id }), resource));
+  command('rocketbrain.rollback', resource => sessionAction((id, db) => db.rollback({ sessionId: id }), resource));
+  command('rocketbrain.cancelQuery', async resource => {
+    const binding = existingBinding(sqlEditorForAction(vscode, resource)?.document);
     if (!binding || (!state.mysql && !profileSessions.has(binding.id)) || !state.running.has(binding.id)) return;
     await consoleDatabase(binding.id).cancel(binding.id);
   });
@@ -1050,16 +1070,17 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     const choice = await vscode.window.showWarningMessage('Reconnect starts a new session. Temporary tables, session variables and uncommitted work from the previous connection are lost. An interrupted write may have an unknown outcome; inspect the server before retrying.', { modal: true }, 'Start New Session');
     if (choice === 'Start New Session' && vscode.workspace.isTrusted) await db.reconnect(id);
   }));
-  command('rocketbrain.sessionStatus', async () => {
-    if (state.offlineMetadata && !isProfileConsole(currentDocument())) {
+  command('rocketbrain.sessionStatus', async resource => {
+    const document = sqlEditorForAction(vscode, resource)?.document;
+    if (state.offlineMetadata && !isProfileConsole(document)) {
       const { database, capturedAt, checkedAt } = state.offlineMetadata.provenance;
       output.appendLine('Offline metadata · ' + database + ' · captured ' + capturedAt + ' · last matched ' + checkedAt);
       output.show(true);
       return;
     }
-    const binding = existingBinding();
+    const binding = existingBinding(document);
     const session = binding ? consoleSessions().find(item => item.id === binding.id) : null;
-    output.appendLine(JSON.stringify({ source: consoleLabel(binding?.id), console: binding?.id, ...(session || { readOnly: true, engine: state.mysql || isProfileConsole(currentDocument()) ? 'MySQL/MariaDB — open a console' : 'SQLite demo' }) }, null, 2));
+    output.appendLine(JSON.stringify({ source: consoleLabel(binding?.id), console: binding?.id, ...(session || { readOnly: true, engine: state.mysql || isProfileConsole(document) ? 'MySQL/MariaDB — open a console' : 'SQLite demo' }) }, null, 2));
     output.show(true);
   });
   command('rocketbrain.manageSessions', async () => {
@@ -1091,7 +1112,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       }
     });
   });
-  command('rocketbrain.consoleMode', () => sessionAction(async (id, db) => {
+  command('rocketbrain.consoleMode', resource => sessionAction(async (id, db) => {
     if (db.getSessionState(id).writeProtection?.connectionReadOnly) {
       void vscode.window.showInformationMessage('This connection profile is locked to read-only mode.');
       return;
@@ -1109,7 +1130,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     if (!vscode.workspace.isTrusted || state.disposed) return;
     await db.setReadOnly(choice.readOnly, { sessionId: id });
     await db.setAutocommit(choice.autocommit, { sessionId: id });
-  }));
+  }, resource));
   command('rocketbrain.connectMysql', async () => {
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before connecting to a database.');
     const saved = context.workspaceState.get('rocketbrain.mysqlProfile', {});
@@ -1167,6 +1188,11 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
     } }, '.'),
     { dispose() { void disposeDatabase().catch(()=>{}); } }
   );
+  if (vscode.workspace.onDidGrantWorkspaceTrust) context.subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(updateStatus));
+  if (vscode.workspace.onDidChangeTextDocument) context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => {
+    if (event.document === currentDocument() && event.document.languageId === 'sql' &&
+        event.contentChanges?.some(change => change.range.start.line === 0)) updateStatus();
+  }));
   await refreshSchema(); updateStatus();
   // Deliberate local extension API for integration callers; credentials are never returned or persisted here.
   async function inspectRelationshipCatalog(request, method) {

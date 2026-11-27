@@ -4,6 +4,7 @@
   let history = [], currentId = null, editingCell = null, requestSequence = 0;
   let renderedWindow, scrollTop = 0;
   let gridTabCell;
+  let menuCell;
   const cellPositions = new WeakMap(), selectedCells = new Map();
   const drafts = new Map(), browseForms = new Map(),bulkForms=new Map(), layouts = new Map();
   const charts = new Map();
@@ -695,12 +696,81 @@
   }
 
   function setGridTabCell(cell) {
-    if (gridTabCell && gridTabCell !== cell) gridTabCell.tabIndex = -1;
+    if (gridTabCell && gridTabCell !== cell) {
+      gridTabCell.tabIndex = -1;
+      gridTabCell.classList.remove('result-cell-selected');
+    }
     gridTabCell = cell;
     if (!cell) return;
     cell.tabIndex = 0;
+    cell.classList.add('result-cell-selected');
     const position = cellPositions.get(cell);
     selectedCells.set(position.result, position);
+    updateCellTools(cell);
+  }
+
+  function updateCellTools(cell) {
+    const busy = $('result-view').disabled;
+    $('copy-cell').disabled = $('copy-row').disabled = !cell || cellPositions.get(cell).inserted || $('copy').disabled || busy;
+    $('view-cell-record').disabled = !cell || busy;
+    $('edit-selected-cell').hidden = !cell?.ondblclick;
+    $('edit-selected-cell').disabled = busy;
+  }
+
+  function copyCell(cell, single) {
+    if (!cell?.isConnected || $('copy-cell').disabled) return;
+    const position = cellPositions.get(cell), record = current();
+    if (record?.id !== position.result) return;
+    vscode.postMessage({ type: 'copySelection', id: record.id, revision: record.chart?.revision,
+      row: cell.parentElement.sectionRowIndex, ...(single && { column: position.column }) });
+  }
+
+  function viewCellRecord(cell) {
+    if (!cell?.isConnected || $('view-cell-record').disabled) return;
+    updateResultLayout(layout => {
+      layout.row = cell.parentElement.sectionRowIndex;
+      layout.mode = 'record';
+    });
+    $('result-view').focus({ preventScroll: true });
+  }
+
+  function closeCellMenu(restoreFocus = false) {
+    if (!menuCell) return;
+    const cell = menuCell;
+    menuCell = undefined;
+    $('result-cell-menu').hidden = true;
+    if (restoreFocus && cell.isConnected) cell.focus({ preventScroll: true });
+  }
+
+  function openCellMenu(cell, left, top) {
+    if (cellPositions.get(cell)?.mode !== 'grid' || editingCell || $('result-cell-tools').hidden) return;
+    setGridTabCell(cell);
+    const menu = $('result-cell-menu');
+    const actions = [
+      [$('copy-cell'), () => copyCell(cell, true)],
+      [$('copy-row'), () => copyCell(cell, false)],
+      [$('view-cell-record'), () => viewCellRecord(cell)],
+      [$('edit-selected-cell'), () => cell.ondblclick?.()]
+    ];
+    menu.replaceChildren();
+    for (const [control, action] of actions) {
+      if (control.disabled || control.hidden) continue;
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.textContent = control.textContent;
+      item.title = control.title;
+      item.setAttribute('role', 'menuitem');
+      item.tabIndex = -1;
+      item.onclick = () => { closeCellMenu(true); action(); };
+      menu.append(item);
+    }
+    if (!menu.childElementCount) return;
+    menuCell = cell;
+    menu.hidden = false;
+    menu.style.left = Math.max(4, Math.min(left, window.innerWidth - menu.offsetWidth - 4)) + 'px';
+    menu.style.top = Math.max(4, Math.min(top, window.innerHeight - menu.offsetHeight - 4)) + 'px';
+    menu.firstElementChild.focus({ preventScroll: true });
+    return true;
   }
 
   function findDataCell(position) {
@@ -1528,6 +1598,7 @@
         const td = tr.insertCell();
         td.tabIndex = -1;
         td.dataset.resultCell = '';
+        td.setAttribute('aria-keyshortcuts', 'Shift+F10');
         registerDataCell(td, active, row, index, 'grid');
         presentDataCell(td, active, row, index, enabled);
         pin(td, index);
@@ -1602,7 +1673,8 @@
   function render(requestedFocus) {
     const active = current();
     const grid = $('grid'), windowId = active?.result?.browse?.window?.id;
-    const returnFocus = requestedFocus || cellPositions.get(document.activeElement);
+    const returnFocus = requestedFocus || cellPositions.get(menuCell || document.activeElement);
+    closeCellMenu();
     const anchor = renderedWindow === windowId && windowId ? visibleScrollAnchor(grid) : null;
     renderedWindow = undefined;
     grid.removeAttribute('tabindex');
@@ -1630,6 +1702,7 @@
     if (windowId) $('copy').title = $('export').title = 'Use all rows and columns in the retained scroll window.';
     $('result-view').disabled = true;
     $('result-layout').hidden = $('result-column-panel').hidden = true;
+    $('result-cell-tools').hidden = true;
     renderExportAction(active);
     $('close-result').disabled = !active || active.state === 'running' || active.editBusy || Boolean(editingCell || active && draft(active).pendingRequestId);
     const pin = $('pin-result'), statement = $('script-result-selection'), captured = active?.result?.scriptStatements;
@@ -1667,6 +1740,7 @@
     renderBulk(active);
     if (layout.mode === 'grid') {
       renderGrid(active, result, rows, enabled, layout, columns);
+      $('result-cell-tools').hidden = !gridTabCell;
       if (windowId) {
         grid.tabIndex = 0;
         renderedWindow = windowId;
@@ -1935,6 +2009,10 @@
     render();
   }
   $('result-view').onchange = () => updateResultLayout(layout => { layout.mode = $('result-view').value; });
+  $('copy-cell').onclick = () => copyCell(gridTabCell, true);
+  $('copy-row').onclick = () => copyCell(gridTabCell, false);
+  $('view-cell-record').onclick = () => viewCellRecord(gridTabCell);
+  $('edit-selected-cell').onclick = () => gridTabCell?.ondblclick?.();
   $('chart-shape').onchange = () => {
     const record = current();
     if (!record?.chart) return;
@@ -2073,11 +2151,38 @@
     if (row && record) resultLayout(record).row = Number(row.dataset.resultRowIndex);
     if (cellPositions.get(event.target)?.mode === 'grid') setGridTabCell(event.target);
   });
+  $('grid').addEventListener('contextmenu', event => {
+    const cell = event.target.closest('[data-result-cell]');
+    if (cell && openCellMenu(cell, event.clientX, event.clientY)) event.preventDefault();
+  });
+  document.addEventListener('pointerdown', event => {
+    if (menuCell && !$('result-cell-menu').contains(event.target)) closeCellMenu();
+  });
+  $('result-cell-menu').addEventListener('keydown', event => {
+    if (event.key === 'Escape' || event.key === 'Tab') {
+      if (event.key === 'Escape') event.preventDefault();
+      closeCellMenu(true);
+      return;
+    }
+    const items = [...$('result-cell-menu').children];
+    const index = items.indexOf(document.activeElement);
+    const destination = { Home: 0, End: items.length - 1,
+      ArrowDown: (index + 1) % items.length, ArrowUp: (index + items.length - 1) % items.length }[event.key];
+    if (destination === undefined) return;
+    event.preventDefault();
+    items[destination]?.focus({ preventScroll: true });
+  });
   $('grid').addEventListener('keydown', event => {
     const cell = event.target;
     if (cell === $('grid')) {
       if (['PageDown', 'ArrowDown', 'End'].includes(event.key)) moveScroll('next', true);
       else if (['PageUp', 'ArrowUp', 'Home'].includes(event.key)) moveScroll('previous', true);
+      return;
+    }
+    if (!editingCell && cellPositions.get(cell)?.mode === 'grid' && !event.isComposing &&
+        (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10')) {
+      const rect = cell.getBoundingClientRect();
+      if (openCellMenu(cell, rect.left, rect.bottom)) event.preventDefault();
       return;
     }
     if (cellPositions.get(cell)?.mode !== 'grid' || editingCell || event.defaultPrevented ||

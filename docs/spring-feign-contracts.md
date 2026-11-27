@@ -1,6 +1,6 @@
 # Inherited and runtime OpenFeign contracts
 
-Open **Rocketbrain: Spring Endpoints** to find an outbound method and jump to its declaration. Inherited routes point to the parent method, with the selected client's prefix and the declaring interface identified. The source resolver supports a single chain of workspace interfaces with unambiguous parameter types and literal Spring MVC mappings. It follows explicit imports, tracks overrides and leaves ambiguous, generic, and unavailable parent declarations unresolved.
+In **Spring & JPA Analysis**, choose **Spring: Navigate to Endpoint** from the view toolbar. This opens a list of outbound methods and their declarations. Inherited routes point to the parent method, with the selected client's prefix and the declaring interface identified. The source resolver supports a single chain of workspace interfaces with unambiguous parameter types and literal Spring MVC mappings. It follows explicit imports, tracks overrides and leaves ambiguous, generic, and unavailable parent declarations unresolved.
 
 For custom contracts or prefixes computed at startup, run **Rocketbrain: Prepare Local JVM Observer** in a trusted workspace. Set `feignContractTrace` to `true` in the generated observer configuration, add the displayed JVM arguments, and restart the application with an independent JDK 25 or later. Connect using **Rocketbrain: Connect Local JVM Observer** and open **Rocketbrain: Inspect OpenFeign Runtime Contracts**.
 

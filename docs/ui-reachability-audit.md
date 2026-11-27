@@ -4,6 +4,21 @@
 
 0.177.0의 [배포 소스](https://github.com/Fenrindale/Rocketbrain/tree/ff17d43aba142984c7ff917b184dbfd2ada6ab14), [확장 메뉴 정의](../package.json), [기능별 판정](feature-status.json), [설치 검증 요약](verification.json)을 근거로 삼았다. Craft Anything CLI로 확인한 0.177.0 패키지는 39개 파일을 담고 있다.
 
+## 작업 화면의 버튼과 메뉴
+
+v0.178의 배치는 레퍼런스의 조작 위치와 입력 방식을 기준으로 비교한다. 버튼은 작업 화면에 나타나야 버튼 배치로 집계한다. 우클릭 메뉴는 같은 편집기·개체·셀에서 열려야 문맥 메뉴 배치로 집계한다. 216행의 기존 팔레트 경로는 진입점 참고 자료다.
+
+| 레퍼런스 위치 | Rocketbrain에서의 위치 | 추가 및 정리한 동작 |
+| --- | --- | --- |
+| IntelliJ 상단 실행 도구 | Java 편집기 상단 | 실행 구성 추가, 실행, 디버그, 파일 구조 버튼. 저장한 구성이 없는 첫 실행에서는 Java 또는 Spring Boot 구성 만들기를 노출한다. |
+| IntelliJ 프로젝트 및 분석 도구 창 | 왼쪽 Java Projects와 Spring & JPA Analysis | 프로젝트 빌드, 테스트 탐색, Spring 엔드포인트 버튼. 테스트 런타임 설치, 빌드 작업, Bean과 엔티티 항목을 각 뷰 메뉴에 배치한다. |
+| IntelliJ 소스 문맥 메뉴 | Java 편집기 우클릭 | Navigate, Refactor, Java Tests 메뉴. Kotlin 소스에서는 해당하는 탐색 메뉴를 표시한다. |
+| DataGrip Database Explorer | 왼쪽 Database와 Database Connections | 콘솔, 연결 추가, 결과 열기, 테이블 미리보기, 프로필 전용 콘솔을 헤더 또는 해당 행에 배치한다. |
+| DataGrip SQL 콘솔 도구 | SQL 편집기 상단 | 실행, 취소, 결과, 연결된 세션의 모드와 트랜잭션 동작을 현재 문서에 맞춰 표시한다. |
+| DataGrip 데이터 편집기 | 하단 Query Results | 선택한 셀·행 복사, 레코드 보기, 편집 가능한 셀의 편집을 결과 도구막대와 셀 문맥 메뉴에 표시한다. |
+
+작업 창 전체의 상단 애플리케이션 툴바는 VS Code가 관리한다. 확장에 공개된 Java·SQL 편집기 상단 영역에 해당 작업 버튼을 배치했다. [IntelliJ IDEA 화면](https://www.jetbrains.com/help/idea/guided-tour-around-the-user-interface.html) · [DataGrip 화면](https://www.jetbrains.com/help/datagrip/guided-tour-around-the-user-interface.html) · [VS Code 메뉴 기여 지점](https://code.visualstudio.com/api/references/contribution-points#contributes.menus)
+
 ## Java 정의 이동
 
 최초 비교표부터 IDEA-015에 정의·구현 이동이 있었다. 0.177.0은 독립 Java 엔진의 정의 공급자를 실제 파일의 Java 편집기에 연결한다. 0.63 설치 시험은 가져온 Spring 프로젝트에서 선언·오버로드의 구현·상위 메서드를 확인했다. 별도의 호스트 시험은 VS Code 공급자 API를 통해 다른 Java 파일과 JDK 소스로 이동할 수 있음을 확인했다. 두 시험은 최초 실행 상태의 마우스 Ctrl+클릭을 직접 보내지 않았다. [선언 이동 시험](../test/java-symbol-navigation-host.js) · [VS Code 공급자 시험](../test/java-host.js)

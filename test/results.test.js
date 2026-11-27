@@ -190,6 +190,35 @@ test('actual result Webview renders database values as text and routes history/c
     assert.ok(writes[0].text.includes('"\'=1+1"'));
   });
 
+  await t.test('the grid toolbar and cell menu act on the current cell and captured row', async () => {
+    const longCell = page.locator('#grid [data-result-cell]').nth(2);
+    await longCell.click();
+    await page.getByRole('button', { name: 'Copy Cell', exact: true }).click();
+    await page.waitForFunction(() => window.__completed.some(message => message.type === 'copySelection' && message.column === 2));
+    assert.equal(clipboard, longText);
+    const formula = page.locator('#grid [data-result-cell]').nth(3);
+    await formula.click({ button: 'right' });
+    const menu = page.getByRole('menu', { name: 'Result cell actions' });
+    assert.equal(await menu.isVisible(), true);
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await menu.getByRole('menuitem', { name: 'Copy Row' }).evaluate(item => item === document.activeElement), true);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => window.__completed.some(message => message.type === 'copySelection' && message.column === undefined));
+    assert.equal(clipboard, `${attack}\t\t${longText.replace(/[\t\r\n]/gu, ' ')}\t'=1+1`);
+    assert.equal(await formula.evaluate(cell => cell === document.activeElement), true);
+    await formula.press('Shift+F10');
+    assert.equal(await menu.isVisible(), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await menu.isVisible(), false);
+    assert.equal(await formula.evaluate(cell => cell === document.activeElement), true);
+    await page.getByRole('button', { name: 'View Record' }).click();
+    assert.match(await page.locator('#result-row-status').textContent(), /Row 1.*1 of 1/);
+    await page.locator('#result-view').selectOption('grid');
+    const record = host.history.find(entry => entry.id === firstId);
+    await assert.rejects(host.copySelection(record, { revision: record.chart.revision - 1, row: 0 }), /changed/);
+    await assert.rejects(host.copySelection(record, { revision: record.chart.revision, row: 0, column: 99 }), /from the captured result/);
+  });
+
   await t.test('alternate views present the captured records safely and navigate within the current preview', async () => {
     host.finish(firstId, { ...firstResult, rows: [...firstResult.rows, ['Second', null, '', '']], rowCount: 2 });
     await lastPost;
@@ -419,7 +448,9 @@ test('actual result Webview renders database values as text and routes history/c
     assert.equal(await editor.isVisible(), false);
     assert.equal(await focused.getAttribute('aria-label'), 'Edit row one column note');
 
-    await edited('one', 'label').press('Enter');
+    await edited('one', 'label').click();
+    await page.getByRole('button', { name: 'Edit Cell', exact: true }).click();
+    assert.equal(await page.locator('#copy-cell').isDisabled(), true);
     await page.locator('#cell-value').fill('discard this');
     await page.locator('#cell-value').dispatchEvent('keydown', { key: 'Escape', isComposing: true, bubbles: true });
     assert.equal(await editor.isVisible(), true);

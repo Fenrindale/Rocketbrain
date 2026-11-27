@@ -2,6 +2,23 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),M=require('../src/java/workbench-model'),T=require('../src/java/workbench-tasks'),{registerJavaWorkbench,CONFIG_KEY}=require('../src/java/workbench'),F=require('./java-workbench-fixture');
 const {pathToFileURL}=require('node:url');
 
+test('Run and Debug in an empty project open configuration choices without starting a process', async t => {
+ const f = F.fixture(t), s = F.fakeVscode(f);
+ const workbench = registerJavaWorkbench(s.context, s.vscode, s.java, s.output, {runner: s.runner});
+ t.after(() => workbench.dispose());
+ const titles = [];
+ s.vscode.window.showQuickPick = async (items, options) => {
+  titles.push(options.title);
+  assert.deepEqual(items.map(item => item.label), ['Add Java Run Configuration', 'Configure Spring Boot Run']);
+ };
+ for (const command of ['run', 'debug']) {
+  await s.commands.get('rocketbrain.java.workbench.' + command)();
+ }
+ assert.deepEqual(titles, ['Java Run Configurations', 'Java Run Configurations']);
+ assert.deepEqual(s.starts, []);
+ assert.deepEqual(s.messages, []);
+});
+
 test('a canonical late-build descriptor remains inside an aliased workspace root',t=>{
  const f=F.fixture(t),file=path.join(f.root,'pom.xml'),alias=path.join(f.parent,'WORKSP~1');
  const native=fs.realpathSync.native;

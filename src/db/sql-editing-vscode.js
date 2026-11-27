@@ -5,6 +5,7 @@ const { templates,resolveTemplate }=require('./sql-templates');
 const { sqlQuickFixes,missingObjectIntent }=require('./sql-quick-fixes');
 const { sqlJoinFixes }=require('./sql-join-fixes');
 const { isProfileConsole: isVirtualProfileConsole }=require('./profile-console-files');
+const { sqlEditorForAction } = require('./sql-editor-target');
 
 function registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner}) {
   const isProfileConsole = database.isProfileSql ?? isVirtualProfileConsole;
@@ -30,8 +31,8 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner}) 
     const text=format(document,range,options);
     return text===document.getText(range)?[]:[vscode.TextEdit.replace(range,text)];
   }
-  async function formatEditor() {
-    const editor=vscode.window.activeTextEditor;
+  async function formatEditor(resource) {
+    const editor = sqlEditorForAction(vscode, resource);
     open(editor?.document);
     const range=editor.selection.isEmpty?whole(editor.document):editor.selection;
     const changes=edits(editor.document,range,editor.options);
@@ -71,8 +72,8 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner}) 
     }
     return insert(editor,{prefix:choice.template.prefix,table});
   }
-  const command=(id,operation)=>vscode.commands.registerCommand(id,async()=>{
-    try{return await operation();}
+  const command=(id,operation)=>vscode.commands.registerCommand(id,async(...args)=>{
+    try{return await operation(...args);}
     catch(error){if(!disposed)await vscode.window.showErrorMessage('Rocketbrain SQL: '+error.message);}
   });
   const fixCommand='rocketbrain.sql.applyReviewedQuickFix';

@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { statementAt } = require('../sql');
 const { isProfileConsole } = require('./profile-console-files');
+const { sqlEditorForAction } = require('./sql-editor-target');
 const { explanationHtml, comparisonHtml, seriesHtml } = require('./explain-plan-view');
 const { comparePlans, comparablePlans, validatePlanQuery } = require('./explain-plan');
 const { sampleCount, summarizeSeries, compareSeries, serializeSamples } = require('./explain-plan-series');
@@ -534,9 +535,9 @@ function registerExplainPlans(context, vscode, { database }) {
     }
   }
 
-  context.subscriptions.push(vscode.commands.registerCommand(VISUAL_EXPLAIN, async () => {
+  context.subscriptions.push(vscode.commands.registerCommand(VISUAL_EXPLAIN, async resource => {
     try {
-      const editor = vscode.window.activeTextEditor;
+      const editor = sqlEditorForAction(vscode, resource);
       return await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Capture visual EXPLAIN', cancellable: true },
         (_, cancellation) => open({ document: editor?.document, selection: editor?.selection, cancellation }));
     } catch (error) { await vscode.window.showErrorMessage(error.message); }
