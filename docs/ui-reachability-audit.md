@@ -19,6 +19,8 @@ v0.178의 배치는 레퍼런스의 조작 위치와 입력 방식을 기준으�
 
 작업 창 전체의 상단 애플리케이션 툴바는 VS Code가 관리한다. 확장에 공개된 Java·SQL 편집기 상단 영역에 해당 작업 버튼을 배치했다. [IntelliJ IDEA 화면](https://www.jetbrains.com/help/idea/guided-tour-around-the-user-interface.html) · [DataGrip 화면](https://www.jetbrains.com/help/datagrip/guided-tour-around-the-user-interface.html) · [VS Code 메뉴 기여 지점](https://code.visualstudio.com/api/references/contribution-points#contributes.menus)
 
+VS Code 1.145.3에 0.178.0 VSIX를 설치했다. Java 편집기 상단 실행 버튼으로 구성 선택기를 열었고, 소스 우클릭에서 Navigate, Refactor, Java Tests를 확인했다. Database 헤더 버튼으로 연결 양식과 SQL 콘솔을 열었고, SQL 편집기 상단 실행 버튼으로 로컬 샘플 3행을 표시했다. 하단에서 두 번째 행의 셀 메뉴를 열고 레코드 보기와 그리드 복귀를 확인했다. [설치 검증](verification.json)
+
 ## Java 정의 이동
 
 최초 비교표부터 IDEA-015에 정의·구현 이동이 있었다. 0.177.0은 독립 Java 엔진의 정의 공급자를 실제 파일의 Java 편집기에 연결한다. 0.63 설치 시험은 가져온 Spring 프로젝트에서 선언·오버로드의 구현·상위 메서드를 확인했다. 별도의 호스트 시험은 VS Code 공급자 API를 통해 다른 Java 파일과 JDK 소스로 이동할 수 있음을 확인했다. 두 시험은 최초 실행 상태의 마우스 Ctrl+클릭을 직접 보내지 않았다. [선언 이동 시험](../test/java-symbol-navigation-host.js) · [VS Code 공급자 시험](../test/java-host.js)

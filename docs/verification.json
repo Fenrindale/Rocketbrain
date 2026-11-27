@@ -1,21 +1,21 @@
 {
-  "version": "0.177.1",
-  "verifiedAt": "2026-11-27T04:42:31.814Z",
+  "version": "0.178.0",
+  "verifiedAt": "2026-11-27T05:12:48.180Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.177.1.vsix",
-    "files": 39,
-    "bytes": 4760726,
-    "sha256": "60f5d535952cdd8a6edd049d2efa5613af1a1927d99a07ec26f0b1a38187eae6"
+    "name": "rocketbrain-0.178.0.vsix",
+    "bytes": 4765318,
+    "sha256": "c4152e5d49aa24f242a3364dc9b332119824978c350eafef5a7ce2ec340762a9",
+    "files": 39
   },
   "localOffline": {
     "origin": "GitHub-hosted exact source preview; external-runtime tests may skip",
-    "head": "b2fcd9d0e0a5ec176f427fcef0aa856f35369254",
-    "run": 45941239074,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45941239074",
-    "tests": 2315,
+    "head": "68219a6fa352becafa034b7006c1f6decc8f99d0",
+    "run": 45944092071,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45944092071",
+    "tests": 2316,
     "suites": 0,
-    "pass": 2062,
+    "pass": 2063,
     "fail": 0,
     "cancelled": 0,
     "skipped": 253,
@@ -23,34 +23,102 @@
   },
   "focusedPolish": {
     "nativeVsCode": {
-      "sourceCommit": "b2fcd9d0e0a5ec176f427fcef0aa856f35369254",
+      "sourceCommit": "68219a6fa352becafa034b7006c1f6decc8f99d0",
       "version": "1.145.3",
-      "vsixSha256": "60f5d535952cdd8a6edd049d2efa5613af1a1927d99a07ec26f0b1a38187eae6",
-      "javaFixture": "Maven App.java → Greeter.java",
-      "javaEngineSetupVisible": true,
-      "actualCtrlClickAfterReady": true,
-      "actualF12AfterReady": true,
-      "earlyNativeProviderReturnedDeclaration": true,
-      "firstPhysicalCtrlClickDuringStartup": "failed",
+      "vsixSha256": "c4152e5d49aa24f242a3364dc9b332119824978c350eafef5a7ce2ec340762a9",
+      "steps": [
+        {
+          "area": "Java",
+          "action": "Native toolbars",
+          "editor": [
+            "Add Java Run Configuration",
+            "Run Java Configuration",
+            "Debug Java Configuration"
+          ],
+          "editorPlacement": "Editor title actions above the Java file",
+          "projectView": [
+            "Build Java Project",
+            "Discover Java Tests"
+          ],
+          "projectPlacement": "Header of Java Projects in the side bar"
+        },
+        {
+          "area": "Java",
+          "action": "Clicked Run Java Configuration on editor toolbar",
+          "observed": "Empty state opens Java Run Configurations with Java and Spring setup actions",
+          "launchedRuntime": false
+        },
+        {
+          "area": "Java",
+          "action": "Right-clicked owned Java editor",
+          "submenus": [
+            "Navigate",
+            "Refactor",
+            "Java Tests"
+          ],
+          "navigateEntry": "Go to Code Target"
+        },
+        {
+          "area": "Database",
+          "action": "Clicked Add Database Connection on Database toolbar",
+          "observed": "New database connection editor",
+          "openedNetworkConnection": false
+        },
+        {
+          "area": "Database",
+          "action": "Clicked Open SQL Console on Database toolbar",
+          "placement": "Database view header in the side bar",
+          "observed": "SQL editor contains sample SELECT"
+        },
+        {
+          "area": "SQL editor",
+          "action": "Clicked Run Selected SQL or Current Statement on editor toolbar",
+          "placement": "Editor title actions above the SQL file",
+          "visibleRows": 3,
+          "dataSource": "Only the local SQLite demo"
+        },
+        {
+          "area": "Query Results",
+          "action": "Right-clicked a second-row cell, clicked View Record, returned to Grid",
+          "placement": "Result panel below the SQL editor",
+          "menu": [
+            "Copy Cell",
+            "Copy Row",
+            "View Record"
+          ],
+          "recordRow": 2
+        }
+      ],
       "actualDatabaseConnections": 0,
-      "navigationReceiptSha256": "af6b8a89f992eb5795ad1c9e0bd3a727456486a87aacd5e2dd04278da336781c",
-      "setupReceiptSha256": "86f16d93b8a819693f16be96f272e091350f85f16558ce13f7cd7ff592f42cc5",
-      "earlyProviderReceiptSha256": "42fd04486b20ec810c1f256f4d966f2af0147fd0032b6c3c8944a2ce0bc3d63c"
+      "receiptSha256": "153208a826122578c951ae953685f1df36610f1d49dbc6f01aecdd737ee157c8"
+    },
+    "results": {
+      "testsPassed": 28,
+      "scope": "Actual Chromium rendering, toolbar, cell context menu, staged edit entry and stale target refusal."
     }
   },
   "uiAudit": {
     "path": "docs/ui-reachability-audit.md",
     "rows": 216,
-    "sha256": "c889a2d48ca5946971beca4d1ffc6bc197547eac74f6e61a7bbe8e1585bf9d95",
-    "baselineVersion": "0.177.0",
-    "originalColdPointerMissReproduced": true,
-    "databaseSample": {
-      "version": "0.177.0",
-      "vsixSha256": "ac39d51382acecdc920fbb27547b7fae21a367ff0e257a4fd89dc4beb18ece71",
-      "scope": "DataGrip mode, Open SQL Console, Ctrl+Enter within the SELECT, real results webview with three local sample rows.",
-      "receiptSha256": "781cc492fabf62e22ada466a85db00a988a7f346e0c027331a6bff3a24dd9398",
-      "actualDatabaseConnections": 0
-    }
+    "placementRowsExpanded": [
+      "IDEA-001",
+      "IDEA-015",
+      "IDEA-019",
+      "IDEA-065",
+      "IDEA-070",
+      "IDEA-073",
+      "IDEA-084",
+      "IDEA-086",
+      "DG-001",
+      "DG-044",
+      "DG-047",
+      "DG-048",
+      "DG-062",
+      "DG-067",
+      "DG-069",
+      "DG-095",
+      "DG-096"
+    ]
   },
   "inheritedRuntimeEvidence": {
     "mappedSchemaViews": {
@@ -126,8 +194,8 @@
     }
   },
   "previousPolish": {
-    "version": "0.177.0",
-    "publicEvidence": "https://github.com/Fenrindale/Rocketbrain/blob/ff17d43aba142984c7ff917b184dbfd2ada6ab14/docs/verification.json"
+    "version": "0.177.1",
+    "publicEvidence": "https://github.com/Fenrindale/Rocketbrain/blob/7b3461656fe6112bdb9af07a6a00777845570416/docs/verification.json"
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
@@ -226,12 +294,12 @@
     "stateChanges": []
   },
   "limits": [
-    "216개 행의 화면·메뉴·명령 접근 경로와 보존된 검증 범위를 검수했다.",
-    "실제 입력 검증은 Maven 예제와 로컬 SQL 샘플에서 수행했다."
+    "상단 버튼은 VS Code의 편집기 도구막대에 배치했다.",
+    "실제 입력 검증은 Java 예제와 로컬 SQLite 샘플을 사용했다."
   ],
   "next": [
-    "SQL 세미콜론 직후의 실행 범위와 파일을 처음 열었을 때의 진단 수정",
-    "전용 SQL 프로필의 카탈로그에 연결된 완성·정의 이동·진단 검증"
+    "같은 위치에서 연결 프로필과 실제 데이터베이스 작업의 조건별 메뉴를 검증",
+    "배치 감사에 남은 편집기 첫 입력, SQL 문장 경계와 최초 파일 진단을 점검"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
