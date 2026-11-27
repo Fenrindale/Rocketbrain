@@ -1,5 +1,7 @@
 # Rocketbrain Desktop Preview
 
+최신 독립 앱의 화면 구성, Java 설정, 업데이트는 [Rocketbrain Desktop 작업창과 업데이트](desktop-workspace.md)에 있다. 이 문서는 0.1.0-preview.1 설치 검증을 기록한다.
+
 Rocketbrain Desktop 0.1.0-preview.1은 Windows x64용 독립 설치 시제품이다. Code OSS 1.143.1 기반의 VSCodium 1.143.17232 배포본에 Rocketbrain 작업창 패치와 Rocketbrain 0.179.1 확장을 내장한다. 별도의 VS Code 설치 없이 실행할 수 있다. [Code OSS 소스](https://github.com/microsoft/vscode/tree/1.143.1) · [기반 배포본](https://github.com/VSCodium/vscodium/releases/tag/1.143.17232)
 
 ## 설치와 실행

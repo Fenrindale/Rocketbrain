@@ -6,6 +6,8 @@ const crypto = require('node:crypto');
 const { resolveDebugBundle } = require('./debug-runtime');
 const { stageLombokAgent } = require('./annotation-processing');
 
+const JDT_VERSION = '1.63.0';
+
 function absoluteDirectory(value, label) {
   if (typeof value !== 'string' || !value.trim() || !path.isAbsolute(value)) throw new Error(`${label} must be an explicit absolute directory.`);
   const resolved = fs.realpathSync(value);
@@ -21,23 +23,33 @@ function jdtLaunchArguments({ launcher, configuration, data, javaAgent }) {
     '-jar', launcher, '-configuration', configuration, '-data', data];
 }
 
-function resolveLaunch(options) {
-  const platform = options.platform || process.platform;
-  const javaHome = absoluteDirectory(options.javaHome, 'rocketbrain.java.javaHome');
-  const serverPath = absoluteDirectory(options.serverPath, 'rocketbrain.java.serverPath');
+function inspectJavaHome(value, platform = process.platform) {
+  const javaHome = absoluteDirectory(value, 'Java engine JDK');
   const release = fs.readFileSync(path.join(javaHome, 'release'), 'utf8');
   if (/JetBrains/i.test(release) || /(?:^|[\\/])JetBrains(?:[\\/]|$)|(?:^|[\\/])jbr(?:[\\/]|$)/i.test(javaHome)) throw new Error('Use an independent general-purpose JDK. Installed IDE JetBrains Runtime is not used by Rocketbrain.');
-  const version = /(?:^|\n)JAVA_VERSION="(\d+)/.exec(release);
-  if (!version || Number(version[1]) < 25) throw new Error('Rocketbrain Java requires an independent JDK 25 or newer to run JDT LS. Project JDKs can differ.');
+  const version = /(?:^|\n)JAVA_VERSION="((\d+)[^"]*)"/.exec(release);
+  if (!version || Number(version[2]) < 25) throw new Error('Rocketbrain Java requires an independent JDK 25 or newer to run JDT LS. Project JDKs can differ.');
   const command = path.join(javaHome, 'bin', platform === 'win32' ? 'java.exe' : 'java');
-  if (!fs.existsSync(command)) throw new Error(`Java executable was not found in ${javaHome}.`);
+  if (!fs.statSync(command, { throwIfNoEntry: false })?.isFile()) throw new Error(`Java executable was not found in ${javaHome}.`);
+  return {javaHome, release, command, version: version[1]};
+}
+
+function inspectServerPath(value, platform = process.platform, arch = process.arch) {
+  const serverPath = absoluteDirectory(value, 'Eclipse JDT LS directory');
   const plugins = path.join(serverPath, 'plugins');
   const launchers = fs.readdirSync(plugins).filter(name => /^org\.eclipse\.equinox\.launcher_[^/]+\.jar$/.test(name));
   if (launchers.length !== 1) throw new Error('JDT LS must contain exactly one Equinox launcher JAR. Select an extracted official JDT LS distribution.');
-  const arch = options.arch || process.arch;
   const configName = platform === 'win32' ? 'config_win' : (platform === 'darwin' ? 'config_mac' : 'config_linux') + (arch === 'arm64' ? '_arm' : '');
   const template = path.join(serverPath, configName);
   if (!fs.existsSync(path.join(template, 'config.ini'))) throw new Error(`JDT LS configuration ${configName} is missing.`);
+  return {serverPath, plugins, launcher: launchers[0], configName, template};
+}
+
+function resolveLaunch(options) {
+  const platform = options.platform || process.platform;
+  const arch = options.arch || process.arch;
+  const {javaHome, release, command} = inspectJavaHome(options.javaHome, platform);
+  const {serverPath, plugins, launcher, configName, template} = inspectServerPath(options.serverPath, platform, arch);
   if (!path.isAbsolute(options.storagePath || '')) throw new Error('Java storagePath must be absolute.');
   const gradleAnnotationProcessing = options.gradleAnnotationProcessing === true;
   if ((options.lombokJar || gradleAnnotationProcessing) && options.trustedWorkspace !== true) {
@@ -54,7 +66,7 @@ function resolveLaunch(options) {
   const identity = crypto.createHash('sha256').update(JSON.stringify({
     schema: 2, serverPath, javaHome, release, platform, arch, configName,
     template: fileHash(path.join(template, 'config.ini')),
-    launcher: { name: launchers[0], sha256: fileHash(path.join(plugins, launchers[0])) },
+    launcher: { name: launcher, sha256: fileHash(path.join(plugins, launcher)) },
     core: core.map(name => ({ name, sha256: fileHash(path.join(plugins, name)) })),
     bundles: debugBundle ? [{ path: debugBundle.path, sha256: debugBundle.sha256 }] : [],
     gradleUserHome: process.env.GRADLE_USER_HOME || '', importRuntime: options.cacheContext || null,
@@ -70,7 +82,7 @@ function resolveLaunch(options) {
   for (const key of ['CLIENT_PORT', 'CLIENT_HOST', 'CLIENT_PIPE', 'SERVER_PORT', 'SERVER_HOST']) delete env[key];
   return {
     command,
-    args: jdtLaunchArguments({ launcher: path.join(plugins, launchers[0]), configuration, data, javaAgent: lombok?.file }),
+    args: jdtLaunchArguments({ launcher: path.join(plugins, launcher), configuration, data, javaAgent: lombok?.file }),
     options: { cwd: serverPath, env, windowsHide: true },
     javaHome, serverPath, configuration, data, identity, bundles, debugBuild: debugBundle?.build,
     annotationProcessing: {gradle:gradleAnnotationProcessing,maven:'project',lombok:lombok && {version:lombok.version,sha256:lombok.sha256}}
@@ -114,4 +126,4 @@ function serverSettings(projectJdks = [], options = {}) {
   };
 }
 
-module.exports = { resolveLaunch, serverSettings, jdtLaunchArguments };
+module.exports = { JDT_VERSION, inspectJavaHome, inspectServerPath, resolveLaunch, serverSettings, jdtLaunchArguments };

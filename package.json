@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.179.1",
+  "version": "0.180.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -92,6 +92,8 @@
       { "language": "rocketbrain-java-regex", "scopeName": "source.rocketbrain-java-regex", "path": "./media/java-regex.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.java.setup", "title": "Java Setup", "category": "Rocketbrain" },
+      { "command": "rocketbrain.desktop.checkForUpdates", "title": "Check for Desktop Updates", "category": "Rocketbrain", "enablement": "rocketbrain.desktopUpdaterAvailable" },
       { "command": "rocketbrain.mode.intellij", "title": "Switch to IntelliJ IDEA Mode", "category": "Rocketbrain" },
       { "command": "rocketbrain.mode.datagrip", "title": "Switch to DataGrip Mode", "category": "Rocketbrain" },
       { "command": "rocketbrain.mode.all", "title": "Show All Tools", "category": "Rocketbrain" },
@@ -1677,6 +1679,9 @@
       { "id": "rocketbrain.results.snapshotsMenu", "label": "Result Snapshots" }
     ],
     "menus": {
+      "commandPalette": [
+        { "command": "rocketbrain.desktop.checkForUpdates", "when": "rocketbrain.desktopUpdaterAvailable" }
+      ],
       "rocketbrain.sql.navigationMenu": [
         { "command": "rocketbrain.sql.goToColumnOrigin", "when": "rocketbrain.sqlToolbarActiveCatalog", "group": "navigation@1" },
         { "command": "rocketbrain.sql.explainColumnOrigin", "when": "rocketbrain.sqlToolbarActiveCatalog", "group": "navigation@2" },

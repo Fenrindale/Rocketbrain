@@ -2,13 +2,14 @@
 // Explicit local installer. Run manually; extension activation never downloads runtimes.
 const fs = require('node:fs');
 const fsp = fs.promises;
-const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { spawnSync } = require('node:child_process');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
-const JDT_VERSION = '1.63.0';
+const { JDT_VERSION, resolveLaunch } = require('../src/java/runtime');
+const run = promisify(execFile);
 const JDT_FILE = 'jdt-language-server-1.63.0-202610191322.tar.gz';
 const JDT_SHA256 = 'b1f2abe0b3cccb462cf64fb4a5587c7d09df60cf8be7748b152cbd89d018bdc4';
 
@@ -28,7 +29,7 @@ async function download(url, file, checksum) {
   if (fs.existsSync(file) && await sha256(file) === checksum) return;
   const response = await fetch(url, { signal: AbortSignal.timeout(300000) });
   if (!response.ok) throw new Error(`Download failed (${response.status}): ${url}`);
-  const partial = file + '.partial'; let bytes = 0;
+  const partial = file + '.' + crypto.randomUUID() + '.partial'; let bytes = 0;
   try {
     await pipeline(Readable.fromWeb(response.body), new Transform({ transform(chunk, encoding, done) { bytes += chunk.length; done(bytes > 350 * 1024 * 1024 ? new Error('Runtime archive exceeds 350 MiB.') : undefined, chunk); } }), fs.createWriteStream(partial, { flags: 'wx' }));
     if (await sha256(partial) !== checksum) throw new Error(`SHA-256 mismatch: ${path.basename(file)}`);
@@ -36,16 +37,15 @@ async function download(url, file, checksum) {
   } finally { await fsp.rm(partial, { force: true }); }
 }
 
-function extract(archive, destination) {
-  const listing = spawnSync('tar', ['-tf', archive], { encoding: 'utf8', windowsHide: true, maxBuffer: 20 * 1024 * 1024 });
-  if (listing.status !== 0) throw new Error(`Cannot list archive: ${listing.stderr || listing.error}`);
+async function extract(archive, destination) {
+  const options = { encoding: 'utf8', windowsHide: true, maxBuffer: 20 * 1024 * 1024 };
+  const listing = await run('tar', ['-tf', archive], options);
   for (const entry of listing.stdout.split(/\r?\n/).filter(Boolean)) {
     const normalized = entry.replace(/\\/g, '/');
     if (normalized.startsWith('/') || /^[a-z]:/i.test(normalized) || normalized.split('/').includes('..')) throw new Error('Unsafe archive entry.');
   }
-  fs.mkdirSync(destination, { recursive: true });
-  const result = spawnSync('tar', ['-xf', archive, '-C', destination], { encoding: 'utf8', windowsHide: true, maxBuffer: 2 * 1024 * 1024 });
-  if (result.status !== 0) throw new Error(`Cannot extract archive: ${result.stderr || result.error}`);
+  await fsp.mkdir(destination, { recursive: true });
+  await run('tar', ['-xf', archive, '-C', destination], options);
 }
 
 async function provision(options) {
@@ -66,7 +66,7 @@ async function provision(options) {
     const archive = path.join(target, path.basename(pkg.name));
     progress(`Downloading and verifying Temurin ${asset.version.semver} (${platform}/${arch}).`);
     await download(pkg.link, archive, pkg.checksum.toLowerCase());
-    const jdkRoot = path.join(target, 'temurin-' + asset.version.semver.replace(/[^a-zA-Z0-9._-]/g, '_')); extract(archive, jdkRoot);
+    const jdkRoot = path.join(target, 'temurin-' + asset.version.semver.replace(/[^a-zA-Z0-9._-]/g, '_')); await extract(archive, jdkRoot);
     const roots = (await fsp.readdir(jdkRoot, { withFileTypes: true })).filter(entry => entry.isDirectory()).map(entry => path.join(jdkRoot, entry.name));
     javaHome = roots.map(root => process.platform === 'darwin' ? path.join(root, 'Contents', 'Home') : root).find(root => fs.existsSync(path.join(root, 'release')));
     if (!javaHome) throw new Error('Temurin archive does not contain a JDK release file.');
@@ -76,11 +76,9 @@ async function provision(options) {
   const archive = path.join(target, JDT_FILE);
   progress(`Downloading and verifying Eclipse JDT LS ${JDT_VERSION}.`);
   await download(jdtUrl, archive, JDT_SHA256);
-  const serverPath = path.join(target, `jdtls-${JDT_VERSION}`); extract(archive, serverPath);
-  const { resolveLaunch } = require('../src/java/runtime');
+  const serverPath = path.join(target, `jdtls-${JDT_VERSION}`); await extract(archive, serverPath);
   const launch = resolveLaunch({ javaHome, serverPath, storagePath: path.join(target, 'validation-storage') });
-  const javaVersion = spawnSync(launch.command, ['--version'], { encoding: 'utf8', windowsHide: true });
-  if (javaVersion.status !== 0) throw new Error(`JDK execution failed: ${javaVersion.stderr || javaVersion.error}`);
+  const javaVersion = await run(launch.command, ['--version'], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
   sources.push({ name: 'Eclipse JDT LS', version: JDT_VERSION, url: jdtUrl, checksumUrl: jdtUrl + '.sha256', sha256: JDT_SHA256, license: 'EPL-2.0 and included third-party licenses.' });
   const debuggerRuntime = await require('./java-debug-provision').provisionDebugger(path.join(target, 'java-debug'), progress, { javaHome, serverPath });
   sources.push(debuggerRuntime.source);

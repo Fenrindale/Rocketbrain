@@ -5,16 +5,21 @@ const projectFiles = '**/{pom.xml,build.gradle,build.gradle.kts,build.sbt,*.java
 const excluded = '**/{.git,.gradle,node_modules,build,target,out,bin}/**';
 const javaSource = document => !document.isClosed && document.uri?.scheme==='file' && jvmLanguages.has(document.languageId);
 
-function registerJavaAutostart(vscode,start,reportError) {
+function registerJavaAutostart(vscode,start,reportError,allowsStart=()=>true) {
   let closed=false, admitted=false, generation=0;
   const workspace = vscode.workspace;
   function eligible() {
-    return !closed && !admitted && workspace.isTrusted;
+    return !closed && !admitted && workspace.isTrusted && allowsStart();
   }
   function admit() {
     if (!eligible()) return;
     admitted=true;
-    void start().catch(reportError);
+    void start().then(started => {
+      if (started === false && !closed) {
+        admitted=false;
+        check();
+      }
+    }).catch(reportError);
   }
   async function inspect() {
     if (!eligible()) return;
@@ -31,7 +36,7 @@ function registerJavaAutostart(vscode,start,reportError) {
     workspace.onDidGrantWorkspaceTrust(check)
   ];
   check();
-  return {dispose(){
+  return { check, get admitted(){return admitted;}, dispose(){
     closed=true;
     for(const subscription of subscriptions)subscription.dispose();
   }};

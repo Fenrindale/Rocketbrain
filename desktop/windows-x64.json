@@ -1,9 +1,9 @@
 {
-  "version": "0.1.0-preview.1",
-  "installerFileVersion": "0.1.0.1",
+  "version": "0.2.0-preview.1",
+  "installerFileVersion": "0.2.0.1",
   "platform": "win32-x64",
   "extensionId": "rocketbrain-local.rocketbrain",
-  "extensionVersion": "0.179.1",
+  "extensionVersion": "0.180.0",
   "source": {
     "codeOssTag": "1.143.1",
     "codeOssCommit": "e646868227c3e3a9e3f24277c8c7220be42c0be7",

@@ -7,8 +7,10 @@ const modes = {
   datagrip: { label: 'DataGrip', icon: 'database', description: 'Databases and SQL', view: 'rocketbrain.connections' }
 };
 
-async function registerWorkspaceMode(context, vscode) {
-  const desktop = ['Rocketbrain', 'Rocketbrain Desktop'].includes(vscode.env?.appName);
+const isRocketbrainDesktop = vscode => ['Rocketbrain', 'Rocketbrain Desktop'].includes(vscode.env?.appName);
+
+async function registerWorkspaceMode(context, vscode, onModeChanged = () => {}) {
+  const desktop = isRocketbrainDesktop(vscode);
   const saved = context.workspaceState.get(modeKey);
   const defaultMode = desktop ? 'intellij' : 'all';
   let current = typeof saved === 'string' && Object.hasOwn(modes, saved) ? saved : defaultMode;
@@ -35,6 +37,7 @@ async function registerWorkspaceMode(context, vscode) {
           await vscode.commands.executeCommand('setContext', modeKey, mode);
           current = mode;
           updateStatus();
+          onModeChanged(current);
         }
         if (desktop && mode === 'datagrip') {
           await vscode.commands.executeCommand('rocketbrain.showQueryResults');
@@ -55,8 +58,9 @@ async function registerWorkspaceMode(context, vscode) {
   }
 
   await vscode.commands.executeCommand('setContext', modeKey, current);
+  onModeChanged(current);
   updateStatus();
   for (const item of items.values()) item.show();
 }
 
-module.exports = { registerWorkspaceMode };
+module.exports = { registerWorkspaceMode, isRocketbrainDesktop };

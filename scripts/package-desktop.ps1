@@ -19,6 +19,12 @@ if ((Get-FileHash -LiteralPath $basePath).Hash -ine $lock.source.sha256) {
 }
 $vsixHash = (Get-FileHash -LiteralPath $vsixPath).Hash.ToLowerInvariant()
 $output = (New-Item -ItemType Directory -Path $OutputDirectory -Force).FullName
+$installer = Join-Path $output "RocketbrainDesktop-$($lock.version)-win32-x64-setup.exe"
+$updateMetadata = Join-Path $output "RocketbrainDesktop-$($lock.version)-win32-x64-update.json"
+$packageReceipt = Join-Path $output 'desktop-package-receipt.json'
+if ((Test-Path -LiteralPath $installer) -or (Test-Path -LiteralPath $updateMetadata) -or (Test-Path -LiteralPath $packageReceipt)) {
+    throw 'Choose an output directory without an existing desktop release.'
+}
 $stage = New-Item -ItemType Directory -Path (Join-Path $output ('desktop-staging-' + [Guid]::NewGuid().ToString('N')))
 $payload = (New-Item -ItemType Directory -Path (Join-Path $stage.FullName 'payload')).FullName
 $unpackedVsix = (New-Item -ItemType Directory -Path (Join-Path $stage.FullName 'vsix')).FullName
@@ -44,6 +50,19 @@ if (!(Test-Path -LiteralPath (Join-Path $builtIn 'dist/extension.js') -PathType 
 
 & node (Join-Path $desktop 'patch-workbench.cjs') $app
 if ($LASTEXITCODE -ne 0) { throw 'The pinned Code OSS workbench patch failed.' }
+$rocketMark = Get-Content -Raw -LiteralPath (Join-Path $repository 'media/rocketbrain.svg')
+$media = Join-Path $app 'out/media'
+foreach ($icon in @('code-icon.svg', 'vscode-icon.svg')) {
+    Set-Content -LiteralPath (Join-Path $media $icon) -Value $rocketMark -Encoding utf8NoBOM
+}
+$letterpressFolders = @($media, (Join-Path $app 'out/vs/workbench/browser/parts/editor/media'))
+foreach ($folder in $letterpressFolders) {
+    foreach ($theme in @('dark', 'light', 'hcDark', 'hcLight')) {
+        $color = if ($theme -in @('light','hcLight')) { '#404D5A' } else { '#C5C5C5' }
+        $mark = $rocketMark.Replace('#C5C5C5', $color)
+        Set-Content -LiteralPath (Join-Path $folder "letterpress-$theme.svg") -Value $mark -Encoding utf8NoBOM
+    }
+}
 $productPath = Join-Path $app 'product.json'
 $product = Get-Content -Raw -LiteralPath $productPath | ConvertFrom-Json -AsHashtable
 $product['nameShort'] = 'Rocketbrain'
@@ -58,10 +77,12 @@ $product['win32NameVersion'] = 'Rocketbrain Desktop'
 $product['win32RegValueName'] = 'Rocketbrain Desktop'
 $product['win32ShellNameShort'] = 'Rocketbrain'
 $product['win32AppUserModelId'] = 'Rocketbrain.Desktop'
+$product['target'] = 'user'
 $product['reportIssueUrl'] = 'https://github.com/Fenrindale/Rocketbrain/issues'
 $product['releaseNotesUrl'] = 'https://github.com/Fenrindale/Rocketbrain'
 $product['rocketbrainDesktop'] = [ordered]@{
     version = $lock.version
+    platform = $lock.platform
     baseArchiveSha256 = $lock.source.sha256
     codeOssCommit = $lock.source.codeOssCommit
     extensionVersion = $extension.version
@@ -88,8 +109,6 @@ foreach ($suffix in @('', '.cmd')) {
     Remove-Item -LiteralPath $old
 }
 
-$installer = Join-Path $output "RocketbrainDesktop-$($lock.version)-win32-x64-setup.exe"
-if (Test-Path -LiteralPath $installer) { throw 'Choose an output directory without an existing preview installer.' }
 & $compilerPath "/DPayloadPath=$payload" "/DOutputPath=$output" "/DDesktopVersion=$($lock.version)" `
     "/DInstallerFileVersion=$($lock.installerFileVersion)" (Join-Path $desktop 'windows-setup.iss')
 if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $installer -PathType Leaf)) { throw 'Windows installer compilation failed.' }
@@ -106,4 +125,25 @@ $receipt = [ordered]@{
     installerSha256 = (Get-FileHash -LiteralPath $installer).Hash.ToLowerInvariant()
     installerBytes = (Get-Item -LiteralPath $installer).Length
 }
-$receipt | ConvertTo-Json | Tee-Object -FilePath (Join-Path $output 'desktop-package-receipt.json')
+$signature = (Get-AuthenticodeSignature -LiteralPath $installer).Status
+$authenticode = switch ($signature) {
+    Valid { 'signed' }
+    NotSigned {
+        if ($lock.version -notmatch '-preview\.\d+$') { throw 'A stable desktop release requires a signed installer.' }
+        'unsigned-preview'
+    }
+    default { throw "Unexpected installer signature state: $signature" }
+}
+[ordered]@{
+    schemaVersion = 1
+    product = 'Rocketbrain Desktop'
+    version = $lock.version
+    target = $lock.platform
+    installer = [ordered]@{
+        name = $receipt.installerFile
+        size = $receipt.installerBytes
+        sha256 = $receipt.installerSha256
+        authenticode = $authenticode
+    }
+} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $updateMetadata -Encoding utf8NoBOM
+$receipt | ConvertTo-Json | Tee-Object -FilePath $packageReceipt

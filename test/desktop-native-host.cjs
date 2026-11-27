@@ -111,8 +111,10 @@ function createInstalledRun(db) {
   return { child, chromium, configPath, extensions, manifest: bundled.manifest, product, hashes };
 }
 
-const titlebar = page => page.locator('[id="workbench.parts.titlebar"] .center-adjacent-toolbar-container');
+const titlebar = page => page.locator('[id="workbench.parts.titlebar"] .rb-workbench-header');
 const sidebar = page => page.locator('[id="workbench.parts.sidebar"]');
+const secondarySidebar = page => page.locator('[id="workbench.parts.auxiliarybar"]');
+const dock = page => page.locator('[id="workbench.parts.statusbar"] .rb-workbench-dock:visible');
 const panel = page => page.locator('[id="workbench.parts.panel"]');
 const editor = page => page.locator('[id="workbench.parts.editor"]');
 const lines = page => editor(page).locator('.monaco-editor .view-lines .view-line');
@@ -130,6 +132,13 @@ async function assertResultsBelowEditor(page) {
   const [panelBounds, editorBounds] = await Promise.all([panel(page).boundingBox(), editor(page).boundingBox()]);
   assert.ok(panelBounds && editorBounds && panelBounds.y >= editorBounds.y + editorBounds.height - 3,
     'Query Results is not in the bottom workbench panel.');
+}
+
+async function assertSideLayout(page, secondaryName) {
+  await secondarySidebar(page).getByText(secondaryName, { exact: true }).first().waitFor({ state: 'visible', timeout: 10000 });
+  const [primary, center, secondary] = await Promise.all([sidebar(page).boundingBox(), editor(page).boundingBox(), secondarySidebar(page).boundingBox()]);
+  assert.ok(primary && center && secondary && primary.x + primary.width <= center.x + 3 && center.x + center.width <= secondary.x + 3,
+    'The Rocketbrain tools are not positioned around the editor in left and right docks.');
 }
 
 async function selectRunConfiguration(page) {
@@ -159,7 +168,8 @@ async function exerciseJava(page) {
   const top = titlebar(page);
   await action(top, 'Java Mode').click({ timeout: 12000 });
   await header(page, 'Java Projects').waitFor({ state: 'visible', timeout: 10000 });
-  step('Window toolbar → Java Mode', 'Java Projects visible');
+  await assertSideLayout(page, 'Outline');
+  step('Window toolbar → Java Mode', 'Java Projects docked left and Structure docked right around the editor');
   const point = await invocationPoint(page);
   await page.keyboard.down('Control');
   try {
@@ -172,16 +182,19 @@ async function exerciseJava(page) {
   await page.locator('.tabs-container .tab.active').filter({ hasText: /^Greeter\.java$/ })
     .waitFor({ state: 'visible', timeout: 10000 });
   step('Java editor → Ctrl+Click', 'Greeter.java declaration opened from App.java');
+  await page.screenshot({ path: path.join(output, 'desktop-java-structure.png') });
   await page.getByRole('tab', { name: /App\.java/ }).click({ timeout: 8000 });
   await action(top, 'Run Java').click({ timeout: 10000 });
   await selectRunConfiguration(page);
   assert.equal((await recorded('run-output')).greeting, true);
   assert.equal((await recorded('run-ended')).terminated, true);
-  step('Window toolbar → Run Java', 'Fixture JVM printed its greeting and exited');
+  await panel(page).getByText('Debug Console', { exact: true }).first().waitFor({ state: 'visible', timeout: 10000 });
+  step('Window toolbar → Run Java', 'Fixture JVM printed its greeting and exited with console docked below the editor');
 
   await action(top, 'Debug Java').click({ timeout: 10000 });
   await selectRunConfiguration(page);
   assert.equal((await recorded('debug-stopped')).reason, 'breakpoint');
+  await panel(page).getByText('Run and Debug', { exact: true }).first().waitFor({ state: 'visible', timeout: 10000 });
   await page.keyboard.press('F5');
   assert.equal((await recorded('debug-ended')).terminated, true);
   step('Window toolbar → Debug Java', 'Owned Java debug session stopped at breakpoint, resumed and exited');
@@ -213,8 +226,9 @@ async function exerciseDatabase(page, config) {
   const top = titlebar(page);
   await action(top, 'Database Mode').click({ timeout: 12000 });
   await header(page, 'Database').waitFor({ state: 'visible', timeout: 10000 });
+  await assertSideLayout(page, 'Explorer');
   await assertResultsBelowEditor(page);
-  step('Window toolbar → Database Mode', 'Database Explorer and bottom Query Results visible');
+  step('Window toolbar → Database Mode', 'Database Explorer left, Files right, and Query Results below the editor');
 
   await action(top, 'Open SQL Console').click({ timeout: 10000 });
   await lines(page).filter({ hasText: /SELECT/i }).last().click({ timeout: 10000 });
@@ -227,7 +241,7 @@ async function exerciseDatabase(page, config) {
   await assertResultsBelowEditor(page);
   step('SQL console → Ctrl+Enter', 'Observed marker 31807 in the bottom panel after the statement terminator');
 
-  await action(top, 'Database Explorer').click({ timeout: 10000 });
+  await action(dock(page), 'Database Explorer').click({ timeout: 10000 });
   const tree = header(page, 'Database').locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " pane ")][1]');
   const preview = tree.getByText('transaction_probe', { exact: true }).first();
   if (!await preview.count()) {
@@ -289,6 +303,11 @@ async function run(db) {
     await exerciseJava(page);
     await exerciseDatabase(page, db.config);
     await page.screenshot({ path: path.join(output, 'desktop-db-after-commit.png') });
+    await action(titlebar(page), 'Java Mode').click({ timeout: 12000 });
+    await header(page, 'Java Projects').waitFor({ state: 'visible', timeout: 10000 });
+    await assertSideLayout(page, 'Outline');
+    await panel(page).waitFor({ state: 'hidden', timeout: 10000 });
+    step('Window toolbar → return to Java Mode', 'Java docks restored and database results dock closed');
     return { executableSha256, ...hashes, product: product.nameShort, core: ready.vscode,
       build: product.rocketbrainDesktop.version, codeOssCommit: product.rocketbrainDesktop.codeOssCommit,
       extension: ready.extension, bundledVsixSha256: product.rocketbrainDesktop.extensionVsixSha256,

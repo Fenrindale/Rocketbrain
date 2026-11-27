@@ -66,6 +66,39 @@ test('opening a local Java document starts support and explicit commands remain 
   } finally {registered.dispose();}
 });
 
+test('standalone Java startup waits through Database mode and rechecks deferred start after the switch', async () => {
+  let enabled = false, starts = 0, resolveStart;
+  const subscribe = () => ({ dispose() {} });
+  const workspace = { isTrusted: true, workspaceFolders: [{}], textDocuments: [],
+    findFiles: async () => [{ scheme: 'file' }], onDidOpenTextDocument: subscribe,
+    onDidChangeWorkspaceFolders: subscribe, onDidGrantWorkspaceTrust: subscribe };
+  const startup = registerJavaAutostart({ workspace }, () => {
+    starts++;
+    return new Promise(resolve => { resolveStart = resolve; });
+  }, assert.fail, () => enabled);
+  try {
+    await tick();
+    assert.equal(starts, 0);
+    enabled = true;
+    startup.check();
+    await tick();
+    assert.equal(starts, 1);
+    enabled = false;
+    resolveStart(false);
+    await tick();
+    assert.equal(startup.admitted, false);
+    assert.equal(starts, 1);
+    enabled = true;
+    startup.check();
+    await tick();
+    assert.equal(startup.admitted, true);
+    assert.equal(starts, 2);
+    resolveStart();
+  } finally {
+    startup.dispose();
+  }
+});
+
 test('native definition requested during startup delegates once to the real provider', async () => {
   const document = { version: 1 };
   const position = { line: 2, character: 10 };

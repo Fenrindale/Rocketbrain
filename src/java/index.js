@@ -1,6 +1,9 @@
 'use strict';
 const path = require('node:path');
-const { resolveLaunch, serverSettings } = require('./runtime');
+const { resolveLaunch, serverSettings, inspectServerPath } = require('./runtime');
+const { desktopJavaHome, discoverDesktopJdk, inspectDesktopRuntime } = require('./desktop-runtime');
+const { registerDesktopJavaSetup } = require('./desktop-setup-vscode');
+const { isRocketbrainDesktop } = require('../workspace-mode');
 const { registerSpringFeatures } = require('./spring');
 const { registerJavaDebugger } = require('./debug');
 const { ACTIONS,namedAction,editorAnchor } = require('./extraction-actions');
@@ -15,8 +18,27 @@ const { registerJavaAutostart, registerJavaDefinitionStartup, createDefinitionRe
 function registerJavaFeatures(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain Java', { log: true });
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 29);
-  status.command = 'rocketbrain.javaSupport';
+  const desktop = isRocketbrainDesktop(vscode) && !vscode.env?.remoteName;
+  const profileStorage = context.globalStorageUri?.scheme === 'file' ? context.globalStorageUri.fsPath : context.globalStoragePath;
+  const managedEngine = path.join(profileStorage, 'java-engine');
+  const config = () => vscode.workspace.getConfiguration('rocketbrain.java');
+  const detectJdk = () => discoverDesktopJdk(managedEngine);
+  const desktopRuntime = () => inspectDesktopRuntime(config(), managedEngine, detectJdk);
+  const enginePaths = () => {
+    if (desktop) {
+      const { jdk, serverPath, debugBundlePath, problems } = desktopRuntime();
+      return { javaHome: jdk?.path, serverPath, debugBundlePath, problems };
+    }
+    const settings = config();
+    return { javaHome: settings.get('javaHome'), serverPath: settings.get('serverPath'), debugBundlePath: settings.get('debugBundlePath') };
+  };
   let client, lastSettings, fileWatcher, debuggerController, disposing, containerOwner, definitionReadiness, epoch = 0;
+  let workspaceMode, setup, autostart;
+  let setupPrompted = false;
+  const javaModeActive = () => !desktop || (workspaceMode !== undefined && workspaceMode !== 'datagrip');
+  const canStartDesktop = () => javaModeActive() && Boolean(vscode.workspace.workspaceFolders?.length ||
+    vscode.workspace.textDocuments.some(document => document.uri.scheme === 'file' && ['java', 'kotlin', 'groovy'].includes(document.languageId)));
+  status.command = desktop ? 'rocketbrain.java.setup' : 'rocketbrain.javaSupport';
   let disposed = false, configuring = false, installing = false, pending = Promise.resolve();
   let state = { state: 'stopped', message: 'Java server is stopped.' };
   const subscriptions = [output, status];
@@ -34,8 +56,9 @@ function registerJavaFeatures(context, vscode) {
       next === 'configuration-required' ? 'Setup' : next;
     status.text = `$(coffee) Rocketbrain Java · ${label}`;
     status.tooltip = indexing ? 'Java is connected. Wait for project indexing before navigating to definitions.' : state.message;
-    status.show();
+    if (javaModeActive()) status.show(); else status.hide();
     void vscode.commands.executeCommand('setContext', 'rocketbrain.javaEngineState', indexing ? 'indexing' : next);
+    setup?.refresh();
   }
   const serial = action => { const run = pending.then(() => action(), () => action()); pending = run.catch(() => {}); return run; };
   function readNullChecks(config) {
@@ -93,6 +116,7 @@ function registerJavaFeatures(context, vscode) {
   }
   async function startNow(override) {
     if (disposed || client) return { ...state };
+    if (!javaModeActive()) return { ...state, message: 'Switch to Java mode to start the Java engine.' };
     if (containerOwner) {
       update('container', 'The managed container Java session owns editor navigation and diagnostics.');
       return { ...state };
@@ -100,12 +124,17 @@ function registerJavaFeatures(context, vscode) {
     const config = vscode.workspace.getConfiguration('rocketbrain.java');
     if (!config.get('enabled', true)) { update('disabled', 'Enable rocketbrain.java.enabled to start Java support.'); return { ...state }; }
     if (!vscode.workspace.isTrusted) { update('restricted', 'Java project import requires a trusted workspace.'); return { ...state }; }
-    if (!config.get('serverPath') || !config.get('javaHome')) { update('configuration-required', 'Set rocketbrain.java.serverPath to an extracted official JDT LS distribution and rocketbrain.java.javaHome to an independent JDK 25+.'); return { ...state }; }
+    const { javaHome, serverPath, debugBundlePath, problems } = enginePaths();
+    if (!serverPath || !javaHome) {
+      update('configuration-required', desktop ? problems.join(' ') || 'Open Java Setup to finish configuring the Java engine.' :
+        'Set rocketbrain.java.serverPath to an extracted official JDT LS distribution and rocketbrain.java.javaHome to an independent JDK 25+.');
+      return { ...state };
+    }
     try {
       const index = override || storedIndex();
       const gradleAnnotationProcessing = config.get('annotationProcessing.gradleEnabled',false) === true;
       const launch = resolveLaunch({
-        serverPath:config.get('serverPath'),javaHome:config.get('javaHome'),debugBundlePath:config.get('debugBundlePath'),
+        serverPath,javaHome,debugBundlePath,
         storagePath:index.storage,trustedWorkspace:vscode.workspace.isTrusted,
         lombokJar:config.get('annotationProcessing.lombokJar',''),gradleAnnotationProcessing,
         cacheContext:{projectJdks:config.get('projectJdks',[]),gradleHome:config.get('gradleHome',''),gradleJavaHome:config.get('gradleJavaHome','')}
@@ -206,7 +235,18 @@ function registerJavaFeatures(context, vscode) {
   const api = {
     start: () => serial(startNow),
     stop: () => serial(stopNow),
-    restart: () => serial(async () => { await stopNow(); return startNow(); }),
+    restart: () => serial(async () => {
+      if (!javaModeActive()) return { ...state, message: 'Switch to Java mode to restart the Java engine.' };
+      await stopNow();
+      return startNow();
+    }),
+    setWorkspaceMode(mode) {
+      workspaceMode = mode;
+      if (desktop) {
+        showStatus();
+        autostart?.check();
+      }
+    },
     suspendForContainer: () => serial(async () => {
       if (disposed || containerOwner) throw Error('The local Java service already has a container owner.');
       if (vscode.debug.activeDebugSession) throw Error('Finish the active debug session before switching the Java language engine.');
@@ -230,7 +270,7 @@ function registerJavaFeatures(context, vscode) {
         else update(priorState.state, priorState.message);
       } };
     }),
-    getState: () => ({ ...state, springMode: 'local-semantic-index', springLimit: 'Local source/configuration model; runtime and custom Conditions remain unknown. This is not the full Spring Language Server.' }),
+    getState: () => ({ ...state, ready: state.state === 'running' && Boolean(definitionReadiness?.isReady), springMode: 'local-semantic-index', springLimit: 'Local source/configuration model; runtime and custom Conditions remain unknown. This is not the full Spring Language Server.' }),
     executeWorkspaceCommand: async (command, ...args) => {
       await api.start();
       if (!client || state.state !== 'running') throw new Error(state.message);
@@ -356,7 +396,6 @@ function registerJavaFeatures(context, vscode) {
   subscriptions.push(api.delegatedBuild);
   api.groovy=require('./groovy-vscode').registerGroovyWorkbench(vscode,api);
   api.quarkus=require('./quarkus-vscode').registerQuarkusWorkbench(vscode,api);
-  const profileStorage = context.globalStorageUri?.scheme === 'file' ? context.globalStorageUri.fsPath : context.globalStoragePath;
   api.jakarta=require('./jakarta-vscode').registerJakartaWorkbench(vscode,api,{storagePath:profileStorage});
   api.micronaut=require('./micronaut-vscode').registerMicronautWorkbench(vscode,api);
   api.scala=require('./scala-vscode').registerScalaWorkbench(context,vscode,api);
@@ -412,26 +451,40 @@ function registerJavaFeatures(context, vscode) {
   });
   subscriptions.push(api.codeHints);
   api.coroutines=require('./kotlin-coroutines-vscode').registerKotlinCoroutines(vscode,api);
-  async function installEngine() {
+  const reloadSetup = () => {
+    if (!desktop || javaModeActive() && (autostart?.admitted || client)) return api.restart();
+    return api.getState();
+  };
+  async function writeEngineSettings(values) {
+    configuring = true;
+    try {
+      const settings = config();
+      for (const [key, value] of Object.entries(values)) await settings.update(key, value, vscode.ConfigurationTarget.Global);
+    } finally {
+      configuring = false;
+    }
+  }
+  async function saveSetup(key, value) {
+    if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before changing the Java engine.');
+    if (key === 'javaHome' && value) value = desktopJavaHome(value).path;
+    if (key === 'serverPath') value = inspectServerPath(value).serverPath;
+    await writeEngineSettings({ [key]: value });
+    await reloadSetup();
+  }
+  async function installEngine(javaHome, onProgress) {
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before installing and starting the Java engine.');
     if (installing) throw new Error('Java engine installation is already running.');
     installing = true;
     try {
       const { provision } = require('../../scripts/java-provision');
       const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Rocketbrain · Install and configure Java engine', cancellable: false }, progress => provision({
-        target: path.join(context.globalStorageUri.fsPath, 'java-engine'),
-        onProgress(message) { output.appendLine(message); progress.report({ message }); }
+        target: managedEngine, 'java-home': javaHome,
+        onProgress(message) { output.appendLine(message); progress.report({ message }); onProgress?.(message); }
       }));
-      configuring = true;
-      try {
-        const config = vscode.workspace.getConfiguration('rocketbrain.java');
-        await config.update('javaHome', result.settings['rocketbrain.java.javaHome'], vscode.ConfigurationTarget.Global);
-        await config.update('serverPath', result.settings['rocketbrain.java.serverPath'], vscode.ConfigurationTarget.Global);
-        await config.update('debugBundlePath', result.settings['rocketbrain.java.debugBundlePath'], vscode.ConfigurationTarget.Global);
-        await config.update('enabled', true, vscode.ConfigurationTarget.Global);
-      } finally { configuring = false; }
-      const info = await api.restart();
-      vscode.window.showInformationMessage(info.state === 'running' ? 'Rocketbrain Java engine is installed and connected.' : info.message);
+      await writeEngineSettings({ javaHome: result.javaHome, serverPath: result.serverPath,
+        debugBundlePath: result.debugBundlePath, enabled: true });
+      const info = await reloadSetup();
+      if (!desktop) vscode.window.showInformationMessage(info.state === 'running' ? 'Rocketbrain Java engine is installed and connected.' : info.message);
       return info;
     } finally { installing = false; }
   }
@@ -444,11 +497,27 @@ function registerJavaFeatures(context, vscode) {
     }
   });
   subscriptions.push(api.librarySources);
-  subscriptions.push(vscode.commands.registerCommand('rocketbrain.java.installEngine', () => installEngine().catch(error => vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`))), vscode.commands.registerCommand('rocketbrain.java.start', () => api.start().catch(error => vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`))), vscode.commands.registerCommand('rocketbrain.java.restart', () => api.restart().catch(error => vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`))), vscode.commands.registerCommand('rocketbrain.java.status', () => api.getState()), vscode.commands.registerCommand('rocketbrain.javaSupport', async () => {
+
+  if (desktop) {
+    setup = registerDesktopJavaSetup(vscode, { runtime: desktopRuntime, canStart: canStartDesktop, detectJdk,
+      getState: api.getState, install: installEngine, save: saveSetup, restart: api.restart, output });
+    subscriptions.push(setup, vscode.workspace.onDidGrantWorkspaceTrust(setup.refresh),
+      vscode.workspace.onDidChangeWorkspaceFolders(setup.refresh), vscode.workspace.onDidOpenTextDocument(setup.refresh));
+  }
+  const reportSetupError = error => vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`);
+  const installOrOpenSetup = () => desktop ? setup.open() : installEngine().catch(reportSetupError);
+  subscriptions.push(
+    vscode.commands.registerCommand('rocketbrain.java.installEngine', installOrOpenSetup),
+    vscode.commands.registerCommand('rocketbrain.java.setup', () => desktop ? setup.open() : vscode.commands.executeCommand('rocketbrain.javaSupport')),
+    vscode.commands.registerCommand('rocketbrain.java.start', () => api.start().catch(reportSetupError)),
+    vscode.commands.registerCommand('rocketbrain.java.restart', () => api.restart().catch(reportSetupError)),
+    vscode.commands.registerCommand('rocketbrain.java.status', api.getState),
+    vscode.commands.registerCommand('rocketbrain.javaSupport', async () => {
+    if (desktop) return setup.open();
     const info = api.getState();
     const selected = await vscode.window.showQuickPick([{ label: 'Install and configure Java engine', description: 'Download Eclipse JDT LS and Temurin JDK; save Java paths', action: 'install' }, { label: 'Start / restart Java server', action: 'restart' }, { label: 'Open Java settings', action: 'settings' }, { label: 'Show Java output', action: 'output' }, { label: 'Browse Spring endpoints', action: 'endpoints' }], { title: `Rocketbrain Java · ${info.state}`, placeHolder: info.message });
-    if (selected?.action === 'install') await installEngine().catch(error => vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`));
-    else if (selected?.action === 'restart') await api.restart().catch(error => vscode.window.showErrorMessage(`Rocketbrain Java: ${error.message}`));
+    if (selected?.action === 'install') await installEngine().catch(reportSetupError);
+    else if (selected?.action === 'restart') await api.restart().catch(reportSetupError);
     else if (selected?.action === 'settings') await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:rocketbrain-local.rocketbrain rocketbrain.java');
     else if (selected?.action === 'output') output.show();
     else if (selected?.action === 'endpoints') await vscode.commands.executeCommand('rocketbrain.spring.endpoints');
@@ -460,7 +529,13 @@ function registerJavaFeatures(context, vscode) {
   subscriptions.push(vscode.workspace.onDidChangeConfiguration(event=>{
     if(event.affectsConfiguration('rocketbrain.java.nullChecks'))void serial(syncNullChecks).catch(error=>output.appendLine(error.message));
   }));
-  subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (!configuring && ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome', 'extractInterface.replaceUsages', 'staticImport.favorites', 'annotationProcessing.gradleEnabled', 'annotationProcessing.lombokJar'].some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) void api.restart().catch(error => output.appendLine(error.message)); }));
+  subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
+    const restartSettings = ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome',
+      'extractInterface.replaceUsages', 'staticImport.favorites', 'annotationProcessing.gradleEnabled', 'annotationProcessing.lombokJar'];
+    if (configuring || !restartSettings.some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) return;
+    setup?.refresh();
+    void Promise.resolve(reloadSetup()).catch(error => output.appendLine(error.message));
+  }));
   update('stopped', 'Java server is stopped.');
   subscriptions.push(registerJavaDefinitionStartup(vscode, {
     async start(token) {
@@ -469,12 +544,26 @@ function registerJavaFeatures(context, vscode) {
     },
     provider: document => client?.getFeature('textDocument/definition')?.getProvider(document),
     isAvailable: () => {
-      if (disposed || containerOwner || state.state === 'error' || !vscode.workspace.isTrusted) return false;
-      const config = vscode.workspace.getConfiguration('rocketbrain.java');
-      return config.get('enabled', true) && Boolean(config.get('javaHome') && config.get('serverPath'));
+      if (disposed || containerOwner || state.state === 'error' || !javaModeActive() || !vscode.workspace.isTrusted) return false;
+      if (!config().get('enabled', true)) return false;
+      if (client) return true;
+      const paths = enginePaths();
+      return Boolean(paths.javaHome && paths.serverPath);
     }
   }));
-  subscriptions.push(registerJavaAutostart(vscode,api.start,error=>output.appendLine(error.message)));
+  autostart = registerJavaAutostart(vscode, async () => {
+    try {
+      const started = await serial(() => javaModeActive() ? startNow() : false);
+      if (started === false) return false;
+    }
+    finally {
+      if (setup && !setupPrompted && javaModeActive() && ['configuration-required', 'error'].includes(state.state)) {
+        setupPrompted = true;
+        setup.open({ automatic: true });
+      }
+    }
+  }, error => output.appendLine(error.message), javaModeActive);
+  subscriptions.push(autostart);
   return api;
 }
 
