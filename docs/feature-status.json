@@ -6344,19 +6344,19 @@
     }
   ],
   "localVerification": {
-    "vsixSha256": "35eb3096065e526fb019aa1d580649f7d59bf120a87f2a556ed4594049965127",
-    "sourceManifestSha256": "ee069f24a0fd052de609aa2af1f313024832fb16dcb038dac187ea25db0713e8",
+    "vsixSha256": "2393c1ed45e7000dfbf779fe383df829401cb13ec4f784d1ab1f8a31199bdd76",
+    "sourceManifestSha256": "532415da488493ae279e87a43947586a4f8e25246a526fb0d8ae23b226e75b52",
     "focusedNativeHosts": []
   },
   "stateChanges": [],
   "offline": {
     "origin": "GitHub-hosted exact source preview; external-runtime tests may skip",
-    "head": "519500a7d1dc2d1ef1fe4a95bdd54d904ad81745",
-    "run": 45917739766,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45917739766",
-    "tests": 2304,
+    "head": "604db3fc2cdaf6aef9b80cb8afb9a41600e0f0f4",
+    "run": 45920396255,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45920396255",
+    "tests": 2306,
     "suites": 0,
-    "pass": 2051,
+    "pass": 2053,
     "fail": 0,
     "cancelled": 0,
     "skipped": 253,

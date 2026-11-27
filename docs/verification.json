@@ -1,46 +1,88 @@
 {
-  "version": "0.176.0",
-  "verifiedAt": "2026-11-27T00:40:10.806Z",
+  "version": "0.176.1",
+  "verifiedAt": "2026-11-27T01:10:24.076Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.176.0.vsix",
-    "sha256": "35eb3096065e526fb019aa1d580649f7d59bf120a87f2a556ed4594049965127",
-    "bytes": 4754722,
+    "name": "rocketbrain-0.176.1.vsix",
+    "sha256": "2393c1ed45e7000dfbf779fe383df829401cb13ec4f784d1ab1f8a31199bdd76",
+    "bytes": 4755706,
     "files": 39
   },
   "source": {
     "frozenPublicInputs": 3172,
-    "inputVectorSha256": "ee069f24a0fd052de609aa2af1f313024832fb16dcb038dac187ea25db0713e8",
+    "inputVectorSha256": "532415da488493ae279e87a43947586a4f8e25246a526fb0d8ae23b226e75b52",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "origin": "GitHub-hosted exact source preview; external-runtime tests may skip",
-    "head": "519500a7d1dc2d1ef1fe4a95bdd54d904ad81745",
-    "run": 45917739766,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45917739766",
-    "tests": 2304,
+    "head": "604db3fc2cdaf6aef9b80cb8afb9a41600e0f0f4",
+    "run": 45920396255,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45920396255",
+    "tests": 2306,
     "suites": 0,
-    "pass": 2051,
+    "pass": 2053,
     "fail": 0,
     "cancelled": 0,
     "skipped": 253,
     "todo": 0
   },
-  "focusedLocalOffline": {
-    "node": "v24.22.3",
-    "sourceCommit": "519500a7d1dc2d1ef1fe4a95bdd54d904ad81745",
-    "tests": 51,
-    "suites": 0,
-    "pass": 48,
-    "fail": 0,
-    "cancelled": 0,
-    "skipped": 3,
-    "todo": 0
-  },
-  "optionalLocalRuntimeDiagnostic": {
-    "sourceCommit": "7db143653db3c2dbd0192f3d3e59862d4b988eca",
-    "baselineCheck": "test/jpa-observer.test.js and its observer runtime are unchanged across the release.",
-    "observation": "The locally installed JDK enabled a preexisting assertion whose expected capabilities omit springProviderTrace. The separate standard GitHub suite leaves optional JDK configurations unset."
+  "focusedPolish": {
+    "schema": {
+      "sourceCommit": "604db3fc2cdaf6aef9b80cb8afb9a41600e0f0f4",
+      "node": "v24.22.3",
+      "tests": 49,
+      "suites": 0,
+      "pass": 49,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "logSha256": "0993257462f6e2c2e0a4b2b9c05cd47b6db86e3c8f23352026f96fc7250e6943"
+    },
+    "jpa": {
+      "sourceCommit": "604db3fc2cdaf6aef9b80cb8afb9a41600e0f0f4",
+      "jdk": "Temurin 25.0.5+8",
+      "runtime": "Owned observer and synthetic loopback fixture",
+      "tests": 13,
+      "suites": 0,
+      "pass": 13,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "logSha256": "c19c6615dd43e31572481af32831feeed4fcb5fd2a6bc689ea3184b9ca366b0f"
+    },
+    "localSuite": {
+      "sourceCommit": "604db3fc2cdaf6aef9b80cb8afb9a41600e0f0f4",
+      "node": "v24.22.3",
+      "scope": "Offline suite with available optional local runtimes",
+      "tests": 2325,
+      "suites": 0,
+      "pass": 2101,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 224,
+      "todo": 0,
+      "logSha256": "ae8dac67a8cc42312f2bce3e50985f86e2602f0aa0e61c904828d8635d2ae1d2"
+    },
+    "nativeVsCode": {
+      "version": "1.145.3",
+      "sourceCommit": "604db3fc2cdaf6aef9b80cb8afb9a41600e0f0f4",
+      "vsixSha256": "2393c1ed45e7000dfbf779fe383df829401cb13ec4f784d1ab1f8a31199bdd76",
+      "checks": [
+        "actualPackagedCommands",
+        "nativeComparisonReadonly",
+        "nativeDraftUntitledEditable",
+        "sourceTargetSQLOrder",
+        "displayedPrerequisite",
+        "incompleteSelectionRefused",
+        "explicitPrerequisiteIncluded",
+        "checkedItemPreservedOnReopen",
+        "noManagedReviewFromDraft"
+      ],
+      "actualDatabaseConnections": 0,
+      "receiptSha256": "cf730f8e89997d00f38ed035d36ed94012d01ba2024486aeb00aa018f6e9f61b"
+    }
   },
   "focusedPackagedNative": [],
   "vendorRuntime": {},
@@ -118,12 +160,8 @@
     }
   },
   "newlyVerified": {
-    "DG-082": {
-      "scope": "Saved-snapshot comparison and saved origin profile capture with a mocked catalog; target role, stale target refusal and route cleanup.",
-      "verification": "offline"
-    },
     "DG-083": {
-      "scope": "Selected editable additive SQL and guarded mapped NEW/OLD trigger review, phase SQL and recovery journal replay with mock MySQL and MariaDB catalogs.",
+      "scope": "선택한 추가 변경의 선행 관계 안내와 명시적 포함, 선택 편집 상태 유지, 초안에서 대상 확인, 적용 검토와 초안 분리를 확인했다.",
       "verification": "offline"
     }
   },
@@ -131,7 +169,7 @@
     "channel": "Craft Anything CLI",
     "archiveEntries": 39,
     "archiveConfidence": "observed",
-    "staticReview": {
+    "referenceStaticReview": {
       "product": "DataGrip 2026.3",
       "build": "263.7307.216",
       "method": "Offline analysis of installed classes and driver descriptors with Craft Anything CLI 0.6.1",
@@ -234,23 +272,11 @@
   },
   "limits": [
     "기존 216개 항목의 점수와 판정 기준을 유지했다.",
-    "새 기능은 모의 카탈로그와 일반 오프라인 테스트로 검증했다. 새 스키마 이행 동작의 실제 서버 검증은 후속 범위다.",
-    "트리거 재바인딩은 같은 스키마의 관찰한 정적 NEW·OLD 참조를 다룬다. 동적 SQL·루틴·종속 뷰의 동시 변경과 별도 서버 원자적 DDL은 범위 밖이다.",
-    "원본 전체 작업창 배치에는 VS Code 확장 호스트 제약이 있다."
+    "이번 변경은 오프라인 스키마 비교와 합성 JPA 검증을 포함한다.",
+    "클라우드 공급자 실제 인증, 별도 서버의 원자적 DDL과 전체 작업창 교체는 기존 기능표의 남은 범위다."
   ],
   "next": [
-    "일반 테스트에서 누락되는 대상·권한·SQL 모드와 실제 서버 결과를 후속 검증으로 확인",
-    "승인된 AWS RDS MySQL IAM과 Azure MySQL Entra 환경의 실제 인증 검증"
+    "결과 그리드에 키보드 탐색과 편집 취소 흐름을 실제 VS Code에서 점검"
   ],
-  "repository": "https://github.com/Fenrindale/Rocketbrain",
-  "triggeredHostedCompatibilityCheck": {
-    "workflow": "Unix database transport",
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45918133518",
-    "head": "0d4a98317489c164fbb18930eb16883519f0fed4",
-    "trigger": "Automatic main push workflow for changed connection-profile source",
-    "conclusion": "cancelled",
-    "mysqlSocketStep": "cancelled",
-    "mariadbSocketStep": "success before cancellation",
-    "scope": "Existing runner-local socket-only saved-profile compatibility fixture. This result is excluded from new schema migration and cloud verification."
-  }
+  "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
