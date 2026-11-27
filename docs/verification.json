@@ -1,80 +1,57 @@
 {
-  "version": "0.177.0",
-  "verifiedAt": "2026-11-27T02:39:19.605Z",
+  "version": "0.177.1",
+  "verifiedAt": "2026-11-27T04:42:31.814Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.177.0.vsix",
-    "sha256": "ac39d51382acecdc920fbb27547b7fae21a367ff0e257a4fd89dc4beb18ece71",
-    "bytes": 4758294,
-    "files": 39
-  },
-  "source": {
-    "frozenPublicInputs": 3174,
-    "inputVectorSha256": "7ab0e247ba2d66703a5f1da78ea9bdfa17060b3814433cbd403ef2e7135400e1",
-    "generatedSummariesAreMetadata": true
+    "name": "rocketbrain-0.177.1.vsix",
+    "files": 39,
+    "bytes": 4760726,
+    "sha256": "60f5d535952cdd8a6edd049d2efa5613af1a1927d99a07ec26f0b1a38187eae6"
   },
   "localOffline": {
     "origin": "GitHub-hosted exact source preview; external-runtime tests may skip",
-    "head": "e9a2a027f09381bfcf75be392f5050f39ed3a4a6",
-    "run": 45928803642,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45928803642",
-    "tests": 2309,
+    "head": "b2fcd9d0e0a5ec176f427fcef0aa856f35369254",
+    "run": 45941239074,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45941239074",
+    "tests": 2315,
     "suites": 0,
-    "pass": 2056,
+    "pass": 2062,
     "fail": 0,
     "cancelled": 0,
     "skipped": 253,
     "todo": 0
   },
-  "workstationOffline": {
-    "sourceCommit": "e9a2a027f09381bfcf75be392f5050f39ed3a4a6",
-    "node": "v24.22.3",
-    "tests": 2330,
-    "suites": 0,
-    "pass": 2106,
-    "fail": 0,
-    "cancelled": 0,
-    "skipped": 224,
-    "todo": 0,
-    "logSha256": "3df10f1aa3920809a3dd1f21b258f50a911fd419f47ec77910ebeae3d487bb01"
-  },
   "focusedPolish": {
-    "workspaceMode": {
-      "sourceCommit": "e9a2a027f09381bfcf75be392f5050f39ed3a4a6",
-      "node": "v24.22.3",
-      "tests": 3,
-      "suites": 0,
-      "pass": 3,
-      "fail": 0,
-      "cancelled": 0,
-      "skipped": 0,
-      "todo": 0,
-      "logSha256": "2ae0c1b315b9e6f8e218feee63facdb6517dbea6510d383e7d9af7ce9f73a56e"
-    },
     "nativeVsCode": {
-      "sourceCommit": "e9a2a027f09381bfcf75be392f5050f39ed3a4a6",
+      "sourceCommit": "b2fcd9d0e0a5ec176f427fcef0aa856f35369254",
       "version": "1.145.3",
+      "vsixSha256": "60f5d535952cdd8a6edd049d2efa5613af1a1927d99a07ec26f0b1a38187eae6",
+      "javaFixture": "Maven App.java → Greeter.java",
+      "javaEngineSetupVisible": true,
+      "actualCtrlClickAfterReady": true,
+      "actualF12AfterReady": true,
+      "earlyNativeProviderReturnedDeclaration": true,
+      "firstPhysicalCtrlClickDuringStartup": "failed",
+      "actualDatabaseConnections": 0,
+      "navigationReceiptSha256": "af6b8a89f992eb5795ad1c9e0bd3a727456486a87aacd5e2dd04278da336781c",
+      "setupReceiptSha256": "86f16d93b8a819693f16be96f272e091350f85f16558ce13f7cd7ff592f42cc5",
+      "earlyProviderReceiptSha256": "42fd04486b20ec810c1f256f4d966f2af0147fd0032b6c3c8944a2ce0bc3d63c"
+    }
+  },
+  "uiAudit": {
+    "path": "docs/ui-reachability-audit.md",
+    "rows": 216,
+    "sha256": "c889a2d48ca5946971beca4d1ffc6bc197547eac74f6e61a7bbe8e1585bf9d95",
+    "baselineVersion": "0.177.0",
+    "originalColdPointerMissReproduced": true,
+    "databaseSample": {
+      "version": "0.177.0",
       "vsixSha256": "ac39d51382acecdc920fbb27547b7fae21a367ff0e257a4fd89dc4beb18ece71",
-      "checks": [
-        "actualStatusbarButtonClicks",
-        "activeModeIndicator",
-        "conditionalJavaAndDatabaseViews",
-        "sharedInfrastructureAndResultPanel",
-        "dirtyEditorAndResultDataPreserved",
-        "offlineNoDatabase",
-        "ownUserSettingsUnchanged",
-        "independentWorkspaceDefault",
-        "persistedAfterRestart",
-        "persistedWorkspaceStorageObserved",
-        "installedByVSCodeCli",
-        "allToolsFromCommandPalette"
-      ],
-      "receiptSha256": "b829308001596e0bdf015ffb00a28149b7b6bc8284613c40e74b4e93a12e05c4",
+      "scope": "DataGrip mode, Open SQL Console, Ctrl+Enter within the SELECT, real results webview with three local sample rows.",
+      "receiptSha256": "781cc492fabf62e22ada466a85db00a988a7f346e0c027331a6bff3a24dd9398",
       "actualDatabaseConnections": 0
     }
   },
-  "focusedPackagedNative": [],
-  "vendorRuntime": {},
   "inheritedRuntimeEvidence": {
     "mappedSchemaViews": {
       "version": "0.174.0",
@@ -149,18 +126,8 @@
     }
   },
   "previousPolish": {
-    "version": "0.176.2",
-    "publicEvidence": "https://github.com/Fenrindale/Rocketbrain/blob/247c3c1c9cfd4865a1f2e838937c1006e7eaf36a/docs/verification.json"
-  },
-  "newlyVerified": {
-    "IDEA-001": {
-      "scope": "IntelliJ IDEA 상태 표시줄 버튼과 Java·Spring 트리 표시, 편집기 유지 및 작업 공간 모드 복원.",
-      "verification": "packaged VS Code and offline unit tests"
-    },
-    "DG-095": {
-      "scope": "DataGrip 상태 표시줄 버튼과 DB 전용 트리 표시, 결과 바로가기 및 전체 도구 복귀.",
-      "verification": "packaged VS Code and offline unit tests"
-    }
+    "version": "0.177.0",
+    "publicEvidence": "https://github.com/Fenrindale/Rocketbrain/blob/ff17d43aba142984c7ff917b184dbfd2ada6ab14/docs/verification.json"
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
@@ -259,12 +226,12 @@
     "stateChanges": []
   },
   "limits": [
-    "기존 216개 항목의 가중치와 판정 기준을 적용했다.",
-    "모드 전환은 VS Code의 상태 표시줄과 Rocketbrain 사이드바에서 검증했다. 실제 DB 연결은 사용하지 않았다.",
-    "창 장식과 도킹은 VS Code 작업창이 관리한다."
+    "216개 행의 화면·메뉴·명령 접근 경로와 보존된 검증 범위를 검수했다.",
+    "실제 입력 검증은 Maven 예제와 로컬 SQL 샘플에서 수행했다."
   ],
   "next": [
-    "각 모드의 주요 작업 바로가기와 패널 접근 흐름 점검"
+    "SQL 세미콜론 직후의 실행 범위와 파일을 처음 열었을 때의 진단 수정",
+    "전용 SQL 프로필의 카탈로그에 연결된 완성·정의 이동·진단 검증"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }

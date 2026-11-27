@@ -12,16 +12,27 @@ Ctrl+클릭과 F12는 같은 정의 이동 기능을 제공한다. 구현 목록
 
 이번에 VS Code 1.145.3에 0.177.0 VSIX를 설치해 준비된 Java 엔진에서 실제 Ctrl+클릭과 F12를 각각 입력했다. 두 입력 모두 Maven 예제의 App.java 호출 위치에서 Greeter.java의 선언을 열었다. 별도의 독립 JDT LS 1.63.0 시험에서 오버로드 선언, 구현, 사용처, 상위 메서드와 JDK 소스도 확인했다. [Maven 예제](../test/fixtures/java/maven/src/main/java/dev/rocketbrain/App.java) · [JDT 시험](../test/java-symbol-navigation.test.js)
 
-0.177.1은 Java Projects에 설치·시작·설정 진입점을 추가하고, 엔진 설정이 끝난 신뢰 작업공간에서 실제 Java 파일을 열 때 정의 공급자를 준비하는 시점을 앞당긴다. JDT의 연결과 프로젝트 분석 완료는 각각 확인해야 한다. [설치와 시작](../src/java/index.js) · [자동 시작](../src/java/startup.js)
+같은 0.177.0 환경에서 엔진이 시작 중일 때 입력한 Ctrl+클릭은 선언을 열지 않았다. 엔진과 프로젝트가 준비된 뒤에는 같은 예제에서 이동했다. 이 재현 범위는 해당 설치와 Maven 예제다.
+
+0.177.1은 Java Projects에 설치·시작·설정 진입점을 추가했다. 바로 시작한 엔진은 Starting, JDT 연결 후 프로젝트 분석 중에는 Indexing, 서비스 준비 후에는 Ready를 표시한다. 실제 Java 파일의 정의 요청이 들어오면 시작과 프로젝트 준비를 기다리는 경로를 추가했다. [설치와 시작](../src/java/index.js) · [자동 시작](../src/java/startup.js)
+
+최종 0.177.1 VSIX를 설치한 별도 VS Code 1.145.3에서 미설정 상태의 Java Projects 설치 진입점을 확인했다. 설정까지 끝낸 새 창에서는 Starting일 때 보낸 첫 정의 공급자 API 요청이 약 8.9초 뒤 App.java의 호출과 일치하는 Greeter.java 선언을 반환했다. Ready 이후 실제 Ctrl+클릭과 F12도 각각 같은 선언을 열었다. **Starting에 누른 첫 실제 Ctrl+클릭은 이동하지 않았다.** 마우스로 이동할 때는 Ready 표시가 나온 뒤 다시 누르면 된다. [검증 기록](verification.json)
+
+0.177.1의 Spring·JPA 공급자는 일반적인 `receiver.method(...)`의 메서드 이름에서 해당 워크스페이스 분석을 기다리지 않는다. 어노테이션 값, Spring Data의 메서드 선언과 JPQL 위치는 기존 분석을 거친다. 시작과 공급자 회귀 검사 21개가 통과했다. 대규모 프로젝트에서의 응답 시간은 후속 실제 입력 시험에 남겼다. [위치 판정](../src/java/definition-position.js) · [공급자 회귀 시험](../test/java-definition-position.test.js)
+
+## DataGrip 샘플 콘솔
+
+별도 VS Code 1.145.3에 0.177.0 VSIX를 설치했다. 상태 표시줄의 DataGrip을 누르고 팔레트에서 Open SQL Console을 실행했다. 샘플 `SELECT * FROM projects;` 안에 커서를 두고 실제 Ctrl+Enter를 눌렀을 때 Query Results에 3행이 나왔고 Database 트리에서 projects가 보였다. 같은 콘솔의 세미콜론 바로 뒤에서는 결과가 나오지 않았다. 문장 선택 함수는 그 위치에서 뒤따르는 설명 주석을 반환했다. 이번 입력 시험은 로컬 샘플에서 진행했다. [문장 선택](../src/sql.js) · [콘솔과 결과 표시](../src/database-workbench.js)
 
 ## 우선순위
 
-| 우선순위 | 항목 | 확인한 사용자 경로 | 닫아야 할 범위 |
+| 우선순위 | 항목 | 확인한 사용자 경로 | 남은 수정·검증 |
 | --- | --- | --- | --- |
-| P0 | IDEA-002 · IDEA-015 · IDEA-071 | 정의 이동은 Java 문서와 엔진·프로젝트 상태에 의존한다. 0.177.1이 설치와 시작 진입점을 추가한다. | 새 설치 후 프로젝트 가져오기, 실제 마우스·F12와 정확한 목적지, 준비 전·후 동작을 각각 기록한다. |
-| P0 | IDEA-015 · IDEA-053 · IDEA-059 | Spring/JPA Java 정의 공급자가 초기 분석 캐시와 맞물리는 경로가 있다. | 일반 Java 메서드와 지원 Spring/JPA 위치에서 처음 열 때의 응답 시간과 목적지를 검증한다. |
+| P0 | IDEA-002 · IDEA-015 · IDEA-071 | 0.177.1에서 설치 진입점, 시작 중 정의 공급자 요청, Ready 뒤 실제 Ctrl+클릭과 F12를 확인했다. | Starting에서 누른 실제 Ctrl+클릭은 이동하지 않았다. 프로젝트가 준비되기 전의 마우스 입력을 검증 범위에 남겼다. |
+| P0 | IDEA-015 · IDEA-053 · IDEA-059 | 0.177.0의 Spring/JPA Java 정의 공급자가 일반 호출에서도 초기 분석을 기다릴 수 있다. 0.177.1의 위치 판정은 해당 대기를 줄이고 기존 Spring/JPA 위치를 보존한다. | 일반 Java 메서드와 지원 Spring/JPA 위치에서 처음 열 때의 응답 시간과 목적지를 검증한다. |
 | P0 | DG-031 · DG-034 · DG-035 | 카탈로그가 있는 조건에서 일반 SQL을 열었을 때 문제 목록이 비어 있었고, 편집 이벤트 뒤에는 WHERE 누락과 열 이름 진단이 나왔다. | 연 직후에 편집 없이 진단이 나타나는 경로를 검증한다. [문서 열기 처리](../src/db/sql-vscode.js) |
 | P0 | DG-027 · DG-028 · DG-029 · DG-030 · DG-033 · DG-034 · DG-037 · DG-039 · DG-047 | 전용 프로필 콘솔과 프로필에 묶은 SQL 파일은 실행 연결을 가진다. 공용 활성 카탈로그를 사용하는 의미 분석 경로에서는 제외된다. | 정확히 연결된 프로필 단위의 완성·정의·진단을 제공하고 동명 객체가 서로 다른 스키마에 있을 때 목적지를 검증한다. [SQL 분석](../src/db/sql-vscode.js) |
+| P0 | DG-044 · DG-096 | 오프라인 데모에서 세미콜론 바로 뒤에 커서를 두고 Ctrl+Enter를 누르자 뒤따르는 주석 범위를 선택해 쿼리를 실행하지 않았다. | 문장 구분 기호 바로 뒤에서도 사용자에게 보이는 문장이 실행되도록 하고, 다음 문장과 주석 경계를 검증한다. [문장 위치 처리](../src/sql.js) |
 | P1 | IDEA-065 · IDEA-070 | Feign 안내의 Spring Endpoints와 Gradle 안내의 Discover Build Tasks 표기가 실제 팔레트 이름과 다르다. Choose Build Task는 목록을 채우고 Run Build Task가 실제 선택을 받는다. | 처음 보는 사용자가 설명과 동일한 명령으로 진입할 수 있게 이름과 동작을 맞춘다. [Feign 안내](spring-feign-contracts.md) · [Gradle 처리](../src/java/workbench.js) |
 | P1 | IDEA-076 · IDEA-077 · IDEA-084 · IDEA-113 | 여백·Variables·Testing의 기본 동작과 팔레트의 확장 기능이 나뉜다. IntelliJ 모드의 테스트 탐색은 Java Projects 더 보기 메뉴에 있다. 키보드 프로필은 별도 선택이다. | 설치 직후 테스트 런타임을 찾고, 실제 Variables 메뉴에서 필드 중단을 설정하며, 기본 입력과 프로필 입력을 함께 검증한다. |
 | P1 | DG-001 · DG-006 · DG-012 · DG-039 · DG-044 · DG-062 · DG-096 | 빠른 연결과 저장 프로필 설정이 두 경로다. SQL 정의 공급자·실행·결과 그리드에 개별 검증 이력이 있다. | 빈 연결 화면 안내를 보강하고 한 세션에서 SQL 열기, Ctrl+클릭, Ctrl+Enter, 결과 이동을 연속으로 재현한다. |
@@ -56,7 +67,7 @@ Ctrl+클릭과 F12는 같은 정의 이동 기능을 제공한다. 구현 목록
 
 | ID | 기능과 상태 | 사용자 진입점 | 마지막 검증 이력 |
 | --- | --- | --- | --- |
-| IDEA-015 | 선언·타입·구현·상위 메서드 이동 · 구현 | Native Go to Definition and Go to Implementation from Java editor with JDT ready. Right-click Go to Code Target or use palette and choose Declaration, Type Declaration, Implementations or Super Method. Dedicated Go to Java Super Method is also in palette. | v0.63 설치 시험 · 두 실제 Spring DB의 설치 환경에서 Java 오버로드의 여러 구현, 상위 메서드와 JDK 소스, 대상 변경 거부, Kotlin 수신 타입별 동명 확장 함수 선언 두 곳을 확인했다. · 0.177.0과 VS Code 1.145.3에서 준비 후 실제 Ctrl+클릭·F12로 다른 Java 파일의 선언을 열었다. [시험 기록](../test/java-symbol-navigation-host.js) |
+| IDEA-015 | 선언·타입·구현·상위 메서드 이동 · 구현 | Native Go to Definition and Go to Implementation from Java editor with JDT ready. Right-click Go to Code Target or use palette and choose Declaration, Type Declaration, Implementations or Super Method. Dedicated Go to Java Super Method is also in palette. | v0.63 설치 시험 · 두 실제 Spring DB의 설치 환경에서 Java 오버로드의 여러 구현, 상위 메서드와 JDK 소스, 대상 변경 거부, Kotlin 수신 타입별 동명 확장 함수 선언 두 곳을 확인했다. · 0.177.1에서 시작 중 요청한 정의 공급자 API가 Greeter 선언을 반환했다. Ready 이후 실제 Ctrl+클릭·F12가 이동했고, Starting 상태에서 처음 누른 마우스 입력은 이동하지 않았다. [시험 기록](../test/java-symbol-navigation-host.js) |
 | IDEA-016 | Find Usages·참조 탐색 · 구현 | Find JVM & Spring Usages via editor right-click, palette, Context Actions and optional key profile. Native reference UI is also available for JDT Java. | v0.65 설치 시험 · 두 Spring DB 설치 환경에서 Java 오버로드 참조 두 곳과 파일 범위, Spring XML과 Java의 양방향 클래스 사용처, 설정 키 사용처 두 곳, Kotlin 수신 타입별 동명 참조 및 변경 거부를 확인했다. [시험 기록](../test/java-usage-search-host.js) |
 | IDEA-017 | 호출 계층 · 구현 | Explore Java Call Hierarchy from right-click or palette, and native call hierarchy where JDT supplies it. Trusted Java editor. | v0.29 설치 시험 · 최종 설치본에서 실제 Spring 메서드의 양방향 호출, 공통 호출 위치, int·String 오버로드와 네이티브 호출 트리를 확인했다. [시험 기록](../test/java-navigation-host.js) |
 | IDEA-018 | 타입·상속 계층 · 구현 | Explore Java Type Hierarchy from right-click or palette. Trusted JDT source selection. | v0.29 설치 시험 · 최종 설치본에서 실제 Spring 프로젝트의 JPA 부모·자식과 인터페이스 구현을 양방향으로 확인하고 네이티브 타입 트리를 열었다. [시험 기록](../test/java-navigation-host.js) |
@@ -297,7 +308,7 @@ Ctrl+클릭과 F12는 같은 정의 이동 기능을 제공한다. 구현 목록
 
 | ID | 기능과 상태 | 사용자 진입점 | 마지막 검증 이력 |
 | --- | --- | --- | --- |
-| DG-044 | 현재 문장·선택 SQL 실행 · 구현 | Open SQL Console, select statement or place caret, Ctrl+Enter / ▶ editor toolbar, then Query Results. · **Open SQL Console** · **Run Selected SQL or Current Statement** · **Focus Query Results** | v0.61 설치 시험 · 실제 두 Spring DB의 설치 SQL 편집기에서 일반 커서 실행과 복합 문장 전체 선택, 지시문 위치와 불완전 선택 거부, 인접 DDL 제외를 확인했다. [시험 기록](../test/sql-current-statement-host.js) |
+| DG-044 | 현재 문장·선택 SQL 실행 · 구현 | Open SQL Console, select statement or place caret, Ctrl+Enter / ▶ editor toolbar, then Query Results. · **Open SQL Console** · **Run Selected SQL or Current Statement** · **Focus Query Results** | v0.61 설치 시험 · 실제 두 Spring DB의 설치 SQL 편집기에서 일반 커서 실행과 복합 문장 전체 선택, 지시문 위치와 불완전 선택 거부, 인접 DDL 제외를 확인했다. · 0.177.0에서 실제 Ctrl+Enter로 오프라인 샘플 3행을 표시했다. 세미콜론 뒤에서는 결과가 나오지 않았다. [시험 기록](../test/sql-current-statement-host.js) |
 | DG-045 | 전체 스크립트·batch·오류 처리 · 구현 | Script review/run actions populate separate captured statement results and allow reopening retained results. · **Review SQL Script Before Running** · **Run SQL Script or Selection** · **Open Retained Script Statement Result** | v0.82 설치 시험 · 설치판의 두 실제 엔진에서 정밀 BIGINT·DECIMAL 입출력과 출력 전용 호출을 검증했다. 호출자 변수 보존, 원문 변경 시 거부, 검토의 재사용 차단을 확인했다. [시험 기록](../test/sql-script-output-host.js) |
 | DG-046 | 같은 세션·temporary table 상태 유지 · 구현 | Dedicated/shared console identities keep regular temporary table and transaction state across commands in the same binding. · **Open SQL Console** · **Open Shared SQL Console** · **Run Selected SQL or Current Statement** | 소스 및 한정 실행 · 로컬 Oracle MySQL8.4.13·MariaDB11.4.8 fixture의 연결·세션·트랜잭션·카탈로그/편집 표본. TLS/클라우드 전체 인증 조합은 미검증이다. [관련 소스](../src/database-workbench.js) |
 | DG-047 | 세션 공유·전용·introspection 분리 · 구현 | Database Connections에서 **Open Dedicated Profile SQL Console**을 실행한다. 파일은 **Bind SQL File to Database Profile**로 묶는다. 프로필 실행 세션과 이미 연결된 공용 카탈로그는 별개다. | v0.64 설치 시험 · 두 실제 DB의 설치판에서 같은 이름의 두 스키마 테이블과 별도 연결을 구분했다. 카탈로그 연결 해제 뒤 전용 트랜잭션을 유지했고 권한 보호·롤백·종료된 세션의 재사용 거부를 확인했다. [시험 기록](../test/dedicated-profile-console-host.js) |
@@ -424,4 +435,4 @@ Ctrl+클릭과 F12는 같은 정의 이동 기능을 제공한다. 구현 목록
 | ID | 기능과 상태 | 사용자 진입점 | 마지막 검증 이력 |
 | --- | --- | --- | --- |
 | DG-095 | DataGrip 전체 창·도구창의 정확한 배치 · 호스트 구조 제약 | 상태 표시줄 **DataGrip** 또는 팔레트 **Switch to DataGrip Mode**를 사용한다. Database·Database Connections·Schema Catalog 뷰로 전환한다. 호스트 창 전체 교체는 제공 범위 밖이다. | v0.177.0 설치 시험 · DB 사이드바와 공용 결과 창, 연결과 신뢰를 요구하는 카탈로그 표시 조건, 전체 도구로 돌아가는 전환을 확인한다. [검증 기록](verification.json) |
-| DG-096 | SQL 단축키·명령·결과 panel 이동 · 구현 | SQL 편집기에서 Ctrl+Enter나 실행 버튼을 누른다. 아래 Query Results의 결과·셀을 선택하고 **Focus Query Editor**로 돌아간다. | v0.76 설치 시험 · 두 DB의 SQL 편집기에서 선택 실행과 커서 위치 문장을 실행하고 정확한 결과에서 원래 편집기·선택·커서를 복원했다. Chromium에서 탭 키보드와 접근성 상태도 확인했다. [시험 기록](../test/results.test.js) |
+| DG-096 | SQL 단축키·명령·결과 panel 이동 · 구현 | SQL 편집기에서 Ctrl+Enter나 실행 버튼을 누른다. 아래 Query Results의 결과·셀을 선택하고 **Focus Query Editor**로 돌아간다. | v0.76 설치 시험 · 두 DB의 SQL 편집기에서 선택 실행과 커서 위치 문장을 실행하고 정확한 결과에서 원래 편집기·선택·커서를 복원했다. Chromium에서 탭 키보드와 접근성 상태도 확인했다. · 0.177.0에서 DataGrip 버튼과 SQL 콘솔을 열고 실제 Ctrl+Enter로 Query Results의 3행을 확인했다. [시험 기록](../test/results.test.js) |

@@ -1,5 +1,5 @@
 {
-  "version": "0.177.0",
+  "version": "0.177.1",
   "asOf": "2026-11-27",
   "total": 216,
   "fullProductParityVerified": false,
@@ -43,12 +43,10 @@
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "IDEA-001",
-    "DG-095"
+    "IDEA-015"
   ],
   "expandedFeatures": [
-    "IDEA-001",
-    "DG-095"
+    "IDEA-015"
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
@@ -454,21 +452,18 @@
       "status": "implemented",
       "label": "구현",
       "delivery": "owned-client-and-jdt",
-      "scope": "JDT의 선언·타입·구현·가장 가까운 상위 메서드를 소스에서 연다. 여러 대상은 이름·위치로 선택하고 JDK 소스를 정확한 범위로 표시한다. Kotlin은 컴파일러가 확인한 타입별 확장 함수 선언을 연다.",
+      "scope": "JDT의 선언·타입·구현·가장 가까운 상위 메서드를 소스에서 연다. 여러 대상은 이름·위치로 선택하고 JDK 소스를 정확한 범위로 표시한다. Kotlin은 컴파일러가 확인한 타입별 확장 함수 선언을 연다. Java Projects에서 엔진 설치와 시작 상태를 확인한다. 독립 Java 엔진의 초기 프로젝트 준비 신호에 정의 이동 요청을 연결한다.",
       "remaining": [],
       "verification": {
-        "state": "v0.63-installed-coverage",
-        "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.63.0",
-          "currentAggregate": "docs/verification.json",
-          "historicalCountsAreNotRebound": true
-        },
-        "testedScope": "두 실제 Spring DB의 설치 환경에서 Java 오버로드의 여러 구현, 상위 메서드와 JDK 소스, 대상 변경 거부, Kotlin 수신 타입별 동명 확장 함수 선언 두 곳을 확인했다.",
+        "state": "v0.177.1-navigation-ui",
+        "testedScope": "VS Code 1.145.3에서 설치된 Maven 예제의 엔진 미설정 화면과 준비 이후 Ctrl+클릭·F12, 시작 중 정의 공급자 요청을 확인했다. 시작 중 첫 물리 Ctrl+클릭: 같은 예제로 이동하지 않았다.",
         "publicEvidence": [
-          "src/java/navigation-symbols.js",
+          "src/java/index.js",
+          "src/java/startup.js",
+          "test/java-startup.test.js",
           "test/java-symbol-navigation-host.js",
-          "docs/java-symbol-navigation.md"
+          "docs/ui-reachability-audit.md",
+          "docs/verification.json"
         ],
         "originalProductParityVerified": false
       }
@@ -6352,21 +6347,24 @@
   "stateChanges": [],
   "publicWorkflow": "docs/verification.json",
   "localVerification": {
-    "vsixSha256": "ac39d51382acecdc920fbb27547b7fae21a367ff0e257a4fd89dc4beb18ece71",
-    "sourceManifestSha256": "7ab0e247ba2d66703a5f1da78ea9bdfa17060b3814433cbd403ef2e7135400e1",
+    "vsixSha256": "60f5d535952cdd8a6edd049d2efa5613af1a1927d99a07ec26f0b1a38187eae6",
     "focusedNativeHosts": []
   },
   "offline": {
     "origin": "GitHub-hosted exact source preview; external-runtime tests may skip",
-    "head": "e9a2a027f09381bfcf75be392f5050f39ed3a4a6",
-    "run": 45928803642,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45928803642",
-    "tests": 2309,
+    "head": "b2fcd9d0e0a5ec176f427fcef0aa856f35369254",
+    "run": 45941239074,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45941239074",
+    "tests": 2315,
     "suites": 0,
-    "pass": 2056,
+    "pass": 2062,
     "fail": 0,
     "cancelled": 0,
     "skipped": 253,
     "todo": 0
+  },
+  "uiAudit": {
+    "path": "docs/ui-reachability-audit.md",
+    "rows": 216
   }
 }
