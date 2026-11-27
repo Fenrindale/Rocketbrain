@@ -234,7 +234,7 @@
   },
   "limits": [
     "기존 216개 항목의 점수와 판정 기준을 유지했다.",
-    "이번 변경에서 실제 Spring·MySQL·MariaDB·클라우드 서버에는 접속하지 않았다.",
+    "새 기능은 모의 카탈로그와 일반 오프라인 테스트로 검증했다. 새 스키마 이행 동작의 실제 서버 검증은 후속 범위다.",
     "트리거 재바인딩은 같은 스키마의 관찰한 정적 NEW·OLD 참조를 다룬다. 동적 SQL·루틴·종속 뷰의 동시 변경과 별도 서버 원자적 DDL은 범위 밖이다.",
     "원본 전체 작업창 배치에는 VS Code 확장 호스트 제약이 있다."
   ],
@@ -242,5 +242,15 @@
     "일반 테스트에서 누락되는 대상·권한·SQL 모드와 실제 서버 결과를 후속 검증으로 확인",
     "승인된 AWS RDS MySQL IAM과 Azure MySQL Entra 환경의 실제 인증 검증"
   ],
-  "repository": "https://github.com/Fenrindale/Rocketbrain"
+  "repository": "https://github.com/Fenrindale/Rocketbrain",
+  "triggeredHostedCompatibilityCheck": {
+    "workflow": "Unix database transport",
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45918133518",
+    "head": "0d4a98317489c164fbb18930eb16883519f0fed4",
+    "trigger": "Automatic main push workflow for changed connection-profile source",
+    "conclusion": "cancelled",
+    "mysqlSocketStep": "cancelled",
+    "mariadbSocketStep": "success before cancellation",
+    "scope": "Existing runner-local socket-only saved-profile compatibility fixture. This result is excluded from new schema migration and cloud verification."
+  }
 }
