@@ -2,7 +2,7 @@
 
 const assert=require('node:assert/strict');
 const {test}=require('node:test');
-const {registerJavaAutostart, registerJavaDefinitionStartup}=require('../src/java/startup');
+const {registerJavaAutostart, registerJavaDefinitionStartup, createDefinitionReadiness}=require('../src/java/startup');
 
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
@@ -112,4 +112,32 @@ test('native definition abandons requests when setup is missing or source change
   allowed = true;
   assert.equal(await definition(document, {}, token), undefined);
   assert.equal(starts, 1);
+});
+
+test('Java definitions wait for the project import signal and stop waiting on cancellation', async () => {
+  const readiness = createDefinitionReadiness();
+  let cancel, live = 0, settled = false;
+  const token = {
+    isCancellationRequested: false,
+    onCancellationRequested(callback) {
+      live++;
+      cancel = callback;
+      return { dispose() { live--; } };
+    }
+  };
+  const request = readiness.wait(token).then(() => { settled = true; });
+  await tick();
+  assert.equal(settled, false);
+  cancel();
+  await request;
+  assert.equal(live, 0);
+
+  settled = false;
+  const next = readiness.wait(token).then(() => { settled = true; });
+  await tick();
+  assert.equal(settled, false);
+  readiness.complete();
+  await next;
+  await readiness.wait(token);
+  assert.equal(live, 0);
 });

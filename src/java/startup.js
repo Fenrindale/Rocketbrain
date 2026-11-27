@@ -54,4 +54,28 @@ function registerJavaDefinitionStartup(vscode, { start, provider, isAvailable })
   });
 }
 
-module.exports = {registerJavaAutostart, registerJavaDefinitionStartup};
+function createDefinitionReadiness(timeout = 30000) {
+  const { promise, resolve } = Promise.withResolvers();
+  const deadline = Date.now() + timeout;
+  let ready = false;
+  return {
+    complete() { ready = true; resolve(); },
+    stop: resolve,
+    async wait(token) {
+      const remaining = deadline - Date.now();
+      if (ready || remaining <= 0 || token.isCancellationRequested) return;
+      let timer, subscription;
+      try {
+        await Promise.race([promise, new Promise(done => {
+          timer = setTimeout(done, remaining);
+          subscription = token.onCancellationRequested(done);
+        })]);
+      } finally {
+        clearTimeout(timer);
+        subscription?.dispose();
+      }
+    }
+  };
+}
+
+module.exports = {registerJavaAutostart, registerJavaDefinitionStartup, createDefinitionReadiness};

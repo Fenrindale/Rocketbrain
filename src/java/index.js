@@ -10,13 +10,13 @@ const { resolveNullChecks, nullCheckUpdates } = require('./null-checks');
 const { configureNullChecks } = require('./null-checks-vscode');
 const { hash, indexScope, indexStorage, readGeneration } = require('./workspace-index');
 const { registerWorkspaceIndex } = require('./workspace-index-vscode');
-const { registerJavaAutostart, registerJavaDefinitionStartup } = require('./startup');
+const { registerJavaAutostart, registerJavaDefinitionStartup, createDefinitionReadiness } = require('./startup');
 
 function registerJavaFeatures(context, vscode) {
   const output = vscode.window.createOutputChannel('Rocketbrain Java', { log: true });
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 29);
   status.command = 'rocketbrain.javaSupport';
-  let client, lastSettings, fileWatcher, debuggerController, disposing, containerOwner, epoch = 0;
+  let client, lastSettings, fileWatcher, debuggerController, disposing, containerOwner, definitionReadiness, epoch = 0;
   let disposed = false, configuring = false, installing = false, pending = Promise.resolve();
   let state = { state: 'stopped', message: 'Java server is stopped.' };
   const subscriptions = [output, status];
@@ -54,6 +54,8 @@ function registerJavaFeatures(context, vscode) {
       await debuggerController?.stopSessions();
     }
     const previous = client; client = undefined; lastSettings = undefined;
+    definitionReadiness?.stop();
+    definitionReadiness = undefined;
     if (previous) await previous.stop(5000).catch(error => {
       output.appendLine(`Java shutdown: ${error.message}`);
       if (strict) {
@@ -110,12 +112,20 @@ function registerJavaFeatures(context, vscode) {
         fileWatcher = vscode.workspace.createFileSystemWatcher('**/{*.java,pom.xml,build.gradle,build.gradle.kts,settings.gradle,settings.gradle.kts,gradle.properties}');
         subscriptions.push(fileWatcher);
       }
+      const readiness = createDefinitionReadiness();
       const next = new LanguageClient('rocketbrain-java', 'Rocketbrain Java', { command: launch.command, args: launch.args, options: launch.options }, {
         documentSelector: [{ scheme: 'file', language: 'java' }],
         outputChannel: output,
         initializationOptions: { bundles: launch.bundles, workspaceFolders: (vscode.workspace.workspaceFolders || []).map(folder => folder.uri.toString()), settings, extendedClientCapabilities: { progressReportProvider: true, classFileContentsSupport: true, overrideMethodsPromptSupport: false, hashCodeEqualsPromptSupport: false, advancedOrganizeImportsSupport: false,advancedExtractRefactoringSupport:false } },
         synchronize: { fileEvents: fileWatcher },
         middleware: {
+          async provideDefinition(document, position, token, provide) {
+            const version = document.version;
+            await readiness.wait(token);
+            if (token.isCancellationRequested || client !== next || document.isClosed ||
+                document.version !== version || !vscode.workspace.isTrusted) return;
+            return provide(document, position, token);
+          },
           workspace:{willRenameFiles(event,next){
             // This exact folder change already includes approved JDT-equivalent text edits.
             return api.refactoring?.isApplyingPackageRename(event.files)?undefined:next(event);
@@ -154,8 +164,14 @@ function registerJavaFeatures(context, vscode) {
       });
       state = { ...state, serverPath: launch.serverPath, javaHome: launch.javaHome, debugBundlePath: launch.bundles[0], debugBuild: launch.debugBuild, runtimeIdentity: launch.identity,
         workspaceData: launch.data,indexGeneration:index.generation,extractInterfaceReplaceUsages,annotationProcessing:launch.annotationProcessing,nullChecks };
-      client = next; update('starting', 'Starting the independent Eclipse JDT Language Server.');
-      next.onNotification('language/status', event => { if (event.type === 'Error') output.appendLine(`JDT LS: ${event.message}`); else output.appendLine(`JDT LS ${event.type}: ${event.message}`); });
+      client = next;
+      definitionReadiness = readiness;
+      update('starting', 'Starting the independent Eclipse JDT Language Server.');
+      next.onNotification('language/status', event => {
+        if (event.type === 'ServiceReady') readiness.complete();
+        if (event.type === 'Error') output.appendLine(`JDT LS: ${event.message}`);
+        else output.appendLine(`JDT LS ${event.type}: ${event.message}`);
+      });
       next.onNotification('language/progressReport', event => { status.tooltip = `Java: ${event.task || ''} ${event.subTask || ''}`; });
       await next.start();
       await next.sendNotification('workspace/didChangeConfiguration', { settings });
@@ -168,6 +184,8 @@ function registerJavaFeatures(context, vscode) {
       api.codeHints?.refresh();
     } catch (error) {
       const failed = client; client = undefined; lastSettings = undefined;
+      definitionReadiness?.stop();
+      definitionReadiness = undefined;
       if (failed) await failed.stop(1000).catch(() => {});
       update('error', error.message); throw error;
     }
