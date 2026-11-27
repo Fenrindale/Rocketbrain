@@ -231,8 +231,8 @@ async function promptProfileCredentials(vscode, record) {
  }
  return credentials;
 }
-function registerConnectionProfiles(context,vscode,{database}){
- const manager=createConnectionProfiles({state:context.workspaceState,secrets:context.secrets,connect:database.connectMysql,disconnect:database.disconnectMysql,getActiveProfile:database.activeConnectionProfile,isTrusted:()=>vscode.workspace.isTrusted,createService:config=>new MysqlService(config,{reportActivity:database.activityLog?.createReporter()}),openProfileConsole:database.openProfileConsole,hasProfileConsole:database.hasProfileConsole,getJavaHome:()=>vscode.workspace.getConfiguration?.('rocketbrain.java')?.get('javaHome')}),editors=new Map(),subscriptions=[];let closed=false;
+function registerConnectionProfiles(context,vscode,{database,createService=config=>new MysqlService(config,{reportActivity:database.activityLog?.createReporter()})}){
+ const manager=createConnectionProfiles({state:context.workspaceState,secrets:context.secrets,connect:database.connectMysql,disconnect:database.disconnectMysql,getActiveProfile:database.activeConnectionProfile,isTrusted:()=>vscode.workspace.isTrusted,createService,openProfileConsole:database.openProfileConsole,hasProfileConsole:database.hasProfileConsole,getJavaHome:()=>vscode.workspace.getConfiguration?.('rocketbrain.java')?.get('javaHome')}),editors=new Map(),subscriptions=[];let closed=false;
  const events=new vscode.EventEmitter();
  database.setDatasetProfileSource?.(manager.datasetProfileSource);
  const listSessions = database.profileSessionList || (() => []);
@@ -252,6 +252,21 @@ function registerConnectionProfiles(context,vscode,{database}){
  const choose=async value=>{const id=typeof value==='string'?value:value?.profileId;if(id)return manager.list().find(r=>r.id===id);return(await vscode.window.showQuickPick(manager.list().map(r=>({label:r.profile.name,description:r.profile.database+' @ '+(transportLabel(r.profile.transport)||r.profile.host),value:r})),{title:'Database connection'}))?.value;};
  const pass=record=>promptProfileCredentials(vscode,record);
  function trusted(){if(closed||!vscode.workspace.isTrusted)throw Error('Trust this open workspace before managing connections.');}
+ async function chooseSchemaComparisonOrigin({includeStoredObjects=false}={}){
+  trusted();
+  const choices=manager.list().map(row=>({label:row.profile.name,
+   description:[row.profile.group,row.profile.database].filter(Boolean).join(' · '),
+   detail:row.profile.user+' @ '+(transportLabel(row.profile.transport)||row.profile.host+':'+row.profile.port),row}));
+  if(!choices.length)throw Error('Save a database connection to use as the schema comparison origin.');
+  const selected=await vscode.window.showQuickPick(choices,{title:'Choose Read-Only Schema Origin',matchOnDescription:true,matchOnDetail:true});
+  trusted();
+  if(!selected)return;
+  const credentials=await pass(selected.row);
+  trusted();
+  if(!credentials)return;
+  const {id,revision}=selected.row;
+  return manager.captureSchemaComparisonOrigin({id,revision,includeStoredObjects,...credentials});
+ }
  async function handle(id,message){trusted();const record=editors.get(id);if(!record||record.busy)throw Error('This connection editor is closed or busy.');if(message.type==='ready'){record.panel.webview.postMessage({type:'model',editorId:id,profile:record.profile,hasSavedPassword:record.hasSavedPassword});return;}
   if(message.editorId!==id||!['test','save','connect'].includes(message.type))throw Error('Invalid connection editor action.');record.busy=true;
   try{if(!message.profile||typeof message.profile!=='object'||Object.hasOwn(message.profile,'id'))throw Error('Reopen the connection editor.');const draft={...structuredClone(message.profile),id:record.profile.id};const reviewed=await reviewAzureMysqlProfile(vscode,draft,record.profile);if(!reviewed)throw Error('The Azure CLI account was not approved.');const profile=await reviewOpenBaoProfile(vscode,reviewed,record.profile);if(!profile)throw Error('The OpenBao reference was not approved.');const openBaoToken=usesOpenBao(profile)?await promptOpenBaoToken(vscode,profile):undefined;if(usesOpenBao(profile)&&openBaoToken===undefined)throw Error('The OpenBao token entry was cancelled.');let result;if(message.type==='test')result=await manager.test({profile,password:message.password,openBaoToken,clientIdentityPassphrase:message.clientIdentityPassphrase,trustStorePassphrase:message.trustStorePassphrase,sshCredential:message.sshCredential});else{result=await manager.save({profile,password:message.password,openBaoToken,clientIdentityPassphrase:message.clientIdentityPassphrase,trustStorePassphrase:message.trustStorePassphrase,sshCredential:message.sshCredential,rememberPassword:message.rememberPassword===true,expectedRevision:record.revision,connectAfterSave:message.type==='connect' });record.profile=result.profile;record.revision=result.revision;record.hasSavedPassword=result.hasSavedPassword;}await record.panel.webview.postMessage({type:'result',result});return result;}catch(error){const persisted=persistedProfileOnFailure(error),saved=persisted&&persisted.id===record.profile.id?manager.list().find(row=>row.id===persisted.id&&row.revision===persisted.revision):null,changed=Boolean(saved);if(saved){record.profile=saved.profile;record.revision=saved.revision;record.hasSavedPassword=saved.hasSavedPassword;}await record.panel.webview.postMessage({type:'result',error:(changed?'Profile saved. Connection setup did not finish: ':'')+error.message});throw error;}finally{record.busy=false;}}
@@ -357,6 +372,6 @@ function registerConnectionProfiles(context,vscode,{database}){
  });
  if(database.onDidChangeProfileSessions)subscriptions.push(database.onDidChangeProfileSessions(()=>events.fire()));
  subscriptions.push(manager.onDidChange(()=>events.fire()),database.onDidChangeDatabase(()=>events.fire()),vscode.window.registerTreeDataProvider('rocketbrain.connections',tree));
- const api={...manager,openEditor,handle,closeEditor(id){editors.get(id)?.panel.dispose();},editors:()=>[...editors.keys()],tree,async dispose(){if(closed)return;closed=true;for(const {panel}of editors.values())panel.dispose();editors.clear();await manager.dispose();for(const s of subscriptions)s.dispose();events.dispose();}};context.subscriptions.push(api);return api;
+ const api={...manager,openEditor,handle,chooseSchemaComparisonOrigin,closeEditor(id){editors.get(id)?.panel.dispose();},editors:()=>[...editors.keys()],tree,async dispose(){if(closed)return;closed=true;for(const {panel}of editors.values())panel.dispose();editors.clear();await manager.dispose();for(const s of subscriptions)s.dispose();events.dispose();}};context.subscriptions.push(api);return api;
 }
 module.exports={connectionHtml,registerConnectionProfiles,promptProfileCredentials,reviewAzureMysqlProfile};

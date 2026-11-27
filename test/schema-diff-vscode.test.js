@@ -8,6 +8,114 @@ function host(capture,options={}){
  return {vscode,commands,providers,api:registerSchemaComparison({},vscode,{capture,...options})};
 }
 
+test('two saved snapshots compare and produce selected editable SQL without a database connection',async t=>{
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'rocketbrain-saved-compare-'));
+ t.after(()=>fs.rmSync(temp,{recursive:true,force:true}));
+ const target=fixture({database:'target_app'}),origin=addColumn(addColumn(fixture({database:'origin_app'}),'selected_note'),'other_note');
+ const write=(name,snapshot)=>{
+  const fsPath=path.join(temp,name+'.json');
+  fs.writeFileSync(fsPath,JSON.stringify(snapshot));
+  return {scheme:'file',fsPath};
+ };
+ const files=[write('target',target),write('origin',origin)],opened=[],errors=[];
+ const forbidden=()=>assert.fail('A saved comparison must never contact a database or prepare managed apply.');
+ const h=host(forbidden,{prepare:forbidden,prepareRebuild:forbidden,apply:forbidden,applyRebuild:forbidden});
+ t.after(()=>h.api.dispose());
+ h.vscode.Uri={parse:value=>({path:new URL(value).pathname})};
+ h.vscode.workspace.openTextDocument=async input=>input;
+ h.vscode.window.showTextDocument=async document=>{opened.push(document);};
+ h.vscode.window.showErrorMessage=async message=>{errors.push(message);};
+ const dialogTitles=[];
+ h.vscode.window.showOpenDialog=async ({title})=>{dialogTitles.push(title);return [files.shift()];};
+ h.vscode.window.showQuickPick=async (items,options)=>{
+  assert.equal(options.title,'Select Changes for Editable SQL Draft');
+  assert.equal(options.canPickMany,true);
+  return items.filter(item=>item.label.endsWith('.selected_note'));
+ };
+ const report=await h.commands.get('rocketbrain.schema.compareSavedSnapshots')();
+ assert.deepEqual(errors,[]);
+ assert.deepEqual(dialogTitles,['Choose Target Schema Snapshot','Choose Origin Schema Snapshot']);
+ assert.equal(report.currentDatabase,'target_app');
+ assert.equal(report.desiredDatabase,'origin_app');
+ assert.equal(report.savedSnapshots,true);
+ assert.equal(report.executedSql,false);
+ assert.equal(opened.length,2);
+ assert.match(opened[0].path,/\/comparison\.md$/);
+ assert.match(h.api.reviewText(report.id),/Compared saved snapshots/);
+ assert.doesNotMatch(h.api.reviewText(report.id),/Review Selected Schema Rebuild/);
+ assert.equal(opened[1].language,'sql');
+ assert.match(opened[1].content,/ALTER TABLE `target_app`\.`people` ADD COLUMN `selected_note`/);
+ assert.doesNotMatch(opened[1].content,/origin_app|other_note/);
+ const selected=report.changes.find(change=>change.object==='selected_note');
+ await assert.rejects(h.api.plan(report.id,[selected.id]),/connected target/);
+ await assert.rejects(h.api.planRebuild(report.id,['people'],{changeIds:[selected.id]}),/connected target/);
+});
+
+test('an editable SQL draft leaves the retained migration document and application untouched',async t=>{
+ const current=fixture(),desired=addColumn(structuredClone(current),'note'),opened=[];
+ let captures=0,prepares=0;
+ const h=host(async()=>{captures++;return current;},{prepare:async request=>{
+  prepares++;
+  return {plan:require('../src/db/schema-diff').planMigration(request.current,request.desired,request),
+   reviewId:'review',expiresAt:Date.now()+10000,connectionEpoch:1};
+ },apply:()=>assert.fail('Opening a draft must not apply its review.')});
+ t.after(()=>h.api.dispose());
+ h.vscode.window.showQuickPick=async (items,{title})=>{assert.equal(title,'Open Editable Migration SQL Draft');return items[0];};
+ h.vscode.window.showErrorMessage=async message=>assert.fail(message);
+ h.vscode.workspace.openTextDocument=async input=>({...input});
+ h.vscode.window.showTextDocument=async document=>{opened.push(document);};
+ const comparison=await h.api.compare(desired);
+ const plan=await h.api.plan(comparison.id,[comparison.changes.find(change=>change.object==='note').id]);
+ await h.commands.get('rocketbrain.schema.openMigrationDraft')();
+ assert.equal(captures,2);
+ assert.equal(prepares,1);
+ assert.deepEqual(opened,[{language:'sql',content:plan.sql+'\n'}]);
+ opened[0].content='ALTER TABLE other_table ADD COLUMN unexpected INT;';
+ const reviewText=h.providers.get('rocketbrain-schema-compare').provideTextDocumentContent({path:'/'+plan.id+'/migration.sql'});
+ assert.equal(reviewText,plan.sql);
+});
+
+test('a saved origin profile plans SQL for the reviewed active target and refuses target drift',async t=>{
+ const target=fixture({database:'target_app'}),origin=addColumn(fixture({database:'origin_app'}),'note');
+ let active=target,changeDuringOrigin=false,prepared=0;
+ const errors=[],opened=[];
+ const h=host(async()=>active,{chooseOrigin:async options=>{
+  assert.deepEqual(options,{includeStoredObjects:true});
+  if(changeDuringOrigin)active=fixture({database:'replaced_target'});
+  return {snapshot:origin,name:'Design profile'};
+ },prepare:async request=>{
+  prepared++;
+  assert.equal(request.current.database,'target_app');
+  assert.equal(request.desired.database,'origin_app');
+  return {plan:require('../src/db/schema-diff').planMigration(request.current,request.desired,request),
+   reviewId:'private',expiresAt:Date.now()+10000,connectionEpoch:1};
+ }});
+ t.after(()=>h.api.dispose());
+ h.vscode.Uri={parse:value=>({path:new URL(value).pathname})};
+ h.vscode.workspace.openTextDocument=async input=>input;
+ h.vscode.window.showTextDocument=async input=>{opened.push(input.path);};
+ h.vscode.window.showInformationMessage=async()=>{};
+ h.vscode.window.showErrorMessage=async message=>{errors.push(message);};
+ h.vscode.window.showQuickPick=async (items,{title})=>{
+  assert.equal(title,'Select Changes for Migration SQL Review');
+  return items;
+ };
+ const compare=h.commands.get('rocketbrain.schema.compareOriginProfile');
+ const plan=await compare();
+ assert.equal(prepared,1);
+ assert.equal(plan.database,'target_app');
+ assert.match(plan.sql,/ALTER TABLE `target_app`\.`people`/);
+ assert.doesNotMatch(plan.sql,/origin_app/);
+ assert.match(h.api.reviewText(opened[0].split('/')[1]),/Origin profile: "Design profile"/);
+ assert.match(opened[1],/\/migration\.sql$/);
+ assert.deepEqual(errors,[]);
+
+ changeDuringOrigin=true;
+ assert.equal(await compare(),undefined);
+ assert.equal(prepared,1);
+ assert.match(errors[0],/server identity changed/);
+});
+
 test('reprojection review can select an unchanged InnoDB geometry table without offering unrelated unchanged tables',async()=>{
  const raw=fixture(),spatial=raw.tables[0];spatial.name='locations';spatial.columns.push({...spatial.columns[0],name:'location',type:'geometry',key:'',ordinal:2});raw.tables.push({...structuredClone(fixture().tables[0]),name:'plain'});
  const current=require('../src/db/schema-diff').normalizeSnapshot(raw,{verifyFingerprint:false}),h=host(async()=>current);let picks=0,offered;
@@ -149,6 +257,50 @@ test('selected rebuild requires explicit dependency selections and current works
   await review();
   assert.match(messages[1],/Trust the workspace/);
  }finally{await h.api.dispose();}
+});
+
+test('the trigger reference command opts in only after selecting a column pair and opens the resulting review',async t=>{
+ const {normalizeSnapshot}=require('../src/db/schema-diff');
+ const current=addColumn(fixture(),'legacy');
+ const renamed=structuredClone(current);
+ renamed.tables[0].columns[1].name='replacement';
+ const desired=normalizeSnapshot(renamed,{verifyFingerprint:false});
+ const requests=[],errors=[],opened=[];
+ const h=host(async()=>current,{prepareRebuild:async request=>{
+  requests.push(request);
+  const id='mapped-trigger-review';
+  return {plan:{id,mapTriggerColumns:request.mapTriggerColumns,database:'one',sql:'-- Rendered trigger review'},
+   reviewId:id,connectionEpoch:7,expiresAt:Date.now()+10000};
+ }});
+ t.after(()=>h.api.dispose());
+ h.vscode.Uri={parse:value=>({path:new URL(value).pathname})};
+ h.vscode.workspace.openTextDocument=async uri=>uri;
+ h.vscode.window.showTextDocument=async uri=>{opened.push(uri.path);};
+ h.vscode.window.showErrorMessage=async message=>{errors.push(message);};
+ h.vscode.window.showInformationMessage=async()=>{};
+ let pickMapping=false;
+ h.vscode.window.showQuickPick=async (items,{title})=>{
+  switch(title){
+   case 'Review Selected Schema Rebuild with Trigger References':return items[0];
+   case 'Select Individual Rebuild Changes':return items;
+   case 'Map a renamed column in people':return items[pickMapping?1:0];
+   case 'Destination for people.legacy':return items[0];
+   default:assert.fail('Unexpected picker: '+title);
+  }
+ };
+ const compared=await h.api.compare(desired);
+ const command=h.commands.get('rocketbrain.schema.reviewSelectedRebuildWithTriggerReferences');
+ assert.equal(await command(),undefined);
+ assert.match(errors.pop(),/Map at least one renamed column/);
+ assert.equal(requests.length,0);
+ pickMapping=true;
+ const review=await command();
+ assert.deepEqual(errors,[]);
+ assert.equal(review.mapTriggerColumns,true);
+ assert.equal(requests[0].mapTriggerColumns,true);
+ assert.deepEqual(requests[0].columnMappings,{people:[{from:'legacy',to:'replacement'}]});
+ assert.deepEqual(requests[0].changeIds,[...compared.changes.map(change=>change.id)].sort());
+ assert.deepEqual(opened,['/mapped-trigger-review/migration.sql']);
 });
 
 test('the selected rebuild command reviews a dependent view with its base table',async()=>{

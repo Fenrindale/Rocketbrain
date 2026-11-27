@@ -344,6 +344,38 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
     } finally { if (!transferred) await prepared.dispose(); }
    });
   },
+  captureSchemaComparisonOrigin(request) {
+   const input=clone(request);
+   return run(async(ticket,signal)=>{
+    exact(input,['id','revision','includeStoredObjects','password','openBaoToken','clientIdentityPassphrase','trustStorePassphrase','sshCredential']);
+    const {includeStoredObjects=false}=input;
+    if(typeof includeStoredObjects!=='boolean')throw fail('Choose whether to inspect stored schema definitions.');
+    const record=records.get(input.id);
+    if(!record||input.revision!==record.revision)throw fail('The saved origin profile changed. Choose it again.');
+    const {profile}=record;
+    const pass=await credentials(profile,input.password,{openBaoToken:input.openBaoToken,signal});
+    guard(ticket);
+    const prepared=await prepare(profile,pass,signal,{forceReadOnly:true,clientIdentityPassphrase:input.clientIdentityPassphrase,
+     trustStorePassphrase:input.trustStorePassphrase,sshCredential:input.sshCredential,expectedAgentFingerprint:savedAgentFingerprint(record)});
+    let service,snapshot;
+    try{
+     guard(ticket);
+     service=createService(prepared.config);
+     snapshot=await require('./schema-diff').captureSchema({_metadataQuery:async(sql,values)=>{
+      guard(ticket);
+      const result=await service._metadataQuery(sql,values);
+      guard(ticket);
+      return result;
+     }},{includeStoredObjects});
+     if(snapshot.database!==profile.database)throw fail('The origin connection opened a different schema. Review the saved profile.');
+    }finally{
+     try{await service?.dispose();}
+     finally{await prepared.dispose();}
+    }
+    guard(ticket);
+    return {snapshot,name:profile.name};
+   });
+  },
   duplicate(request) {
    const input=clone(request);
    return run(async ticket=>{

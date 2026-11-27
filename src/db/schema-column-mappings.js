@@ -88,7 +88,9 @@ function validateMappedDependencies(plan, dependencies) {
   const mapped = (schema, table, name) => schema === plan.database
     ? byTable.get(table)?.get(name) || name : name;
   const {before, after} = dependencies;
-  if (plan.formatVersion === 8) {
+  if (plan.formatVersion === 9) {
+    require('./schema-mapped-triggers').validateMappedTriggerBundle(plan, dependencies);
+  } else if (plan.formatVersion === 8) {
     if (!plan.selectedViews?.length || before.triggers.length || after.triggers.length ||
         before.routines?.length || after.routines?.length) {
       throw fail('Mapped view rebuilds require a selected dependent view and cannot change trigger or routine references.');

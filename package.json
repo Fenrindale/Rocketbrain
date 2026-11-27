@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.174.0",
+  "version": "0.176.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -1106,6 +1106,24 @@
         "category": "Rocketbrain"
       },
       {
+        "command": "rocketbrain.schema.compareSavedSnapshots",
+        "title": "Compare Saved Schema Snapshots",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "rocketbrain.schema.compareOriginProfile",
+        "title": "Compare Saved Origin Profile with Active Database",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected"
+      },
+      {
+        "command": "rocketbrain.schema.openMigrationDraft",
+        "title": "Open Editable Migration SQL Draft",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
         "command": "rocketbrain.schema.compareSnapshotWithOptions",
         "title": "Compare Schema Snapshot with Options",
         "category": "Rocketbrain",
@@ -1148,6 +1166,12 @@
         "command": "rocketbrain.schema.reviewSelectedRebuild",
         "title": "Review Selected Schema Rebuild",
         "category": "Rocketbrain"
+      },
+      {
+        "command": "rocketbrain.schema.reviewSelectedRebuildWithTriggerReferences",
+        "title": "Review Selected Schema Rebuild with Trigger References",
+        "category": "Rocketbrain",
+        "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected"
       },
       {
         "command": "rocketbrain.schema.applyRebuild",

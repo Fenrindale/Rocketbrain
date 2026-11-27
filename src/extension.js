@@ -180,6 +180,7 @@ async function activate(context) {
   context.subscriptions.push(devContainers);
   const schemaComparison=require('./db/schema-diff-vscode').registerSchemaComparison(context,vscode,{
     capture:options=>database.captureSchemaSnapshot(options),
+    chooseOrigin:dbConnections.chooseSchemaComparisonOrigin,
     prepare:request=>database.previewSchemaMigration(request),
     apply:request=>database.applySchemaMigration(request),
     discard:reviewId=>database.discardSchemaMigration(reviewId),
