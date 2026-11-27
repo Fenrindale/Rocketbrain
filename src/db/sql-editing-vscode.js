@@ -48,8 +48,8 @@ function registerSqlEditing(context,vscode,{database,sqlAnalysis,openDesigner}) 
     const snippet=resolveTemplate(template,catalog,table);
     return editor.insertSnippet(new vscode.SnippetString(snippet),editor.selection);
   }
-  async function chooseTemplate() {
-    const editor=vscode.window.activeTextEditor,document=editor?.document;
+  async function chooseTemplate(resource) {
+    const editor=sqlEditorForAction(vscode,resource),document=editor?.document;
     open(document);
     const version=document.version,selection=editor.selection;
     const choice=await vscode.window.showQuickPick(values(document).map(template=>({

@@ -5,6 +5,7 @@
   let renderedWindow, scrollTop = 0;
   let gridTabCell;
   let menuCell;
+  let sqlPreviewResultId;
   const cellPositions = new WeakMap(), selectedCells = new Map();
   const drafts = new Map(), browseForms = new Map(),bulkForms=new Map(), layouts = new Map();
   const charts = new Map();
@@ -1670,6 +1671,19 @@
     if (record?.hasQueryEditor) vscode.postMessage({ type: 'focusQueryEditor', id: record.id });
   }
 
+  function renderResultSql(active) {
+    const available = Boolean(active?.state === 'done' && active.sql?.trim());
+    if (!available || sqlPreviewResultId !== active.id) sqlPreviewResultId = undefined;
+    const expanded = available && sqlPreviewResultId === active.id;
+    const button = $('show-result-sql');
+    $('result-query-tools').hidden = !available;
+    button.disabled = !available;
+    button.textContent = expanded ? 'Hide Result SQL' : 'Show Result SQL';
+    button.setAttribute('aria-expanded', String(expanded));
+    $('result-sql').hidden = !expanded;
+    $('result-sql-text').textContent = expanded ? active.sql : '';
+  }
+
   function render(requestedFocus) {
     const active = current();
     const grid = $('grid'), windowId = active?.result?.browse?.window?.id;
@@ -1687,6 +1701,7 @@
     $('return-source-row').hidden = !source;
     $('return-source-row').disabled = Boolean(editingCell || active?.editBusy || source?.editBusy);
     renderResultTabs(active);
+    renderResultSql(active);
     chartObserver?.disconnect();
     chartObserver = undefined;
     mapObserver?.disconnect();
@@ -2095,6 +2110,11 @@
   });
   $('close-result').onclick = () => send('closeResult');
   $('focus-query-editor').onclick = returnToQuery;
+  $('show-result-sql').onclick = () => {
+    const active = current();
+    sqlPreviewResultId = sqlPreviewResultId === active?.id ? undefined : active?.id;
+    renderResultSql(active);
+  };
   $('tabs').addEventListener('keydown', event => {
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     const tabs = resultTabs(), index = tabs.indexOf(event.target);

@@ -542,10 +542,10 @@ function registerExplainPlans(context, vscode, { database }) {
         (_, cancellation) => open({ document: editor?.document, selection: editor?.selection, cancellation }));
     } catch (error) { await vscode.window.showErrorMessage(error.message); }
   }));
-  context.subscriptions.push(vscode.commands.registerCommand(MEASURE_PLAN, async () => {
+  context.subscriptions.push(vscode.commands.registerCommand(MEASURE_PLAN, async resource => {
     let review;
     try {
-      const editor = vscode.window.activeTextEditor;
+      const editor = sqlEditorForAction(vscode, resource);
       review = prepareMeasurement({ document: editor?.document, selection: editor?.selection });
       const approval = await vscode.window.showWarningMessage('Run this read-only SQL on ' + review.destination + ' to measure its plan?',
         { modal: true, detail: 'The server executes the selected query in a separate read-only session. Rocketbrain requests a server timeout and closes its measurement connection on cancellation or timeout.' }, 'Measure plan');

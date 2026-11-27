@@ -152,6 +152,7 @@ test('actual result Webview renders database values as text and routes history/c
   await lastPost;
   assert.equal(await page.locator('#copy').isDisabled(), true);
   assert.equal(await page.locator('#export').isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Show Result SQL' }).count(), 0);
 
   const attack = '<img src="https://attacker.invalid/steal" onerror="window.__xss=true">';
   const heading = '<svg onload="window.__xss=true">column</svg>';
@@ -173,6 +174,22 @@ test('actual result Webview renders database values as text and routes history/c
     assert.equal(await page.evaluate(() => window.__xss), undefined);
     assert.match(await page.locator('#status').textContent(), /1 rows.*limit reached.*2\.4 ms.*read only/);
     assert.equal(await page.locator('#copy').isDisabled(), false);
+  });
+
+  await t.test('the result toolbar shows captured SQL as literal text without rerunning it', async () => {
+    const query = page.getByRole('region', { name: 'Captured query SQL' });
+    const show = page.getByRole('button', { name: 'Show Result SQL', exact: true });
+    const sent = await page.evaluate(() => window.__sent.length);
+    assert.equal(await query.isVisible(), false);
+    await show.click();
+    assert.equal(await query.locator('pre').textContent(), "SELECT '<payload>' AS test");
+    assert.equal(await query.locator('payload').count(), 0);
+    assert.equal(await show.count(), 0);
+    const hide = page.getByRole('button', { name: 'Hide Result SQL', exact: true });
+    assert.equal(await hide.getAttribute('aria-expanded'), 'true');
+    await hide.click();
+    assert.equal(await query.isVisible(), false);
+    assert.equal(await page.evaluate(() => window.__sent.length), sent);
   });
 
   await t.test('copy/export buttons invoke the actual host handlers with the selected result and preserve CSV quoting', async () => {
@@ -294,6 +311,7 @@ test('actual result Webview renders database values as text and routes history/c
   await lastPost;
   await t.test('errors are text, clear the grid and disable result actions; history restores an earlier result', async () => {
     assert.equal(await page.locator('#message').textContent(), errorText);
+    assert.equal(await page.getByRole('button', { name: 'Show Result SQL' }).count(), 0);
     assert.equal(await page.locator('#message').getAttribute('class'), 'error');
     assert.equal(await page.locator('#message img').count(), 0);
     assert.equal(await page.evaluate(() => window.__errorXss), undefined);
@@ -320,6 +338,11 @@ test('actual result Webview renders database values as text and routes history/c
     assert.equal(await page.locator('thead th').nth(1).textContent(), 'empty');
     assert.equal(await page.locator('tbody tr').count(), 0);
     assert.equal(await page.locator('#copy').isDisabled(), false);
+    await page.getByRole('button', { name: 'Show Result SQL', exact: true }).click();
+    assert.equal(await page.locator('#result-sql-text').textContent(), 'SELECT 1 WHERE false');
+    await page.getByRole('tab', { name: `Result ${firstId}`, exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: 'Show Result SQL', exact: true }).getAttribute('aria-expanded'), 'false');
+    await page.getByRole('tab', { name: `Result ${thirdId}`, exact: true }).click();
   });
 
   await t.test('write results show affected rows and manual transaction state without a read-only label', async () => {

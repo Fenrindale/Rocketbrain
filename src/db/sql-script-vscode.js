@@ -239,7 +239,8 @@ function registerSqlScripts(context,vscode,{database,analysisOnly=()=>false}={})
       await api.describe(editor.document, { range: editor.selection.isEmpty ? undefined : editor.selection });
     return { editor, description };
   }
-  async function savePresetCommand() {
+  async function savePresetCommand(resource) {
+    sqlEditorForAction(vscode, resource);
     const { editor, description } = await prepareActive();
     if (!presetSignature(description)) throw Error('Select SQL with parameters on an observed MySQL or MariaDB connection.');
     const parameters = await values(description, editor.document);
@@ -316,7 +317,7 @@ function registerSqlScripts(context,vscode,{database,analysisOnly=()=>false}={})
       return {resultId:report.resultId,state:report.state,completed:report.completed,failed:report.failed,notRun:report.notRun};
     }catch(error){if(!closed)await vscode.window.showErrorMessage('Rocketbrain SQL: '+error.message);}
   }
-  subscriptions.push(vscode.commands.registerCommand('rocketbrain.sql.runScript',()=>command(false)),vscode.commands.registerCommand('rocketbrain.sql.reviewScript',resource=>command(true,undefined,resource)),vscode.commands.registerCommand('rocketbrain.sql.runWithParameters',()=>command(false)),vscode.commands.registerCommand('rocketbrain.sql.openScriptResult',async selection=>{
+  subscriptions.push(vscode.commands.registerCommand('rocketbrain.sql.runScript',resource=>command(false,undefined,resource)),vscode.commands.registerCommand('rocketbrain.sql.reviewScript',resource=>command(true,undefined,resource)),vscode.commands.registerCommand('rocketbrain.sql.runWithParameters',resource=>command(false,undefined,resource)),vscode.commands.registerCommand('rocketbrain.sql.openScriptResult',async selection=>{
     if (selection !== undefined) return api.openStatement(selection?.resultId,selection?.index,selection?.resultSet);
     const choices=[];for(const [id,cached]of runs)for(const statement of cached.report.statements)for(const result of capturedStatements(statement))choices.push({...result,label:'Run '+id+' · '+result.label,id});
     const selected=await vscode.window.showQuickPick(choices,{title:'Open retained statement result · no SQL rerun'});if(selected)return api.openStatement(selected.id,selected.index,selected.resultSet);
@@ -324,7 +325,7 @@ function registerSqlScripts(context,vscode,{database,analysisOnly=()=>false}={})
   subscriptions.push(vscode.commands.registerCommand('rocketbrain.sql.runClientStatement', current=>command(false,current ?? {})));
   const tracked=fn=>(...args)=>{const work=fn(...args);operations.add(work);void work.finally(()=>operations.delete(work)).catch(()=>{});return work;};
   for (const [id, action] of [['rocketbrain.sql.saveParameterPreset', savePresetCommand], ['rocketbrain.sql.removeParameterPreset', removePresetCommand]]) {
-    subscriptions.push(vscode.commands.registerCommand(id, () => action().catch(error => vscode.window.showErrorMessage(error.message))));
+    subscriptions.push(vscode.commands.registerCommand(id, resource => action(resource).catch(error => vscode.window.showErrorMessage(error.message))));
   }
   subscriptions.push(vscode.workspace.onDidCloseTextDocument(document=>{
     const uri=document.uri.toString();

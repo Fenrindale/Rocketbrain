@@ -37,7 +37,7 @@ const sections = [
     ['s', 'rocketbrain.java.fileStructure', 'File Structure', jvm],
     ['a', 'rocketbrain.java.workbench.sourceTarget', 'Inspect Java Source Build Target', java + ' && !activeEditorIsDirty'],
     ['b', 'rocketbrain.java.workbench.build', 'Build Java Project', project],
-    ['k', 'rocketbrain.java.workbench.tasks', 'Choose Build Task', project],
+    ['k', 'rocketbrain.java.workbench.tasks', 'Discover Build Tasks', project],
     ['r', 'rocketbrain.java.workbench.run', 'Run Java Configuration', project],
     ['c', 'rocketbrain.java.changeSignature', 'Change Java Signature', java + ' && !editorReadonly'],
     ['x', 'rocketbrain.java.safeDelete', 'Safe Delete Java Declaration', java + ' && !editorReadonly'],

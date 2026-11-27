@@ -21,6 +21,24 @@ v0.178의 배치는 레퍼런스의 조작 위치와 입력 방식을 기준으�
 
 VS Code 1.145.3에 0.178.0 VSIX를 설치했다. Java 편집기 상단 실행 버튼으로 구성 선택기를 열었고, 소스 우클릭에서 Navigate, Refactor, Java Tests를 확인했다. Database 헤더 버튼으로 연결 양식과 SQL 콘솔을 열었고, SQL 편집기 상단 실행 버튼으로 로컬 샘플 3행을 표시했다. 하단에서 두 번째 행의 셀 메뉴를 열고 레코드 보기와 그리드 복귀를 확인했다. [설치 검증](verification.json)
 
+## v0.179 화면 배치와 입력
+
+Craft Anything CLI로 로컬 IntelliJ IDEA 2026.3과 DataGrip 2026.3을 별도 프로필에서 열어 작업 창을 캡처했다. IntelliJ의 전역 실행 구성과 프로젝트 헤더, DataGrip의 Database Explorer와 Files 창을 화면에서 확인했다. 각 프로젝트 상태에서 열리는 메뉴와 결과 화면은 해당 버전의 제품 설명과 함께 대조했다. 캡처는 테스트 프로젝트에 한정했다. [IntelliJ 도구 창](https://www.jetbrains.com/help/idea/tool-windows.html) · [DataGrip Database Explorer](https://www.jetbrains.com/help/datagrip/database-explorer.html) · [DataGrip 결과 화면](https://www.jetbrains.com/help/datagrip/viewing-query-results.html)
+
+| 기준 영역 | Rocketbrain 작업 화면 | 배치한 조작 |
+| --- | --- | --- |
+| IntelliJ 소스와 리팩터링 | Java 파일 우클릭 | Code와 Analyze 메뉴, 기존 Refactor의 서명·이름·추출·이동·안전 삭제 |
+| IntelliJ Project·Build·Run·Testing | 왼쪽 Project 폴더, Java Projects의 뷰 메뉴와 실행 구성 행 | 폴더에 새 Java 파일, 빌드와 프로젝트 검사, 실행 구성과 테스트 작업 |
+| IntelliJ Spring·Persistence·Debugger | Spring & JPA Analysis와 디버깅 도구막대 | Bean 의존성 그래프 버튼, 런타임·JPA 메뉴, 단계 이동과 값 검사 |
+| DataGrip Database Explorer | 왼쪽 Database·Schema Catalog·Database Connections | 선택 개체의 참조 복사, 원문·카탈로그·스키마 작업 |
+| DataGrip SQL 콘솔과 결과 | SQL 편집기 상단·우클릭과 하단 Query Results | 현재 SQL 분석, 연결된 콘솔의 실행·검토 메뉴, 결과를 만든 SQL 열기와 저장 쿼리 |
+
+팔레트 경로만 있는 항목은 배치 검증을 받지 않은 상태다. 표의 영역이 전역 메뉴 바인 경우 VS Code가 공개한 편집기·뷰 메뉴에 조작을 연결하고 위치 차이를 남긴다. 조건부 개체와 데이터베이스 작업은 해당 상태가 있는 설치 환경에서 실제 버튼과 결과를 확인해야 배치 검증에 포함한다. [VS Code 메뉴 기여 지점](https://code.visualstudio.com/api/references/contribution-points#contributes.menus)
+
+### 입력 경로
+
+키 바인딩 선언과 실제 편집기 입력은 별도로 확인한다. 선택형 Rocketbrain 키보드 프로필에는 52개 규칙이 있고, 일반 SQL 실행은 기본 `Ctrl+Enter`를 쓴다. 줄 끝의 세미콜론 직후에는 그 줄의 문장이 선택된다. 같은 줄의 다음 문장이 있으면 원래 선택 동작을 유지한다. Java가 Starting인 동안의 첫 Ctrl+클릭은 별도 미해결 항목으로 남아 있다. [SQL 문장 선택](../src/sql.js) · [키보드 프로필](context-actions.md#keyboard-profile)
+
 ## Java 정의 이동
 
 최초 비교표부터 IDEA-015에 정의·구현 이동이 있었다. 0.177.0은 독립 Java 엔진의 정의 공급자를 실제 파일의 Java 편집기에 연결한다. 0.63 설치 시험은 가져온 Spring 프로젝트에서 선언·오버로드의 구현·상위 메서드를 확인했다. 별도의 호스트 시험은 VS Code 공급자 API를 통해 다른 Java 파일과 JDK 소스로 이동할 수 있음을 확인했다. 두 시험은 최초 실행 상태의 마우스 Ctrl+클릭을 직접 보내지 않았다. [선언 이동 시험](../test/java-symbol-navigation-host.js) · [VS Code 공급자 시험](../test/java-host.js)

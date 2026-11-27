@@ -16,6 +16,7 @@ const { tableLayoutConnectionKey } = require('./db/result-layouts');
 const { createMetadataCache, observeCatalogIdentity } = require('./db/metadata-cache');
 const { runCatalogOperation } = require('./db/catalog-refresh');
 const { sqlEditorForAction } = require('./db/sql-editor-target');
+const { qualifiedSqlName } = require('./db/object-reference');
 const demoHistoryKey = require('node:crypto').createHash('sha256').update('rocketbrain:sqlite-demo').digest('hex');
 
 async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTree, isVirtualSqlPreview = () => false, analysisOnlySql = () => false) {
@@ -613,8 +614,8 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       updateStatus();
     }
   }
-  command('rocketbrain.connections.bindSqlFile', async () => {
-    const document = currentDocument();
+  command('rocketbrain.connections.bindSqlFile', async resource => {
+    const document = sqlEditorForAction(vscode, resource)?.document;
     requireSqlFile(document);
     const choices = profileSessionList().filter(row => row.connected && !row.needsReconnect && !row.outcomeUnknown)
       .map(row => ({ label: profileSessions.get(row.id).label, description: row.id,
@@ -630,7 +631,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
           (readOnly ? 'The selected session is read only.' : inTransaction ?
             'This file will use the selected session’s open write transaction.' : 'Writes are enabled in the selected session.') }, 'Bind Database Profile') === 'Bind Database Profile');
   });
-  command('rocketbrain.connections.forgetSqlFile', () => changeSqlFileProfile(currentDocument(), undefined, async ({ path, before }) =>
+  command('rocketbrain.connections.forgetSqlFile', resource => changeSqlFileProfile(sqlEditorForAction(vscode, resource)?.document, undefined, async ({ path, before }) =>
     await vscode.window.showWarningMessage('Remove this SQL file’s database association?', { modal: true,
       detail: `${path}\nDatabase: ${before}\nFuture queries can use the active database. The dedicated session stays open.` },
     'Remove Association') === 'Remove Association'));
@@ -1007,6 +1008,17 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
       await results.show(); await vscode.window.showTextDocument(editor.document, { viewColumn: editor.viewColumn, preserveFocus: false });
       await tableEditor.open({ table: name, sessionId: binding.id, sql });
     } else await runSql(sql, editor.document);
+  });
+  command('rocketbrain.db.copyObjectReference', async target => {
+    const table = state.schema.find(item => item === target?.table);
+    const column = target?.column;
+    if (state.disposed || state.switching || state.offlineMetadata || !table ||
+        (column && !table.columns.includes(column)) || (state.mysql && !vscode.workspace.isTrusted)) {
+      throw Error('The database tree changed. Choose the object again.');
+    }
+    const schema = state.mysql ? state.metadata?.database ?? state.profile?.database : 'main';
+    const dialect = state.mysql ? 'mysql' : 'sqlite';
+    await vscode.env.clipboard.writeText(qualifiedSqlName(dialect, schema, table.name, ...(column ? [column.name] : [])));
   });
   async function openTableSnapshot(name, options) {
     if (!state.mysql || state.offlineMetadata || state.switching || !vscode.workspace.isTrusted) {

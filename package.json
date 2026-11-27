@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.178.0",
+  "version": "0.179.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -369,7 +369,7 @@
       { "command": "rocketbrain.sqlNotebook.pinResult", "title": "Pin SQL Notebook Result", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-sql-notebook" },
       { "command": "rocketbrain.sqlNotebook.unpinResult", "title": "Unpin SQL Notebook Result", "category": "Rocketbrain", "enablement": "notebookType == rocketbrain-sql-notebook" },
       { "command": "rocketbrain.java.structuralSearch", "title": "Search or Replace Java Structure", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
-      { "command": "rocketbrain.spring.beanGraph", "title": "Show Spring Bean Dependency Graph", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.spring.beanGraph", "icon": "$(type-hierarchy)", "title": "Show Spring Bean Dependency Graph", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.runtimeHealth", "title": "Open Spring Actuator Health", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.runtimeSecurity", "title": "Inspect Spring Security Runtime", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.spring.runtimeProperty", "title": "Inspect Spring Property Value and Origin", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -399,7 +399,7 @@
       { "command": "rocketbrain.java.changeSignature", "title": "Change Java Signature", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.safeDelete", "title": "Safe Delete Java Declaration", "category": "Rocketbrain" },
       { "command": "rocketbrain.java.restoreDeleted", "title": "Restore Deleted Java File", "category": "Rocketbrain" },
-      { "command": "rocketbrain.java.newFileFromTemplate", "title": "New Java File from Template", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.java.newFileFromTemplate", "title": "New Java File from Template", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(add)" },
       { "command": "rocketbrain.java.openScratch", "title": "New JShell Scratch", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.runScratch", "title": "Run JShell Scratch", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.dependencyGraph", "title": "Inspect Java Dependencies", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
@@ -424,7 +424,7 @@
       { "command": "rocketbrain.setTransactionIsolation", "title": "Set SQL Session Isolation", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && (rocketbrain.mysqlConnected || rocketbrain.profileConsole)" },
       { "command": "rocketbrain.sql.saveQuery", "title": "Save SQL Query", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && editorLangId == sql" },
       { "command": "rocketbrain.sql.savedQueries", "title": "Saved SQL Queries", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
-      { "command": "rocketbrain.sql.queryHistory", "title": "Query History", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
+      { "command": "rocketbrain.sql.queryHistory", "title": "Query History", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(history)" },
       { "command": "rocketbrain.db.searchSources", "title": "Search SQL Files, Database Objects and DDL", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(search)" },
       { "command": "rocketbrain.schemaCatalog.select", "title": "Choose Catalog Schemas", "category": "Rocketbrain", "icon": "$(list-selection)", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.schemaCatalog.refresh", "title": "Refresh Schema Catalog", "category": "Rocketbrain", "icon": "$(refresh)", "enablement": "rocketbrain.mysqlConnected && isWorkspaceTrusted" },
@@ -442,7 +442,7 @@
       { "command": "rocketbrain.acp.removeSavedSession", "title": "Remove a Saved ACP Session", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.acp.recoverSavedSessions", "title": "Recover Saved ACP Workspace Storage", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.localSqlAssistant.compareProposals", "title": "Compare Local SQL Proposals", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive" },
-      { "command": "rocketbrain.sql.explainVisual", "title": "Visualize SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
+      { "command": "rocketbrain.sql.explainVisual", "title": "Visualize SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted", "icon": "$(graph)" },
       { "command": "rocketbrain.sql.measurePlan", "title": "Measure SQL Execution Plan", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.comparePlans", "title": "Compare Captured SQL Plans", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.sql.measurePlanSeries", "title": "Measure SQL Plan Series", "category": "Rocketbrain", "enablement": "editorLangId == sql && rocketbrain.mysqlConnected && isWorkspaceTrusted" },
@@ -953,7 +953,7 @@
         "category": "Rocketbrain"
       },
       {
-        "command": "rocketbrain.java.testing.history",
+        "command": "rocketbrain.java.testing.history", "icon": "$(history)",
         "title": "Open Java Test Run History",
         "category": "Rocketbrain",
         "enablement": "isWorkspaceTrusted"
@@ -972,7 +972,8 @@
       {
         "command": "rocketbrain.sql.analyze",
         "title": "Analyze Current SQL Document",
-        "category": "Rocketbrain"
+        "category": "Rocketbrain",
+        "icon": "$(checklist)"
       },
       {
         "command": "rocketbrain.sql.refreshAnalysisMetadata",
@@ -1427,7 +1428,8 @@
       {
         "command": "rocketbrain.connections.edit",
         "title": "Edit Database Connection",
-        "category": "Rocketbrain"
+        "category": "Rocketbrain",
+        "icon": "$(settings-gear)"
       },
       { "command": "rocketbrain.connections.connect", "title": "Connect Database Profile", "category": "Rocketbrain", "icon": "$(plug)" },
       { "command": "rocketbrain.connections.openDedicatedConsole", "title": "Open Dedicated Profile SQL Console", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted", "icon": "$(terminal)" },
@@ -1539,7 +1541,10 @@
         "command": "rocketbrain.schema.restoreObjectSource",
         "title": "Restore Retained Database Object Source",
         "category": "Rocketbrain"
-      }
+      },
+      { "command": "rocketbrain.db.copyObjectReference", "title": "Copy Qualified Database Name", "category": "Rocketbrain" },
+      { "command": "rocketbrain.schemaCatalog.copyReference", "title": "Copy Qualified Database Name", "category": "Rocketbrain" },
+      { "command": "rocketbrain.schemaCatalog.open", "title": "Open Catalog Object Source", "category": "Rocketbrain", "icon": "$(file-code)" }
     ],
     "viewsContainers": {
       "activitybar": [
@@ -1657,9 +1662,112 @@
       { "id": "rocketbrain.java.refactorMenu", "label": "Refactor" },
       { "id": "rocketbrain.java.testsMenu", "label": "Java Tests" },
       { "id": "rocketbrain.sql.queryMenu", "label": "Query" },
-      { "id": "rocketbrain.sql.sessionMenu", "label": "SQL Session" }
+      { "id": "rocketbrain.sql.sessionMenu", "label": "SQL Session" },
+      { "id": "rocketbrain.idea.code", "label": "Code" },
+      { "id": "rocketbrain.idea.analysis", "label": "Analyze" },
+      { "id": "rocketbrain.idea.build", "label": "Build and Project" },
+      { "id": "rocketbrain.idea.run", "label": "Run Configurations" },
+      { "id": "rocketbrain.idea.tests", "label": "Java Test Tools" },
+      { "id": "rocketbrain.idea.runtime", "label": "Spring Runtime" },
+      { "id": "rocketbrain.idea.persistence", "label": "Persistence" },
+      { "id": "rocketbrain.idea.debug", "label": "Java Debug" },
+      { "id": "rocketbrain.sql.navigationMenu", "label": "SQL Navigate" },
+      { "id": "rocketbrain.db.sourceToolsMenu", "label": "Database Source Tools" },
+      { "id": "rocketbrain.db.schemaToolsMenu", "label": "Schema Snapshots and Dependencies" },
+      { "id": "rocketbrain.results.snapshotsMenu", "label": "Result Snapshots" }
     ],
     "menus": {
+      "rocketbrain.sql.navigationMenu": [
+        { "command": "rocketbrain.sql.goToColumnOrigin", "when": "rocketbrain.sqlToolbarActiveCatalog", "group": "navigation@1" },
+        { "command": "rocketbrain.sql.explainColumnOrigin", "when": "rocketbrain.sqlToolbarActiveCatalog", "group": "navigation@2" },
+        { "command": "rocketbrain.sql.findReferences", "when": "isWorkspaceTrusted && workspaceFolderCount > 0 && !rocketbrain.profileConsole", "group": "usages@1" },
+        { "command": "rocketbrain.sql.showUsageCoverage", "when": "isWorkspaceTrusted && workspaceFolderCount > 0", "group": "usages@2" }
+      ],
+      "rocketbrain.db.sourceToolsMenu": [
+        { "command": "rocketbrain.db.browseObjectNames", "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "navigation@1" },
+        { "command": "rocketbrain.db.systemCatalog", "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "navigation@2" },
+        { "command": "rocketbrain.db.cacheMetadata", "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "offline@1" },
+        { "command": "rocketbrain.db.openCachedMetadata", "when": "!rocketbrain.mysqlConnected && !rocketbrain.offlineMetadataActive", "group": "offline@2" },
+        { "command": "rocketbrain.db.closeCachedMetadata", "when": "rocketbrain.offlineMetadataActive", "group": "offline@3" },
+        { "command": "rocketbrain.db.removeCachedMetadata", "group": "offline@4" }
+      ],
+      "rocketbrain.db.schemaToolsMenu": [
+        { "command": "rocketbrain.schema.saveSnapshot", "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "navigation@1" },
+        { "command": "rocketbrain.schema.saveSnapshotWithStoredObjects", "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "navigation@2" },
+        { "command": "rocketbrain.schema.compareSnapshotWithOptions", "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "compare@1" },
+        { "command": "rocketbrain.schema.compareSavedSnapshots", "group": "compare@2" },
+        { "command": "rocketbrain.schema.programs", "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "dependencies@1" },
+        { "command": "rocketbrain.schema.programsWithInputs", "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted", "group": "dependencies@2" }
+      ],
+      "rocketbrain.results.snapshotsMenu": [
+        { "command": "rocketbrain.results.saveSnapshot", "group": "navigation@1" },
+        { "command": "rocketbrain.results.openSnapshot", "group": "navigation@2" },
+        { "command": "rocketbrain.results.compareSnapshots", "group": "manage@1" },
+        { "command": "rocketbrain.results.removeSnapshot", "group": "manage@2" }
+      ],
+      "rocketbrain.idea.code": [
+        { "command": "rocketbrain.java.insertLiveTemplate", "when": "!editorReadonly", "group": "generate@1" },
+        { "command": "rocketbrain.java.addTypeImport", "when": "!editorReadonly", "group": "generate@2" },
+        { "command": "rocketbrain.java.addStaticMemberImport", "when": "!editorReadonly", "group": "generate@3" },
+        { "command": "rocketbrain.java.previewFormatting", "group": "editing@1" },
+        { "command": "rocketbrain.editor.configureCodeHints", "group": "editing@2" },
+        { "command": "rocketbrain.editor.callSignatures", "group": "editing@3" },
+        { "command": "rocketbrain.editor.quickDocumentation", "group": "analysis@1" },
+        { "command": "rocketbrain.editor.inspectSemanticToken", "group": "analysis@2" }
+      ],
+      "rocketbrain.idea.analysis": [
+        { "command": "rocketbrain.java.traceDataFlow", "group": "flow@1" },
+        { "command": "rocketbrain.java.traceCallDataFlow", "group": "flow@2" },
+        { "command": "rocketbrain.java.structuralSearch", "group": "structure@1" },
+        { "command": "rocketbrain.java.showClassDiagram", "group": "structure@2" },
+        { "command": "rocketbrain.java.inspectProject", "group": "quality@1" },
+        { "command": "rocketbrain.java.findJavaDuplicates", "group": "quality@2" }
+      ],
+      "rocketbrain.idea.build": [
+        { "command": "rocketbrain.java.workbench.tasks", "group": "build@1" },
+        { "command": "rocketbrain.java.reviewDelegatedCompile", "group": "build@2" },
+        { "command": "rocketbrain.java.dependencyGraph", "group": "project@1" },
+        { "command": "rocketbrain.java.rebuildWorkspaceIndex", "group": "project@2" },
+        { "command": "rocketbrain.java.configureNullChecks", "group": "project@3" }
+      ],
+      "rocketbrain.idea.run": [
+        { "command": "rocketbrain.java.workbench.configureRun", "group": "run@1" },
+        { "command": "rocketbrain.java.workbench.configureSpringRun", "group": "run@2" },
+        { "command": "rocketbrain.java.workbench.startRunGroup", "group": "run@3" },
+        { "command": "rocketbrain.java.workbench.importSharedRun", "group": "settings@1" },
+        { "command": "rocketbrain.java.workbench.reviewRuntimes", "group": "settings@2" }
+      ],
+      "rocketbrain.idea.tests": [
+        { "command": "rocketbrain.java.testing.install", "group": "run@1" },
+        { "command": "rocketbrain.java.testing.coverageByTest", "group": "run@2" },
+        { "command": "rocketbrain.java.testing.rerunFailed", "group": "run@3" },
+        { "command": "rocketbrain.java.testing.history", "group": "history@1" }
+      ],
+      "rocketbrain.idea.runtime": [
+        { "command": "rocketbrain.spring.runtimeHealth", "group": "runtime@1" },
+        { "command": "rocketbrain.spring.runtimeBeans", "group": "runtime@2" },
+        { "command": "rocketbrain.spring.compareRuntime", "group": "runtime@3" },
+        { "command": "rocketbrain.spring.disconnectRuntime", "group": "runtime@4" },
+        { "command": "rocketbrain.spring.runtimeProperty", "group": "observations@1" },
+        { "command": "rocketbrain.spring.runtimeSecurity", "group": "observations@2" },
+        { "command": "rocketbrain.spring.feignContracts", "group": "observations@3" }
+      ],
+      "rocketbrain.idea.persistence": [
+        { "command": "rocketbrain.jpa.relationshipDiagram", "group": "model@1" },
+        { "command": "rocketbrain.jpa.queryTypes", "group": "model@2" },
+        { "command": "rocketbrain.jpa.console.open", "group": "model@3" },
+        { "command": "rocketbrain.jpa.observer.prepare", "group": "observer@1" },
+        { "command": "rocketbrain.jpa.observer.connect", "group": "observer@2" },
+        { "command": "rocketbrain.jpa.observer.inspect", "group": "observer@3" },
+        { "command": "rocketbrain.jpa.observer.disconnect", "group": "observer@4" }
+      ],
+      "rocketbrain.idea.debug": [
+        { "command": "rocketbrain.java.smartStepInto", "when": "debugState == stopped", "group": "stepping@1" },
+        { "command": "rocketbrain.java.restartStackFrame", "when": "debugState == stopped", "group": "stepping@2" },
+        { "command": "rocketbrain.java.showAsyncTaskStack", "when": "debugState == stopped", "group": "stepping@3" },
+        { "command": "rocketbrain.java.inspectLocalValue", "when": "debugState == stopped", "group": "values@1" },
+        { "command": "rocketbrain.java.inspectKotlinObjectFields", "when": "debugState == stopped", "group": "values@2" }
+      ],
       "rocketbrain.sql.queryMenu": [
         { "command": "rocketbrain.runQuery", "when": "rocketbrain.sqlToolbarRunnable", "group": "navigation@1" },
         { "command": "rocketbrain.cancelQuery", "when": "rocketbrain.sqlToolbarCanCancel", "group": "navigation@2" },
@@ -1668,7 +1776,17 @@
         { "command": "rocketbrain.sql.explainVisual", "when": "rocketbrain.sqlToolbarActiveCatalog", "group": "query@2" },
         { "command": "rocketbrain.sql.format", "when": "!editorReadonly && !rocketbrain.profileConsole", "group": "query@3" },
         { "command": "rocketbrain.sql.saveQuery", "when": "isWorkspaceTrusted && workspaceFolderCount > 0 && !rocketbrain.profileConsole", "group": "queries@1" },
-        { "command": "rocketbrain.sql.queryHistory", "when": "isWorkspaceTrusted && workspaceFolderCount > 0", "group": "queries@2" }
+        { "command": "rocketbrain.sql.queryHistory", "when": "isWorkspaceTrusted && workspaceFolderCount > 0", "group": "queries@2" },
+        { "command": "rocketbrain.sql.runScript", "when": "rocketbrain.sqlToolbarActiveCatalog", "group": "query@4" },
+        { "command": "rocketbrain.sql.runWithParameters", "when": "rocketbrain.sqlToolbarActiveCatalog", "group": "query@5" },
+        { "command": "rocketbrain.sql.measurePlan", "when": "rocketbrain.sqlToolbarActiveCatalog", "group": "query@6" },
+        { "command": "rocketbrain.sql.comparePlans", "when": "isWorkspaceTrusted && workspaceFolderCount > 0", "group": "query@7" },
+        { "command": "rocketbrain.sql.savedQueries", "when": "isWorkspaceTrusted && workspaceFolderCount > 0", "group": "queries@3" },
+        { "command": "rocketbrain.sql.saveParameterPreset", "when": "isWorkspaceTrusted && workspaceFolderCount > 0 && rocketbrain.sqlToolbarActiveCatalog", "group": "queries@4" },
+        { "command": "rocketbrain.sql.insertTemplate", "when": "!editorReadonly && !rocketbrain.profileConsole", "group": "queries@5" },
+        { "command": "rocketbrain.sql.analyze", "when": "!rocketbrain.profileConsole", "group": "analysis@1" },
+        { "command": "rocketbrain.sql.previewDdl", "when": "rocketbrain.sqlToolbarActiveCatalog && !rocketbrain.profileConsole", "group": "analysis@2" },
+        { "command": "rocketbrain.sql.manageVirtualSchemas", "when": "isWorkspaceTrusted && workspaceFolderCount > 0 && !rocketbrain.profileConsole && rocketbrain.mysqlConnected", "group": "analysis@3" }
       ],
       "rocketbrain.sql.sessionMenu": [
         { "command": "rocketbrain.consoleMode", "when": "rocketbrain.sqlToolbarIdleSession", "group": "navigation@1" },
@@ -1678,28 +1796,56 @@
         { "command": "rocketbrain.openSharedConsole", "when": "rocketbrain.sqlToolbarRunnable", "group": "console@1" },
         { "command": "rocketbrain.setTransactionIsolation", "when": "rocketbrain.sqlToolbarIdleSession", "group": "console@2" },
         { "command": "rocketbrain.sessionStatus", "group": "console@3" },
-        { "command": "rocketbrain.manageSessions", "group": "console@4" }
+        { "command": "rocketbrain.manageSessions", "group": "console@4" },
+        { "command": "rocketbrain.connections.bindSqlFile", "when": "resourceScheme == file && !rocketbrain.profileConsole", "group": "binding@1" },
+        { "command": "rocketbrain.connections.forgetSqlFile", "when": "resourceScheme == file && rocketbrain.profileConsole", "group": "binding@2" }
       ],
       "rocketbrain.java.navigateMenu": [
         { "command": "rocketbrain.java.navigateSymbol", "group": "navigation@1" },
         { "command": "rocketbrain.java.findUsages", "group": "navigation@2" },
         { "command": "rocketbrain.java.fileStructure", "group": "navigation@3" },
         { "command": "rocketbrain.java.callHierarchy", "when": "editorLangId == java", "group": "hierarchy@1" },
-        { "command": "rocketbrain.java.typeHierarchy", "when": "editorLangId == java", "group": "hierarchy@2" }
+        { "command": "rocketbrain.java.typeHierarchy", "when": "editorLangId == java", "group": "hierarchy@2" },
+        { "command": "rocketbrain.java.goToSuperMethod", "when": "editorLangId == java", "group": "hierarchy@3" },
+        { "command": "rocketbrain.java.mixed.definition", "group": "navigation@4" }
       ],
       "rocketbrain.java.refactorMenu": [
         { "command": "rocketbrain.java.refactor", "group": "navigation@1" },
         { "command": "rocketbrain.java.generateMembers", "group": "edit@1" },
-        { "command": "rocketbrain.java.cleanUpFile", "group": "edit@2" }
+        { "command": "rocketbrain.java.cleanUpFile", "group": "edit@2" },
+        { "command": "rocketbrain.java.reviewTypeRename", "when": "!editorReadonly", "group": "signature@1" },
+        { "command": "rocketbrain.java.renamePackage", "when": "!editorReadonly", "group": "signature@2" },
+        { "command": "rocketbrain.java.changeSignature", "when": "!editorReadonly", "group": "signature@3" },
+        { "command": "rocketbrain.java.safeDelete", "when": "!editorReadonly", "group": "signature@4" },
+        { "command": "rocketbrain.java.extractMethod", "when": "!editorReadonly", "group": "extract@1" },
+        { "command": "rocketbrain.java.extractVariable", "when": "!editorReadonly", "group": "extract@2" },
+        { "command": "rocketbrain.java.extractConstant", "when": "!editorReadonly", "group": "extract@3" },
+        { "command": "rocketbrain.java.extractField", "when": "!editorReadonly", "group": "extract@4" },
+        { "command": "rocketbrain.java.extractInterface", "when": "!editorReadonly", "group": "extract@5" },
+        { "command": "rocketbrain.java.move", "when": "!editorReadonly", "group": "move@1" },
+        { "command": "rocketbrain.java.moveInnerClass", "when": "!editorReadonly", "group": "move@2" },
+        { "command": "rocketbrain.java.moveCrossProject", "when": "!editorReadonly", "group": "move@3" },
+        { "command": "rocketbrain.java.movePackage", "when": "!editorReadonly", "group": "move@4" },
+        { "command": "rocketbrain.java.moveMember", "when": "!editorReadonly", "group": "move@5" },
+        { "command": "rocketbrain.java.moveInstanceMethod", "when": "!editorReadonly", "group": "move@6" },
+        { "command": "rocketbrain.java.pullUpMembers", "when": "!editorReadonly", "group": "move@7" },
+        { "command": "rocketbrain.java.pushDownMembers", "when": "!editorReadonly", "group": "move@8" },
+        { "command": "rocketbrain.java.inlineMethod", "when": "!editorReadonly", "group": "convert@1" },
+        { "command": "rocketbrain.java.convertStructure", "when": "!editorReadonly", "group": "convert@2" }
       ],
       "rocketbrain.java.testsMenu": [
         { "command": "rocketbrain.java.testing.discover", "group": "navigation@1" },
         { "command": "rocketbrain.java.testing.run", "group": "navigation@2" },
         { "command": "rocketbrain.java.testing.debug", "group": "navigation@3" },
-        { "command": "rocketbrain.java.testing.coverage", "group": "coverage" }
+        { "command": "rocketbrain.java.testing.coverage", "group": "coverage" },
+        { "command": "rocketbrain.java.testing.coverageByTest", "group": "coverage@2" },
+        { "command": "rocketbrain.java.testing.rerunFailed", "group": "history@1" },
+        { "command": "rocketbrain.java.testing.history", "group": "history@2" }
       ],
       "debug/toolBar": [
-        { "command": "rocketbrain.spring.debugProperty", "when": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java", "group": "navigation@40" }
+        { "command": "rocketbrain.spring.debugProperty", "when": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java", "group": "navigation@40" },
+        { "command": "rocketbrain.java.hotCodeReplace", "when": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java", "group": "navigation@41" },
+        { "submenu": "rocketbrain.idea.debug", "when": "isWorkspaceTrusted && inDebugMode && debugType == rocketbrain-java", "group": "rocketbrainJava" }
       ],
       "notebook/cell/title": [
         { "command": "rocketbrain.jupyter.debugCell", "when": "isWorkspaceTrusted && notebookType == rocketbrain-jupyter && notebookCellType == code", "group": "inline" },
@@ -1743,7 +1889,12 @@
           "command": "rocketbrain.java.findUsages",
           "when": "isWorkspaceTrusted && resourceScheme == file && resourceExtname =~ /^\\.(xml|properties|ya?ml)$/i",
           "group": "navigation"
-        }
+        },
+        { "submenu": "rocketbrain.idea.code", "when": "isWorkspaceTrusted && resourceScheme == file && editorLangId == java", "group": "2_code@1" },
+        { "submenu": "rocketbrain.idea.analysis", "when": "isWorkspaceTrusted && resourceScheme == file && editorLangId == java", "group": "2_code@2" },
+        { "command": "rocketbrain.java.addMethodBreakpoint", "when": "isWorkspaceTrusted && resourceScheme == file && editorLangId == java", "group": "debug" },
+        { "command": "rocketbrain.java.manageLibrarySources", "when": "isWorkspaceTrusted && resourceScheme == jdt", "group": "navigation@8" },
+        { "submenu": "rocketbrain.sql.navigationMenu", "when": "editorLangId == sql && !rocketbrain.profileConsole", "group": "rocketbrainSql@3" }
       ],
       "explorer/context": [
         {
@@ -1755,6 +1906,7 @@
       "view/title": [
         { "command": "rocketbrain.connections.add", "when": "view == rocketbrain.databases && isWorkspaceTrusted", "group": "navigation@2" },
         { "command": "rocketbrain.connections.openDedicatedConsole", "when": "view == rocketbrain.connections && isWorkspaceTrusted && rocketbrain.hasDatabaseProfiles", "group": "navigation@2" },
+        { "command": "rocketbrain.connections.edit", "when": "view == rocketbrain.connections && isWorkspaceTrusted && rocketbrain.hasDatabaseProfiles", "group": "navigation@4" },
         { "command": "rocketbrain.java.installEngine", "when": "view == rocketbrain.javaProjects && workspaceFolderCount > 0 && isWorkspaceTrusted && config.rocketbrain.java.enabled && rocketbrain.javaEngineState == configuration-required", "group": "setup" },
         { "command": "rocketbrain.showQueryResults", "when": "view == rocketbrain.databases && rocketbrain.workspaceMode == datagrip", "group": "navigation@3" },
         { "command": "rocketbrain.java.workbench.build", "when": "view == rocketbrain.javaProjects && workspaceFolderCount > 0 && isWorkspaceTrusted", "group": "navigation@2" },
@@ -1805,6 +1957,7 @@
           "when": "view == rocketbrain.project",
           "group": "navigation"
         },
+        { "command": "rocketbrain.java.newFileFromTemplate", "when": "view == rocketbrain.project && workspaceFolderCount > 0 && isWorkspaceTrusted", "group": "navigation@1" },
         { "command": "rocketbrain.refresh", "when": "view == rocketbrain.project || (view == rocketbrain.databases && !rocketbrain.mysqlConnected)", "group": "navigation@5" },
         { "command": "rocketbrain.connectMysql", "when": "view == rocketbrain.databases && isWorkspaceTrusted", "group": "connection@1" },
         { "command": "rocketbrain.openConsole", "when": "view == rocketbrain.databases", "group": "navigation@1" },
@@ -1870,7 +2023,19 @@
           "command": "rocketbrain.schema.openObjectSource",
           "when": "view == rocketbrain.databases",
           "group": "source"
-        }
+        },
+        { "command": "rocketbrain.java.openScratch", "when": "view == rocketbrain.project && isWorkspaceTrusted && workspaceFolderCount > 0", "group": "new" },
+        { "submenu": "rocketbrain.idea.build", "when": "view == rocketbrain.javaProjects && isWorkspaceTrusted && workspaceFolderCount > 0", "group": "build@1" },
+        { "submenu": "rocketbrain.idea.run", "when": "view == rocketbrain.javaProjects && isWorkspaceTrusted && workspaceFolderCount > 0", "group": "build@2" },
+        { "submenu": "rocketbrain.idea.tests", "when": "view == rocketbrain.javaProjects && isWorkspaceTrusted && workspaceFolderCount > 0", "group": "build@3" },
+        { "command": "rocketbrain.spring.beanGraph", "when": "view == rocketbrain.analysis && isWorkspaceTrusted && workspaceFolderCount > 0", "group": "navigation@3" },
+        { "submenu": "rocketbrain.idea.runtime", "when": "view == rocketbrain.analysis && isWorkspaceTrusted && workspaceFolderCount > 0", "group": "analysis@6" },
+        { "submenu": "rocketbrain.idea.persistence", "when": "view == rocketbrain.analysis && isWorkspaceTrusted && workspaceFolderCount > 0", "group": "analysis@7" },
+        { "command": "rocketbrain.java.testing.history", "when": "view == workbench.view.testing && isWorkspaceTrusted && workspaceFolderCount > 0 && rocketbrain.workspaceMode != datagrip", "group": "navigation@20" },
+        { "submenu": "rocketbrain.db.sourceToolsMenu", "when": "view == rocketbrain.databases && isWorkspaceTrusted", "group": "rocketbrainSource@1" },
+        { "submenu": "rocketbrain.db.schemaToolsMenu", "when": "(view == rocketbrain.databases || view == rocketbrain.schemaCatalog) && isWorkspaceTrusted && workspaceFolderCount > 0", "group": "rocketbrainSource@2" },
+        { "command": "rocketbrain.sql.queryHistory", "when": "view == rocketbrain.results && isWorkspaceTrusted && workspaceFolderCount > 0", "group": "navigation@7" },
+        { "submenu": "rocketbrain.results.snapshotsMenu", "when": "view == rocketbrain.results && isWorkspaceTrusted && workspaceFolderCount > 0", "group": "rocketbrainResults@1" }
       ],
       "editor/title": [
         { "command": "rocketbrain.runQuery", "when": "resourceLangId == sql && rocketbrain.sqlToolbarRunnable", "group": "navigation@1" },
@@ -1920,7 +2085,10 @@
           "command": "rocketbrain.http.run",
           "when": "resourceLangId == rocketbrain-http && isWorkspaceTrusted",
           "group": "navigation"
-        }
+        },
+        { "command": "rocketbrain.sql.analyze", "when": "resourceLangId == sql && !rocketbrain.profileConsole", "group": "navigation@6" },
+        { "command": "rocketbrain.sql.explainVisual", "when": "resourceLangId == sql && rocketbrain.sqlToolbarActiveCatalog", "group": "navigation@7" },
+        { "submenu": "rocketbrain.sql.navigationMenu", "when": "resourceLangId == sql && !rocketbrain.profileConsole", "group": "rocketbrainSql@3" }
       ],
       "view/item/context": [
         { "command": "rocketbrain.openTable", "when": "view == rocketbrain.databases && viewItem == rocketbrain.table && !rocketbrain.offlineMetadataActive && (!rocketbrain.mysqlConnected || isWorkspaceTrusted)", "group": "inline@1" },
@@ -2084,7 +2252,12 @@
           "command": "rocketbrain.schema.editTable",
           "when": "view == rocketbrain.databases && viewItem == rocketbrain.table",
           "group": "schema"
-        }
+        },
+        { "command": "rocketbrain.java.newFileFromTemplate", "when": "view == rocketbrain.project && viewItem == rocketbrain.project.directory && isWorkspaceTrusted", "group": "navigation@1" },
+        { "command": "rocketbrain.java.workbench.exportSharedRun", "when": "view == rocketbrain.javaProjects && isWorkspaceTrusted && viewItem == rocketbrainJavaRunConfiguration", "group": "configuration@2" },
+        { "command": "rocketbrain.db.copyObjectReference", "when": "view == rocketbrain.databases && (viewItem == rocketbrain.table || viewItem == rocketbrain.tableColumn) && !rocketbrain.offlineMetadataActive && (!rocketbrain.mysqlConnected || isWorkspaceTrusted)", "group": "copy@1" },
+        { "command": "rocketbrain.schemaCatalog.copyReference", "when": "view == rocketbrain.schemaCatalog && (viewItem == rocketbrain.schemaCatalogSchema || viewItem == rocketbrain.schemaCatalogObject)", "group": "copy@1" },
+        { "command": "rocketbrain.schemaCatalog.open", "when": "view == rocketbrain.schemaCatalog && viewItem == rocketbrain.schemaCatalogObject", "group": "navigation@1" }
       ]
     },
     "keybindings": [

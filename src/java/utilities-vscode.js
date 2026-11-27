@@ -355,7 +355,16 @@ function registerJavaUtilities(context, vscode, { java }) {
     });
   }
   const subscriptions = [
-    command(COMMANDS.newFile, value => value?.sourceRoot ? createFile(value) : createInteractive(value)),
+    command(COMMANDS.newFile, async value => {
+      if (value?.sourceRoot) return createFile(value);
+      if (value?.contextValue !== 'rocketbrain.project.directory') return createInteractive(value);
+      const folder = value.resourceUri;
+      if (!localUri(folder) || !vscode.workspace.getWorkspaceFolder(folder)) {
+        throw Error('Choose a local directory in the Project view.');
+      }
+      await physicalDirectory(folder.fsPath);
+      return createInteractive(folder);
+    }),
     command(COMMANDS.openScratch, value => value?.name ? openScratch(value) : openInteractiveScratch()),
     command(COMMANDS.runScratch, value => value?.uri ? runScratch(value) : runInteractiveScratch())
   ];

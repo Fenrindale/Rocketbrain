@@ -5,6 +5,7 @@ const { inspectDmlScope } = require('./sql-dml-scope');
 const { isProfileConsole: isVirtualProfileConsole } = require('./profile-console-files');
 const { createOverlayStore, overlayScope, buildOverlay } = require('./virtual-schema-overlays');
 const { callCompletions, callSignature } = require('./sql-call-completion');
+const { sqlEditorForAction } = require('./sql-editor-target');
 const overlaySourceScheme='rocketbrain-virtual-schema-source';
 
 function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChangeDatabase,output,joinCatalog,joinLogicalRelationships,objectDefinition,objectColumnOrigin,liveCatalogIdentity,
@@ -737,10 +738,10 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     if(value?.metadata)metadata=value.metadata;
     reanalyze();
   }));
-  const command=(name,action)=>subscriptions.push(vscode.commands.registerCommand(name,async()=>{try{return await action();}catch(error){output?.appendLine(error.message);await vscode.window.showErrorMessage('Rocketbrain SQL: '+error.message);}}));
+  const command=(name,action)=>subscriptions.push(vscode.commands.registerCommand(name,async(...args)=>{try{return await action(...args);}catch(error){output?.appendLine(error.message);await vscode.window.showErrorMessage('Rocketbrain SQL: '+error.message);}}));
   command('rocketbrain.sql.refreshAnalysisMetadata',refreshMetadata);
-  command('rocketbrain.sql.previewDdl',async()=>{
-    const document=vscode.window.activeTextEditor?.document;
+  command('rocketbrain.sql.previewDdl',async resource=>{
+    const document=sqlEditorForAction(vscode,resource)?.document;
     if(document?.languageId!=='sql')throw Error('Open a SQL editor.');
     const basis=await vscode.window.showQuickPick(['Observed database catalog','Local DDL snapshot'],{title:'Preview SQL with a Virtual Schema'});
     if(!basis)return;
@@ -758,9 +759,9 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     vscode.window.setStatusBarMessage(`Virtual SQL schema · ${report.ddlChanges?.length??0} scripted changes · no SQL executed`,10000);
     return report;
   });
-  command('rocketbrain.sql.clearDdlPreview',()=>clearDdlPreview(vscode.window.activeTextEditor?.document));
-  command('rocketbrain.sql.manageVirtualSchemas',async()=>{
-    const editor=vscode.window.activeTextEditor;
+  command('rocketbrain.sql.clearDdlPreview',resource=>clearDdlPreview(sqlEditorForAction(vscode,resource)?.document));
+  command('rocketbrain.sql.manageVirtualSchemas',async resource=>{
+    const editor=sqlEditorForAction(vscode,resource);
     const selectedContext=overlayContext();
     const saved=overlays.list(selectedContext.scope);
     const choices=[
@@ -801,8 +802,8 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
       return removeOverlay(selected.item.id,selected.item.revision);
     }
   });
-  function showOrigin(explain){
-    const editor=vscode.window.activeTextEditor;
+  function showOrigin(explain,resource){
+    const editor=sqlEditorForAction(vscode,resource);
     if(!editor||editor.document.languageId!=='sql')throw Error('Place the cursor inside a SQL column name.');
     const version=editor.document.version,generation=epoch;
     return vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:'Tracing the database column origin',cancellable:true},
@@ -817,10 +818,10 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
         return result;
       });
   }
-  command('rocketbrain.sql.goToColumnOrigin',()=>showOrigin(false));
-  command('rocketbrain.sql.explainColumnOrigin',()=>showOrigin(true));
-  command('rocketbrain.sql.findReferences',async()=>{
-    const editor=vscode.window.activeTextEditor;
+  command('rocketbrain.sql.goToColumnOrigin',resource=>showOrigin(false,resource));
+  command('rocketbrain.sql.explainColumnOrigin',resource=>showOrigin(true,resource));
+  command('rocketbrain.sql.findReferences',async resource=>{
+    const editor=sqlEditorForAction(vscode,resource);
     if(!editor||!['sql','java'].includes(editor.document.languageId))throw new Error('Open SQL or a configured Java source file.');
     lastProjectReport=null;
     const locations=await provideReferences(editor.document,editor.selection.active,{includeDeclaration:true});
@@ -837,7 +838,17 @@ function registerSQLAnalysis(context,vscode,{catalog,catalogSnapshot,onDidChange
     await vscode.window.showTextDocument(document,{preview:true});
     return structuredClone(report.coverage);
   });
-  command('rocketbrain.sql.analyze',async()=>{const document=vscode.window.activeTextEditor?.document;if(!document||document.languageId!=='sql')throw new Error('Open a SQL document first.');if(!isProfileConsole(document)&&!virtualActive(document)&&!metadata?.cachedMetadata)await refreshMetadata();const report=analyzeDocument(document);output?.appendLine('SQL source analysis: '+report.state+'; '+report.statements.length+' statements. No user query was executed.');return report;});
+  command('rocketbrain.sql.analyze',async resource=>{
+    const document=sqlEditorForAction(vscode,resource)?.document;
+    if(!document||document.languageId!=='sql')throw new Error('Open a SQL document first.');
+    if(!isProfileConsole(document)&&!virtualActive(document)&&!metadata?.cachedMetadata&&(!liveCatalogIdentity||liveCatalogIdentity()))await refreshMetadata();
+    const report=analyzeDocument(document);
+    const summary=report.state==='not-connected'?'not-connected. Connect to MySQL or MariaDB for catalog-backed checks.':
+      report.state+'; '+report.statements.length+' statements.';
+    output?.appendLine('SQL source analysis: '+summary+' No user query was executed.');
+    output?.show?.(true);
+    return report;
+  });
   if(vscode.workspace.onDidChangeWorkspaceFolders)subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{projectGeneration++;projectPlans.clear();lastProjectReport=null;}));
   if(onDidChangeSqlFileProfile)subscriptions.push(onDidChangeSqlFileProfile(document=>{
     projectGeneration++;projectPlans.clear();lastProjectReport=null;

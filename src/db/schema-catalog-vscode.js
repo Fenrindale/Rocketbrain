@@ -1,6 +1,7 @@
 'use strict';
 
 const { identifier } = require('./schema-rename');
+const { qualifiedSqlName } = require('./object-reference');
 
 const prefix = 'rocketbrain.schemaCatalog.';
 const maxSchemas = 16;
@@ -143,6 +144,7 @@ function registerSchemaCatalog(context, vscode, { database, objectSources }) {
             const active = visible.names.includes(schema);
             return newItem(schema, active ? Collapsed : None, { id: JSON.stringify([offer.connection, schema]), schema, offer,
               kinds: visible.kinds, description: active ? (schema === offer.database ? 'SQL default' : undefined) : 'Unavailable',
+              contextValue: active ? 'rocketbrain.schemaCatalogSchema' : undefined,
               iconPath: new vscode.ThemeIcon('database') });
           });
         }
@@ -194,6 +196,15 @@ function registerSchemaCatalog(context, vscode, { database, objectSources }) {
       if (desired) return select(desired.map(item => item.label), offer);
     }),
     command('open', item => open(item?.object, item?.offer)),
+    command('copyReference', item => {
+      guard(item?.offer);
+      const { schemas, excluded } = settings(item.offer);
+      const schema = item.object?.schema ?? item.schema;
+      if (!schemas.includes(schema) || (item.object && excluded.some(object => identityOf(object) === identityOf(item.object)))) {
+        throw Error('Choose an included database object from the current catalog.');
+      }
+      return vscode.env.clipboard.writeText(qualifiedSqlName('mysql', schema, ...(item.object ? [item.object.name] : [])));
+    }),
     command('hide', item => setExcluded(item?.object, true, item?.offer)),
     command('restore', async () => {
       const offer = frame();

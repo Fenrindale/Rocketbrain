@@ -3,16 +3,39 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {registerSQLAnalysis}=require('../src/db/sql-vscode');
 const catalog={database:'app',dialect:'mysql',sqlMode:[],tableNameCaseSensitive:false,visibility:'current-account',loadedAt:'observed',coverage:{tables:'loaded',columns:'loaded'},tables:[{name:'people',columns:[{name:'id',type:'bigint',nullable:false},{name:'name',type:'varchar(100)',nullable:false}]}],views:[]};
 function host(source,fetchCatalog=async()=>catalog,pluginOptions={}){
-  const events={};let collection=new Map();const providers={};let calls=0;
+  const events={};let collection=new Map();const providers={},commands=new Map();let calls=0;
   class Emitter{listeners=new Set();event=fn=>{this.listeners.add(fn);return{dispose:()=>this.listeners.delete(fn)};};fire(value){for(const fn of this.listeners)fn(value);}dispose(){}}
   class Range{constructor(...args){if(args.length===2){this.start=args[0];this.end=args[1];}else{this.start={line:args[0],character:args[1]};this.end={line:args[2],character:args[3]};}}}
   const uri={toString:()=> 'file:///fixture/query.sql'},doc={uri,languageId:'sql',version:1,isClosed:false,getText:()=>source,positionAt:offset=>{const lines=source.slice(0,offset).split('\n');return {line:lines.length-1,character:lines.at(-1).length};},offsetAt:position=>source.split('\n').slice(0,position.line).reduce((sum,line)=>sum+line.length+1,0)+position.character};
   const vscode={EventEmitter:Emitter,Range,DiagnosticSeverity:{Error:0,Warning:1,Information:2},Diagnostic:class{constructor(range,message,severity){Object.assign(this,{range,message,severity});}},CompletionItemKind:{Field:1,Struct:2},CompletionItem:class{constructor(label){this.label=label;}},MarkdownString:class{value='';appendText(value){this.value+=value;}},Hover:class{constructor(value){this.contents=[value];}},Location:class{constructor(value,range){this.uri=value;this.range=range;}},languages:{createDiagnosticCollection:()=>({clear:()=>collection.clear(),set:(uri,values)=>collection.set(uri.toString(),values),delete:uri=>collection.delete(uri.toString()),dispose(){}})},window:{activeTextEditor:{document:doc},showErrorMessage:async()=>{}},commands:{registerCommand:()=>({dispose(){}})},workspace:{isTrusted:true,textDocuments:[doc],getConfiguration:()=>({get:(key,value)=>value})}};
   for(const name of ['onDidChangeTextDocument','onDidCloseTextDocument','onDidChangeConfiguration']){events[name]=new Emitter();vscode.workspace[name]=events[name].event;}
   for(const [name,key] of [['registerCompletionItemProvider','completion'],['registerHoverProvider','hover'],['registerDefinitionProvider','definition']])vscode.languages[name]=(selector,provider)=>{providers[key]=provider;return {dispose(){}};};
+  vscode.commands.registerCommand=(name,action)=>{commands.set(name,action);return {dispose(){commands.delete(name);}};};
   const connection=new Emitter();const api=registerSQLAnalysis({},vscode,{catalog:async()=>{calls++;return fetchCatalog();},onDidChangeDatabase:connection.event,catalogSnapshot:()=>catalog,...pluginOptions});
-  return {api,doc,vscode,providers,connection,calls:()=>calls,diagnostics:()=>collection.get(uri.toString())||[]};
+  return {api,doc,vscode,providers,commands,connection,calls:()=>calls,diagnostics:()=>collection.get(uri.toString())||[]};
 }
+
+test('the SQL toolbar reports offline analysis and refuses a different editor resource', async () => {
+  const lines = [], shown = [], errors = [];
+  const h = host('SELECT * FROM projects;', async () => { throw Error('Offline metadata cannot be read.'); }, {
+    liveCatalogIdentity: () => null,
+    catalogSnapshot: () => null,
+    output: { appendLine: value => lines.push(value), show: preserveFocus => shown.push(preserveFocus) }
+  });
+  h.vscode.window.showErrorMessage = async message => errors.push(message);
+  try {
+    const analyze = h.commands.get('rocketbrain.sql.analyze');
+    const unrelated = { scheme: 'file', path: '/other.sql', toString: () => 'file:///other.sql' };
+    assert.equal(await analyze(unrelated), undefined);
+    assert.match(errors[0], /Activate this SQL editor/);
+    assert.deepEqual(shown, []);
+    const result = await analyze(h.doc.uri);
+    assert.equal(result.state, 'not-connected');
+    assert.equal(h.calls(), 0);
+    assert.match(lines.at(-1), /SQL source analysis: not-connected\. Connect to MySQL or MariaDB/);
+    assert.deepEqual(shown, [true]);
+  } finally { h.api.dispose(); }
+});
 test('native SQL diagnostics map multiple statements and CTE definitions without implicit server queries',()=>{
   const source='WITH chosen AS (SELECT p.id AS person_id FROM people p)\nSELECT c.person_id FROM chosen c;\nSELECT p.missing FROM people p;',h=host(source);
   try{const report=h.api.analyzeDocument(h.doc);assert.equal(h.calls(),0);assert.equal(report.statements.length,2);assert.equal(report.state,'invalid');assert.ok(h.diagnostics().some(d=>d.code==='sql.name.column'&&d.range.start.line===2));const pos=h.doc.positionAt(source.indexOf('c.person_id')+3),defs=h.providers.definition.provideDefinition(h.doc,pos);assert.ok(defs.length>0);assert.equal(defs[0].range.start.line,0);const hover=h.providers.hover.provideHover(h.doc,pos);assert.ok(hover.contents[0].value.includes('person_id'));}finally{h.api.dispose();}

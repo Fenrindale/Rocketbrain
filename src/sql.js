@@ -22,6 +22,11 @@ function statementAt(text, offset, { dialect = 'mysql' } = {}) {
   ranges.push({ start, end: text.length, sql: text.slice(start).trim() });
   const bounded = Math.max(0, Math.min(offset, text.length));
   const index = ranges.findIndex(r => bounded >= r.start && bounded < r.end);
+  const previous = ranges[index - 1];
+  if (previous?.sql && /^[\t ]*$/.test(text.slice(ranges[index].start, bounded)) &&
+      /^[\t ]*(?:\r|\n|$)/.test(text.slice(bounded))) {
+    return previous.sql;
+  }
   if (index >= 0 && ranges[index].sql) return ranges[index].sql;
   return ranges.filter(r => r.end <= bounded && r.sql).at(-1)?.sql || ranges.find(r => r.sql)?.sql || '';
 }

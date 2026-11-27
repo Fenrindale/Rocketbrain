@@ -16,6 +16,7 @@ class ProjectTree {
   item(uri, directory, label) {
     const item = new vscode.TreeItem(label, directory ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
     item.id = uri.toString(); item.resourceUri = uri;
+    if (directory) item.contextValue = 'rocketbrain.project.directory';
     if (!directory) item.command = { command: 'vscode.open', title: 'Open File', arguments: [uri] };
     return item;
   }
@@ -40,7 +41,15 @@ class SchemaTree {
         item.command = { command: 'rocketbrain.openTable', title: 'Preview Table', arguments: [table.name] }; return item;
       });
     }
-    return (parent.table?.columns || []).map(col => { const item = new vscode.TreeItem(col.name); item.description = col.type + (col.primaryKey ? ' · PK' : ''); item.iconPath = new vscode.ThemeIcon(col.primaryKey ? 'key' : 'symbol-field'); return item; });
+    return (parent.table?.columns || []).map(col => {
+      const item = new vscode.TreeItem(col.name);
+      item.description = col.type + (col.primaryKey ? ' · PK' : '');
+      item.iconPath = new vscode.ThemeIcon(col.primaryKey ? 'key' : 'symbol-field');
+      item.contextValue = 'rocketbrain.tableColumn';
+      item.table = parent.table;
+      item.column = col;
+      return item;
+    });
   }
   refresh() { this.events.fire(); }
   dispose() { this.events.dispose(); }
@@ -152,11 +161,12 @@ async function activate(context) {
   context.subscriptions.push(jpaScaffold);
   const analysis = require('./analysis-tree').registerAnalysisTree(context, vscode, { spring: java.spring, jpa });
   context.subscriptions.push(analysis);
-  sqlAnalysis=require('./db/sql-vscode').registerSQLAnalysis(context,vscode,{catalog:database.databaseCatalog,catalogSnapshot:database.catalogSnapshot,onDidChangeDatabase:database.onDidChangeDatabase,
+  const sqlAnalysisOutput = vscode.window.createOutputChannel('Rocketbrain SQL');
+  sqlAnalysis=require('./db/sql-vscode').registerSQLAnalysis(context,vscode,{catalog:database.databaseCatalog,catalogSnapshot:database.catalogSnapshot,onDidChangeDatabase:database.onDidChangeDatabase,output:sqlAnalysisOutput,
     joinCatalog:database.joinCompletionCatalog,joinLogicalRelationships:database.joinLogicalRelationships,
     objectDefinition:objectSources.definition,objectColumnOrigin:objectSources.columnOrigin,liveCatalogIdentity:database.liveCatalogIdentity,
     isProfileConsole:database.isProfileSql,onDidChangeSqlFileProfile:database.onDidChangeSqlFileProfile});
-  context.subscriptions.push(sqlAnalysis);
+  context.subscriptions.push(sqlAnalysis, sqlAnalysisOutput);
   const sqlCollations = require('./db/sql-collation-vscode').registerSqlCollations(vscode, {
     database, virtualActive: sqlAnalysis.virtualActive, onDidChangeAnalysis: sqlAnalysis.onDidChange
   });

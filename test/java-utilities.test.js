@@ -8,6 +8,7 @@ const fs = require('node:fs/promises');
 const { listFileTemplates, validIdentifier, checkPackage, renderJavaFile, writeTemplateFile } =
   require('../src/java/file-templates');
 const { runJavaScratch, scratchClasspath } = require('../src/java/scratch-engine');
+const { registerJavaUtilities, COMMANDS } = require('../src/java/utilities-vscode');
 
 const custom = {
   name: 'Custom probe', source: 'test',
@@ -21,6 +22,57 @@ async function ownedDirectory(t) {
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   return directory;
 }
+
+test('Project folder action anchors source and package choices to the selected directory', async t => {
+  const root = await ownedDirectory(t);
+  const source = path.join(root, 'src', 'main', 'java');
+  const selected = path.join(source, 'demo', 'chosen');
+  const other = path.join(root, 'src', 'test', 'java', 'demo', 'other');
+  await Promise.all([fs.mkdir(selected, {recursive: true}), fs.mkdir(other, {recursive: true})]);
+  const file = fsPath => ({scheme: 'file', fsPath});
+  const folder = {uri: file(root), name: 'fixture'};
+  const commands = new Map(), errors = [];
+  let selectedPackage, selectedRoot;
+  const vscode = {
+    Uri: {file},
+    workspace: {
+      isTrusted: true, workspaceFolders: [folder],
+      getWorkspaceFolder: () => folder, findFiles: async () => [],
+      getConfiguration: () => ({get: (_key, fallback) => fallback})
+    },
+    window: {
+      activeTextEditor: {document: {uri: file(path.join(other, 'UnrelatedTest.java'))}},
+      createOutputChannel: () => ({dispose() {}}),
+      async showQuickPick(items, options) {
+        if (options.title === 'Java File Template · Source Root') selectedRoot = items[0].source.path;
+        return items[0];
+      },
+      async showInputBox(options) {
+        if (options.title === 'Java File Template · Type Name') return 'NewClass';
+        selectedPackage = options.value;
+      },
+      async showErrorMessage(message) { errors.push(message); }
+    },
+    commands: {registerCommand(id, handler) {
+      commands.set(id, handler);
+      return {dispose: () => commands.delete(id)};
+    }}
+  };
+  const tools = registerJavaUtilities({globalStorageUri: file(root)}, vscode, {java: {}});
+  t.after(() => tools.dispose());
+  const invoke = dir => commands.get(COMMANDS.newFile)({
+    contextValue: 'rocketbrain.project.directory', resourceUri: file(dir)
+  });
+  await invoke(selected);
+  assert.equal(selectedRoot, source);
+  assert.equal(selectedPackage, 'demo.chosen');
+  assert.deepEqual(await fs.readdir(selected), []);
+  assert.deepEqual(errors, []);
+  selectedPackage = undefined;
+  await invoke(path.join(selected, 'deleted'));
+  assert.equal(selectedPackage, undefined);
+  assert.equal(errors.length, 1);
+});
 
 test('Java file templates render Spring, JUnit and workspace-defined Java with safe file names and package substitutions', () => {
   assert.equal(listFileTemplates().length, 10);
