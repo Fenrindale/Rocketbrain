@@ -6350,5 +6350,23 @@
     }
   ],
   "stateChanges": [],
-  "publicWorkflow": "docs/verification.json"
+  "publicWorkflow": "docs/verification.json",
+  "localVerification": {
+    "vsixSha256": "ac39d51382acecdc920fbb27547b7fae21a367ff0e257a4fd89dc4beb18ece71",
+    "sourceManifestSha256": "7ab0e247ba2d66703a5f1da78ea9bdfa17060b3814433cbd403ef2e7135400e1",
+    "focusedNativeHosts": []
+  },
+  "offline": {
+    "origin": "GitHub-hosted exact source preview; external-runtime tests may skip",
+    "head": "e9a2a027f09381bfcf75be392f5050f39ed3a4a6",
+    "run": 45928803642,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45928803642",
+    "tests": 2309,
+    "suites": 0,
+    "pass": 2056,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 253,
+    "todo": 0
+  }
 }

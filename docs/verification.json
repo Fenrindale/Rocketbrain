@@ -1,86 +1,76 @@
 {
-  "version": "0.176.2",
-  "verifiedAt": "2026-11-27T02:06:22.992Z",
+  "version": "0.177.0",
+  "verifiedAt": "2026-11-27T02:39:19.605Z",
   "fullProductParityVerified": false,
   "artifact": {
-    "name": "rocketbrain-0.176.2.vsix",
-    "sha256": "726aadaf14caa9da8aa079da3922813c6b9a09a9926e2ba648455a013381dfbc",
-    "bytes": 4757128,
+    "name": "rocketbrain-0.177.0.vsix",
+    "sha256": "ac39d51382acecdc920fbb27547b7fae21a367ff0e257a4fd89dc4beb18ece71",
+    "bytes": 4758294,
     "files": 39
   },
   "source": {
-    "frozenPublicInputs": 3172,
-    "inputVectorSha256": "ddae956a0b4dd16a6ca20dd509d0d973ec74eda77e5dff73b489fd5c7ea5b925",
+    "frozenPublicInputs": 3174,
+    "inputVectorSha256": "7ab0e247ba2d66703a5f1da78ea9bdfa17060b3814433cbd403ef2e7135400e1",
     "generatedSummariesAreMetadata": true
   },
   "localOffline": {
     "origin": "GitHub-hosted exact source preview; external-runtime tests may skip",
-    "head": "bcb900f920ad3bc151babaad1a6302e69c935a16",
-    "run": 45925996887,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45925996887",
-    "tests": 2306,
+    "head": "e9a2a027f09381bfcf75be392f5050f39ed3a4a6",
+    "run": 45928803642,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45928803642",
+    "tests": 2309,
     "suites": 0,
-    "pass": 2053,
+    "pass": 2056,
     "fail": 0,
     "cancelled": 0,
     "skipped": 253,
     "todo": 0
   },
+  "workstationOffline": {
+    "sourceCommit": "e9a2a027f09381bfcf75be392f5050f39ed3a4a6",
+    "node": "v24.22.3",
+    "tests": 2330,
+    "suites": 0,
+    "pass": 2106,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 224,
+    "todo": 0,
+    "logSha256": "3df10f1aa3920809a3dd1f21b258f50a911fd419f47ec77910ebeae3d487bb01"
+  },
   "focusedPolish": {
-    "grid": {
-      "sourceCommit": "bcb900f920ad3bc151babaad1a6302e69c935a16",
+    "workspaceMode": {
+      "sourceCommit": "e9a2a027f09381bfcf75be392f5050f39ed3a4a6",
       "node": "v24.22.3",
-      "tests": 31,
+      "tests": 3,
       "suites": 0,
-      "pass": 28,
+      "pass": 3,
       "fail": 0,
       "cancelled": 0,
-      "skipped": 3,
+      "skipped": 0,
       "todo": 0,
-      "logSha256": "1b2f6991cdb1b58608079a17e347924ba7c07168af69d77fb6dc399b0c58c7bc"
-    },
-    "packagedChromium": {
-      "sourceCommit": "bcb900f920ad3bc151babaad1a6302e69c935a16",
-      "vsixSha256": "726aadaf14caa9da8aa079da3922813c6b9a09a9926e2ba648455a013381dfbc",
-      "browser": "157.0.4341.60",
-      "viewport": {
-        "width": 440,
-        "height": 670
-      },
-      "rendererSha256": "5cd30b990186e17729f81b80dc11dcd4100d5f200cedcf5dd2f880bb8aebcfd7",
-      "cssSha256": "d7980eaee1d802fca41f72efde52c9e2c591ce2d527da42b268f8485b0e84b78",
-      "checks": [
-        "oneRovingDataTabStop",
-        "loadedVisibleCellNavigation",
-        "readonlyKeyboardReachable",
-        "enterAndF2",
-        "sqlNullCheckboxFocus",
-        "gridEscapeRestoredWithoutDraft",
-        "gridCancelRestoredWithoutDraft",
-        "recordEscapeRestoredWithoutDraft",
-        "recordViewFollowsKeyboardSelectedRow",
-        "stageRestoredWithOneDraftReceipt",
-        "sameModelRerenderRestoredFocus",
-        "staleModelDidNotRebind",
-        "continuousWrapperKeyboardPaging"
-      ],
-      "receiptSha256": "fdc2a1280d261f03a02ac99b3bf448659cdcc4b2831e64da4ae069c818be7ec1",
-      "actualDatabaseConnections": 0
+      "logSha256": "2ae0c1b315b9e6f8e218feee63facdb6517dbea6510d383e7d9af7ce9f73a56e"
     },
     "nativeVsCode": {
-      "sourceCommit": "bcb900f920ad3bc151babaad1a6302e69c935a16",
+      "sourceCommit": "e9a2a027f09381bfcf75be392f5050f39ed3a4a6",
       "version": "1.145.3",
-      "vsixSha256": "726aadaf14caa9da8aa079da3922813c6b9a09a9926e2ba648455a013381dfbc",
-      "actualDatabaseConnections": 0,
+      "vsixSha256": "ac39d51382acecdc920fbb27547b7fae21a367ff0e257a4fd89dc4beb18ece71",
       "checks": [
-        "actualCodeWebview",
-        "rovingGridTabStop",
-        "keyMovement",
-        "escapeRestoresGridCellUnchanged",
-        "keyboardSelectedRowPersistsInRecord",
-        "nullEditorCheckboxAndRecordEscape"
+        "actualStatusbarButtonClicks",
+        "activeModeIndicator",
+        "conditionalJavaAndDatabaseViews",
+        "sharedInfrastructureAndResultPanel",
+        "dirtyEditorAndResultDataPreserved",
+        "offlineNoDatabase",
+        "ownUserSettingsUnchanged",
+        "independentWorkspaceDefault",
+        "persistedAfterRestart",
+        "persistedWorkspaceStorageObserved",
+        "installedByVSCodeCli",
+        "allToolsFromCommandPalette"
       ],
-      "receiptSha256": "7c846e287d33247255c83a9ec2f46dc18be1ea47fed2dd0ce574c49d30d4af8c"
+      "receiptSha256": "b829308001596e0bdf015ffb00a28149b7b6bc8284613c40e74b4e93a12e05c4",
+      "actualDatabaseConnections": 0
     }
   },
   "focusedPackagedNative": [],
@@ -159,28 +149,23 @@
     }
   },
   "previousPolish": {
-    "version": "0.176.1",
-    "publicEvidence": "https://github.com/Fenrindale/Rocketbrain/blob/a8eb5f882d729620afc91f969d4c73f157f5d992/docs/verification.json"
+    "version": "0.176.2",
+    "publicEvidence": "https://github.com/Fenrindale/Rocketbrain/blob/247c3c1c9cfd4865a1f2e838937c1006e7eaf36a/docs/verification.json"
   },
   "newlyVerified": {
-    "DG-062": {
-      "scope": "합성 결과에서 SQL NULL 편집 시작, Escape와 취소, 로컬 스테이징, 레코드 화면과 모델 교체의 포커스를 확인했다.",
-      "verification": "offline Chromium"
+    "IDEA-001": {
+      "scope": "IntelliJ IDEA 상태 표시줄 버튼과 Java·Spring 트리 표시, 편집기 유지 및 작업 공간 모드 복원.",
+      "verification": "packaged VS Code and offline unit tests"
     },
-    "DG-096": {
-      "scope": "읽기 전용과 편집 가능한 결과에서 방향키·Home·End, 컬럼 고정·숨김, 레코드 전환과 연속 페이지 갱신의 포커스를 확인했다.",
-      "verification": "offline Chromium"
+    "DG-095": {
+      "scope": "DataGrip 상태 표시줄 버튼과 DB 전용 트리 표시, 결과 바로가기 및 전체 도구 복귀.",
+      "verification": "packaged VS Code and offline unit tests"
     }
   },
   "craftAnything": {
     "channel": "Craft Anything CLI",
     "archiveEntries": 39,
-    "archiveConfidence": "observed",
-    "gridReferenceStaticReview": {
-      "build": "DataGrip 2026.3 (263.7307.216)",
-      "scope": "Grid navigation, editor cancel and preferred focus observed in installed artifact.",
-      "moduleSha256": "c1218d81eec418fead8f97dcec52578a8d51e39e19db414bb08506bafa603ed3"
-    }
+    "archiveConfidence": "observed"
   },
   "hostedRuntime": {
     "kotlinIosSimulatorDebug": {
@@ -275,11 +260,11 @@
   },
   "limits": [
     "기존 216개 항목의 가중치와 판정 기준을 적용했다.",
-    "이번 변경은 합성 결과에서 그리드의 키보드 이동과 로컬 편집 상태를 확인했다.",
-    "클라우드 공급자 실제 인증, 별도 서버의 원자적 DDL과 전체 작업창 교체는 기존 기능표의 남은 범위다."
+    "모드 전환은 VS Code의 상태 표시줄과 Rocketbrain 사이드바에서 검증했다. 실제 DB 연결은 사용하지 않았다.",
+    "창 장식과 도킹은 VS Code 작업창이 관리한다."
   ],
   "next": [
-    "값 검증 오류가 발생했을 때 안내와 입력 포커스의 복구 흐름을 점검"
+    "각 모드의 주요 작업 바로가기와 패널 접근 흐름 점검"
   ],
   "repository": "https://github.com/Fenrindale/Rocketbrain"
 }
