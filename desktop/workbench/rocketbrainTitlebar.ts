@@ -272,7 +272,9 @@ class RocketbrainWorkbench {
 	private async arrange(mode: WorkspaceMode): Promise<void> {
 		const database = mode === 'database';
 		this.layout.setPartHidden(true, Parts.ACTIVITYBAR_PART);
-		this.layout.setPanelPosition(Position.BOTTOM);
+		if (database || this.layout.isVisible(Parts.PANEL_PART)) {
+			this.dockPanelAtBottom();
+		}
 		this.moveContainer(projectContainer, ViewContainerLocation.Sidebar);
 		this.moveContainer(filesContainer, database ? ViewContainerLocation.AuxiliaryBar : ViewContainerLocation.Sidebar);
 		this.moveContainer(debugContainer, ViewContainerLocation.Panel);
@@ -297,10 +299,19 @@ class RocketbrainWorkbench {
 		}
 	}
 
+	private dockPanelAtBottom(): void {
+		if (this.layout.getPanelPosition() !== Position.BOTTOM) {
+			this.layout.setPanelPosition(Position.BOTTOM);
+		}
+	}
+
 	private async toggleContainer(id: string, part: Parts.SIDEBAR_PART | Parts.AUXILIARYBAR_PART | Parts.PANEL_PART): Promise<void> {
 		if (this.views.isViewContainerVisible(id)) {
 			this.layout.setPartHidden(true, part);
 		} else {
+			if (part === Parts.PANEL_PART) {
+				this.dockPanelAtBottom();
+			}
 			await this.views.openViewContainer(id, true);
 		}
 	}
@@ -309,11 +320,15 @@ class RocketbrainWorkbench {
 		if (this.views.isViewVisible(id)) {
 			this.layout.setPartHidden(true, part);
 		} else {
+			if (part === Parts.PANEL_PART) {
+				this.dockPanelAtBottom();
+			}
 			await this.views.openView(id, true);
 		}
 	}
 
 	private async launchJava(debug: boolean): Promise<void> {
+		this.dockPanelAtBottom();
 		if (debug) {
 			await this.views.openViewContainer(debugContainer);
 		} else {

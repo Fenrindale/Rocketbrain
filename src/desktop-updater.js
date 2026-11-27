@@ -67,7 +67,7 @@ function selectRelease(releases, installed) {
 
 function request(url, options) {
   return new Promise((resolve, reject) => {
-    const connection = https.get(url, options, resolve);
+    const connection = https.get(url, { ...options, minVersion: 'TLSv1.2', rejectUnauthorized: true }, resolve);
     connection.once('error', reject);
     connection.setTimeout(20_000, () => connection.destroy(new Error('GitHub did not finish sending the update response.')));
   });

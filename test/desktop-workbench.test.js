@@ -17,6 +17,7 @@ function createWorkbench(initialMode = 'intellij') {
     ['workbench.view.debug', 0], ['workbench.view.extension.rocketbrain-query-panel', 1], ['outline', 0],
   ]);
   const visible = new Map();
+  let panelPosition = 0;
   const events = [];
   const menus = [];
   let contextListener;
@@ -74,11 +75,16 @@ function createWorkbench(initialMode = 'intellij') {
       mainContainer: root,
       getContainer: (_window, part) => parts.get(part),
       getSize: () => ({ width: 800 }),
+      isVisible: () => visible.has(1),
       setPartHidden(hidden, part) {
         events.push(['hidden', hidden, part]);
         if (hidden && part.endsWith('.panel')) visible.delete(1);
       },
-      setPanelPosition(position) { events.push(['panel-position', position]); },
+      getPanelPosition: () => panelPosition,
+      setPanelPosition(position) {
+        panelPosition = position;
+        events.push(['panel-position', position]);
+      },
     },
     { async executeCommand(id) {
       events.push(['command', id]);
@@ -121,13 +127,14 @@ test('the native shell docks Java and database tools around the editor and resto
   assert.equal(button('Java Mode').attributes.get('aria-pressed'), 'true');
   assert.equal(kinds.get('workbench.view.debug'), 1);
   assert.equal(kinds.get('outline'), 2);
-  assert.ok(events.some(event => event[0] === 'panel-position' && event[1] === 2));
+  assert.equal(events.some(event => event[0] === 'panel-position'), false);
 
   button('Database Mode').listeners.get('click')();
   await flush();
   assert.equal(root.dataset.rocketbrainMode, 'database');
   assert.equal(button('Database Mode').attributes.get('aria-pressed'), 'true');
   assert.equal(kinds.get('workbench.view.explorer'), 2);
+  assert.ok(events.some(event => event[0] === 'panel-position' && event[1] === 2));
   assert.deepEqual(events.slice(-3), [
     ['open-container', 'workbench.view.extension.rocketbrain'],
     ['open-container', 'workbench.view.explorer'],
