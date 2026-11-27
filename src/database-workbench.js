@@ -946,6 +946,7 @@ async function registerDatabaseWorkbench(context, vscode, ProjectTree, SchemaTre
   command('rocketbrain.openSharedConsole', () => openSharedConsole(currentDocument()));
   command('rocketbrain.focusQueryResults', () => results.focus());
   command('rocketbrain.focusQueryEditor', () => results.returnToQuery());
+  command('rocketbrain.showQueryResults', () => results.show());
   command('rocketbrain.results.returnToQuery', expected => results.returnToQuery(results.requireActionTarget(expected).id));
   command('rocketbrain.results.copyTsv', expected => {
     if (!vscode.workspace.isTrusted) throw Error('Trust the workspace before copying a result from Context Actions.');

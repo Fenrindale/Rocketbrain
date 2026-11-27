@@ -2,7 +2,7 @@
   "name": "rocketbrain",
   "displayName": "Rocketbrain",
   "description": "Independent Java/Spring and MySQL/MariaDB workbench with reviewed Java refactoring, project/build/run tools and database authoring.",
-  "version": "0.176.2",
+  "version": "0.177.0",
   "repository": { "type": "git", "url": "https://github.com/Fenrindale/Rocketbrain.git" },
   "homepage": "https://github.com/Fenrindale/Rocketbrain",
   "bugs": { "url": "https://github.com/Fenrindale/Rocketbrain/issues" },
@@ -92,6 +92,10 @@
       { "language": "rocketbrain-java-regex", "scopeName": "source.rocketbrain-java-regex", "path": "./media/java-regex.tmLanguage.json" }
     ],
     "commands": [
+      { "command": "rocketbrain.mode.intellij", "title": "Switch to IntelliJ IDEA Mode", "category": "Rocketbrain" },
+      { "command": "rocketbrain.mode.datagrip", "title": "Switch to DataGrip Mode", "category": "Rocketbrain" },
+      { "command": "rocketbrain.mode.all", "title": "Show All Tools", "category": "Rocketbrain" },
+      { "command": "rocketbrain.showQueryResults", "title": "Show Query Results", "category": "Rocketbrain", "icon": "$(table)" },
       { "command": "rocketbrain.java.copyAsyncTraceHelper", "title": "Copy Java Async Trace Helper", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.copyReactorAsyncTraceHelper", "title": "Copy Reactor Async Trace Helper", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted" },
       { "command": "rocketbrain.java.showAsyncTaskStack", "title": "Show Java Async Submission Stack", "category": "Rocketbrain", "enablement": "isWorkspaceTrusted && debugState == stopped" },
@@ -1569,33 +1573,39 @@
       "rocketbrain": [
         {
           "id": "rocketbrain.project",
-          "name": "Project"
+          "name": "Project",
+          "when": "rocketbrain.workspaceMode != datagrip"
         },
         {
           "id": "rocketbrain.databases",
-          "name": "Database"
+          "name": "Database",
+          "when": "rocketbrain.workspaceMode != intellij"
         },
         {
           "id": "rocketbrain.schemaCatalog",
           "name": "Schema Catalog",
-          "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted",
+          "when": "rocketbrain.mysqlConnected && isWorkspaceTrusted && rocketbrain.workspaceMode != intellij",
           "visibility": "collapsed"
         },
         {
           "id": "rocketbrain.analysis",
-          "name": "Spring & JPA Analysis"
+          "name": "Spring & JPA Analysis",
+          "when": "rocketbrain.workspaceMode != datagrip"
         },
         {
           "id": "rocketbrain.javaProjects",
-          "name": "Java Projects"
+          "name": "Java Projects",
+          "when": "rocketbrain.workspaceMode != datagrip"
         },
         {
           "id": "rocketbrain.kotlinCoroutines",
-          "name": "Kotlin Coroutines"
+          "name": "Kotlin Coroutines",
+          "when": "rocketbrain.workspaceMode != datagrip"
         },
         {
           "id": "rocketbrain.connections",
-          "name": "Database Connections"
+          "name": "Database Connections",
+          "when": "rocketbrain.workspaceMode != intellij"
         },
         {
           "id": "rocketbrain.sshWorkspace",
@@ -1706,6 +1716,8 @@
         }
       ],
       "view/title": [
+        { "command": "rocketbrain.showQueryResults", "when": "view == rocketbrain.databases && rocketbrain.workspaceMode == datagrip", "group": "navigation@3" },
+        { "command": "rocketbrain.java.testing.discover", "when": "view == rocketbrain.javaProjects && rocketbrain.workspaceMode == intellij && isWorkspaceTrusted", "group": "test" },
         { "command": "rocketbrain.contextActions.results", "when": "view == rocketbrain.results", "group": "navigation@2" },
         { "command": "rocketbrain.sqlite.open", "when": "view == rocketbrain.databases && isWorkspaceTrusted", "group": "connection@3" },
         { "command": "rocketbrain.sqlite.browse", "when": "view == rocketbrain.databases && rocketbrain.sqliteConnected && isWorkspaceTrusted", "group": "connection@4" },

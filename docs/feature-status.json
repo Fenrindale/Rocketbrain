@@ -1,5 +1,5 @@
 {
-  "version": "0.176.2",
+  "version": "0.177.0",
   "asOf": "2026-11-27",
   "total": 216,
   "fullProductParityVerified": false,
@@ -43,10 +43,13 @@
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "DG-062",
-    "DG-096"
+    "IDEA-001",
+    "DG-095"
   ],
-  "expandedFeatures": [],
+  "expandedFeatures": [
+    "IDEA-001",
+    "DG-095"
+  ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
   "verificationDisclosure": "갱신하지 않은 행의 검증 수치·동일 최종 VSIX 표현은 보존한 이전 검증 이력을 뜻한다. 현재 릴리스의 실제 통합 집계와 실행 소스 귀속은 docs/verification.json에 별도로 기록한다.",
@@ -60,22 +63,17 @@
       "status": "platform-limited",
       "label": "호스트 구조 제약",
       "delivery": "rocketbrain",
-      "scope": "TreeView·Webview·테마·키맵을 VS Code 공개 API로 구성한다.",
+      "scope": "상태 표시줄의 IntelliJ IDEA 버튼으로 Project, Java Projects, Spring & JPA Analysis, Kotlin Coroutines를 표시한다. Java Projects에서 테스트를 찾을 수 있다. 선택은 작업 공간별로 저장하며 명령 팔레트의 Show All Tools로 전체 도구를 표시한다.",
       "remaining": [
         "원본 전체 창 chrome·도킹의 정확한 교체는 일반 확장 구조 범위 밖이다."
       ],
       "verification": {
-        "state": "source-audit",
-        "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
-          "currentAggregate": "docs/verification.json",
-          "historicalCountsAreNotRebound": true
-        },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 공개 확장 API 경계와 기존 설계/구현 문서 기준. 전체 원본 창 동등성은 실행 판정하지 않는다.",
+        "state": "workspace-mode",
+        "testedScope": "상태 표시줄 버튼, 작업 공간별 모드 저장, Java·Spring 사이드바 표시 조건을 확인한다.",
         "publicEvidence": [
-          "src/extension.js",
-          "package.json"
+          "src/workspace-mode.js",
+          "package.json",
+          "test/workspace-mode.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6298,22 +6296,18 @@
       "status": "platform-limited",
       "label": "호스트 구조 제약",
       "delivery": "rocketbrain",
-      "scope": "DB 트리·결과 Webview·명령을 VS Code가 허용하는 영역에 배치한다.",
+      "scope": "상태 표시줄의 DataGrip 버튼으로 Database와 Database Connections를 표시한다. Schema Catalog는 연결과 작업 공간 신뢰가 필요하다. Database 화면의 Show Query Results로 결과 창을 열며, 작업 모드를 변경해도 편집기와 연결 상태를 유지한다.",
       "remaining": [
         "DataGrip 전체 workbench chrome/도킹의 정확한 교체는 일반 확장 구조 범위 밖이다."
       ],
       "verification": {
-        "state": "source-audit",
-        "scopeProvenance": {
-          "kind": "preserved-prior-verification",
-          "inheritedContainerVersion": "0.21.0",
-          "currentAggregate": "docs/verification.json",
-          "historicalCountsAreNotRebound": true
-        },
-        "testedScope": "보존한 이전 검증 범위(인용된 최종 VSIX·검사 수치는 해당 이력 기준): 공개 확장 API 경계와 기존 설계/구현 문서 기준. 전체 원본 창 동등성은 실행 판정하지 않는다.",
+        "state": "workspace-mode",
+        "testedScope": "DB 사이드바와 공용 결과 창, 연결과 신뢰를 요구하는 카탈로그 표시 조건, 전체 도구로 돌아가는 전환을 확인한다.",
         "publicEvidence": [
-          "src/extension.js",
-          "package.json"
+          "src/workspace-mode.js",
+          "src/database-workbench.js",
+          "package.json",
+          "test/workspace-mode.test.js"
         ],
         "originalProductParityVerified": false
       }
@@ -6355,24 +6349,6 @@
       }
     }
   ],
-  "localVerification": {
-    "vsixSha256": "726aadaf14caa9da8aa079da3922813c6b9a09a9926e2ba648455a013381dfbc",
-    "sourceManifestSha256": "ddae956a0b4dd16a6ca20dd509d0d973ec74eda77e5dff73b489fd5c7ea5b925",
-    "focusedNativeHosts": []
-  },
   "stateChanges": [],
-  "offline": {
-    "origin": "GitHub-hosted exact source preview; external-runtime tests may skip",
-    "head": "bcb900f920ad3bc151babaad1a6302e69c935a16",
-    "run": 45925996887,
-    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45925996887",
-    "tests": 2306,
-    "suites": 0,
-    "pass": 2053,
-    "fail": 0,
-    "cancelled": 0,
-    "skipped": 253,
-    "todo": 0
-  },
   "publicWorkflow": "docs/verification.json"
 }

@@ -208,6 +208,7 @@ async function activate(context) {
   context.subscriptions.push(wsl.javaDebug);
   const contextActions = require('./context-actions').registerContextActions(vscode, context, { database, java });
   const keyboardProfile = require('./keyboard-profile-vscode').registerKeyboardProfile(vscode,context);
+  await require('./workspace-mode').registerWorkspaceMode(context, vscode);
   context.subscriptions.push(contextActions, keyboardProfile);
   return { ...database, navigation, contextActions, keyboardProfile, duckdb, sqlite, mongoDb, jdbc, java, javaTesting, javaUtilities, javaNavigation, javaEditing, javaInspections, javaSourceAnalysis, jvmDiagnostics, httpTools, webdav, sftpDeployment, ftpsDeployment, deploymentChanges, openApi, jpa, jpaScaffold, analysis, sqlAnalysis, sqlCollations, sqlEditing, embeddedLanguage, schemaRename, sqlScripts, sqlNotebook, jupyter, python, vue, react, angular, devContainers, schemaComparison, streamImports, tableTransfer, schemaPrograms, schemaCoordinator, schemaDiagrams, schemaDdlExport, dbConnections, dbAuthoring, dbSessionTools, dbAdmin, lazyCatalog, objectSources, routineCalls, schemaCatalog, databaseSearch, explainPlans, localSqlAssistant, sqlProposalReview, springProjects, springRegistration, gitWorktrees, changelists, codeReview, codeModel, sshWorkspace, acpReview, docker, kubernetes, federation, wsl };
 }
