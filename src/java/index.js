@@ -24,9 +24,18 @@ function registerJavaFeatures(context, vscode) {
   subscriptions.push(spring);
   function update(next, message) {
     state = { ...state, state: next, message };
-    status.text = `$(coffee) Rocketbrain Java · ${next === 'running' ? 'Ready' : next === 'starting' ? 'Starting' : next === 'configuration-required' ? 'Setup' : next}`;
-    status.tooltip = message; status.show(); output.appendLine(`${next}: ${message}`);
-    void vscode.commands.executeCommand('setContext', 'rocketbrain.javaEngineState', next);
+    showStatus();
+    output.appendLine(`${next}: ${message}`);
+  }
+  function showStatus() {
+    const next = state.state;
+    const indexing = next === 'running' && definitionReadiness && !definitionReadiness.isReady;
+    const label = indexing ? 'Indexing' : next === 'running' ? 'Ready' : next === 'starting' ? 'Starting' :
+      next === 'configuration-required' ? 'Setup' : next;
+    status.text = `$(coffee) Rocketbrain Java · ${label}`;
+    status.tooltip = indexing ? 'Java is connected. Wait for project indexing before navigating to definitions.' : state.message;
+    status.show();
+    void vscode.commands.executeCommand('setContext', 'rocketbrain.javaEngineState', indexing ? 'indexing' : next);
   }
   const serial = action => { const run = pending.then(() => action(), () => action()); pending = run.catch(() => {}); return run; };
   function readNullChecks(config) {
@@ -168,7 +177,10 @@ function registerJavaFeatures(context, vscode) {
       definitionReadiness = readiness;
       update('starting', 'Starting the independent Eclipse JDT Language Server.');
       next.onNotification('language/status', event => {
-        if (event.type === 'ServiceReady') readiness.complete();
+        if (event.type === 'ServiceReady') {
+          readiness.complete();
+          if (client === next && state.state === 'running') showStatus();
+        }
         if (event.type === 'Error') output.appendLine(`JDT LS: ${event.message}`);
         else output.appendLine(`JDT LS ${event.type}: ${event.message}`);
       });
@@ -260,6 +272,10 @@ function registerJavaFeatures(context, vscode) {
       throw Error('Start the independent Java language server in a trusted workspace.');
     }
     const server=client;
+    await definitionReadiness?.wait(cancellation);
+    if(client!==server||!vscode.workspace.isTrusted||cancellation?.isCancellationRequested) {
+      throw Error('Java navigation changed or was cancelled while waiting for project indexing.');
+    }
     const parameters=kind==='super'?{type:'superImplementation',position}:position;
     const locations=await server.sendRequest(methods[kind],parameters,...(cancellation?[cancellation]:[]));
     if(client!==server||!vscode.workspace.isTrusted)throw Error('The Java language server changed during navigation.');
@@ -447,7 +463,10 @@ function registerJavaFeatures(context, vscode) {
   subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { if (!configuring && ['enabled', 'serverPath', 'javaHome', 'debugBundlePath', 'projectJdks', 'gradleHome', 'gradleJavaHome', 'extractInterface.replaceUsages', 'staticImport.favorites', 'annotationProcessing.gradleEnabled', 'annotationProcessing.lombokJar'].some(key => event.affectsConfiguration(`rocketbrain.java.${key}`))) void api.restart().catch(error => output.appendLine(error.message)); }));
   update('stopped', 'Java server is stopped.');
   subscriptions.push(registerJavaDefinitionStartup(vscode, {
-    start: api.start,
+    async start(token) {
+      await api.start();
+      await definitionReadiness?.wait(token);
+    },
     provider: document => client?.getFeature('textDocument/definition')?.getProvider(document),
     isAvailable: () => {
       if (disposed || containerOwner || state.state === 'error' || !vscode.workspace.isTrusted) return false;

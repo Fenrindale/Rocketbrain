@@ -43,7 +43,7 @@ function registerJavaDefinitionStartup(vscode, { start, provider, isAvailable })
       if (token.isCancellationRequested || !isAvailable() || provider(document)) return;
       const version = document.version;
       try {
-        await start();
+        await start(token);
       } catch {
         // Java startup already publishes the failure and recovery action in its status item.
         return;
@@ -59,16 +59,17 @@ function createDefinitionReadiness(timeout = 30000) {
   const deadline = Date.now() + timeout;
   let ready = false;
   return {
+    get isReady() { return ready; },
     complete() { ready = true; resolve(); },
     stop: resolve,
     async wait(token) {
       const remaining = deadline - Date.now();
-      if (ready || remaining <= 0 || token.isCancellationRequested) return;
+      if (ready || remaining <= 0 || token?.isCancellationRequested) return;
       let timer, subscription;
       try {
         await Promise.race([promise, new Promise(done => {
           timer = setTimeout(done, remaining);
-          subscription = token.onCancellationRequested(done);
+          subscription = token?.onCancellationRequested(done);
         })]);
       } finally {
         clearTimeout(timer);

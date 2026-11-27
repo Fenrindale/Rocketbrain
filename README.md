@@ -48,7 +48,7 @@ pnpm run package
 2. 명령 팔레트에서 **Rocketbrain: Install and Configure Independent Java Engine**을 실행합니다. 고정된 공개 구성요소의 출처와 체크섬을 확인하고 확장 전용 폴더에 설치합니다. 현재 설치 도구는 Eclipse JDT LS 1.63.0과 독립 Temurin JDK 25 계열을 사용합니다.
 3. **Java Projects**에서 가져온 소스 루트·패키지·라이브러리를 확인합니다. Maven 작업에는 별도 Maven 설치와 `rocketbrain.java.mavenHome` 설정이 필요합니다.
 
-**Java Projects**가 비어 있고 엔진 설정이 필요하면 **Install Java Engine**이 표시됩니다. Java 파일에서 호출 이름을 **Ctrl+클릭**하거나 **F12**를 눌러 선언으로 이동합니다. 이미 설정된 엔진이 시작 중이면 첫 이동 요청이 엔진 연결을 기다립니다. 인터페이스에서 구현체를 찾으려면 **Ctrl+F12** 또는 **Go to Code Target → Implementations**를 사용합니다.
+**Java Projects**가 비어 있고 엔진 설정이 필요하면 **Install Java Engine**이 표시됩니다. 상태 표시줄의 **Rocketbrain Java**가 **Ready**를 표시하면 Java 파일에서 호출 이름을 **Ctrl+클릭**하거나 **F12**를 눌러 선언으로 이동합니다. **Starting**과 **Indexing**은 엔진과 프로젝트가 준비되는 중임을 표시합니다. 인터페이스에서 구현체를 찾으려면 **Ctrl+F12** 또는 **Go to Code Target → Implementations**를 사용합니다.
 
 **Rebuild Java Workspace Index**에서 현재 가져온 프로젝트와 JDK를 확인한 뒤 새 Eclipse JDT LS 인덱스를 만들 수 있습니다. 정규 프로젝트 가져오기에는 Maven이나 Gradle 설정 실행이 포함될 수 있습니다. 검토한 프로젝트와 소스 경로가 새 인덱스에 다시 연결된 뒤 전환하며, 기존 인덱스는 보존됩니다. 재빌드 전에는 워크스페이스의 Java 소스와 빌드 설정을 저장하고 실행 중인 Java 작업을 마치세요.
 

@@ -1638,7 +1638,7 @@
       {
         "view": "rocketbrain.javaProjects",
         "contents": "Java navigation is starting. You can open source files while the project is loading.",
-        "when": "rocketbrain.javaEngineState == starting"
+        "when": "rocketbrain.javaEngineState == starting || rocketbrain.javaEngineState == indexing"
       },
       {
         "view": "rocketbrain.javaProjects",
