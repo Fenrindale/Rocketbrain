@@ -14,6 +14,7 @@ const { resolveDebugBundle } = require('../src/java/debug-runtime');
 const mysql = require('mysql2/promise');
 
 const [executable, outputParent, engine = 'mariadb'] = process.argv.slice(2);
+const databaseOnly = process.env.RB_DESKTOP_SMOKE_DB_ONLY === '1';
 assert.ok(executable && outputParent && ['mariadb', 'mysql'].includes(engine),
   'Usage: node test/desktop-native-host.cjs <installed Rocketbrain.exe> <output directory> [mariadb|mysql]');
 const exe = fs.realpathSync(executable);
@@ -65,16 +66,8 @@ function createInstalledRun(db) {
   for (const folder of [user, extensions, driver]) fs.mkdirSync(folder, { recursive: true });
   fs.cpSync(path.join(root, 'test/fixtures/java/maven'), project,
     { recursive: true, filter: file => !file.endsWith(path.sep + 'target') });
-  const javaHome = fs.realpathSync(process.env.RB_DESKTOP_JAVA_HOME ||
-    path.join(root, 'research/implementation/runtimes/temurin25/extracted/jdk-25.0.5+8'));
-  const serverPath = fs.realpathSync(process.env.RB_DESKTOP_JDTLS ||
-    path.join(root, 'test-output/java-runtime/jdtls-1.63.0'));
-  const debugBundle = resolveDebugBundle(process.env.RB_DESKTOP_JAVA_DEBUG_BUNDLE, serverPath);
-  assert.ok(debugBundle, 'The pinned Java debug bundle must be available for the launch test.');
-  fs.writeFileSync(path.join(user, 'settings.json'), JSON.stringify({
-    'rocketbrain.java.javaHome': javaHome,
-    'rocketbrain.java.serverPath': serverPath,
-    'rocketbrain.java.debugBundlePath': debugBundle.path,
+  const settings = {
+    'rocketbrain.java.enabled': !databaseOnly,
     'editor.multiCursorModifier': 'alt',
     'workbench.startupEditor': 'none',
     'workbench.secondarySideBar.defaultVisibility': 'hidden',
@@ -86,7 +79,21 @@ function createInstalledRun(db) {
     'security.workspace.trust.enabled': false,
     'http.proxy': 'http://127.0.0.1:9',
     'http.proxySupport': 'override'
-  }));
+  };
+  if (!databaseOnly) {
+    const javaHome = fs.realpathSync(process.env.RB_DESKTOP_JAVA_HOME ||
+      path.join(root, 'research/implementation/runtimes/temurin25/extracted/jdk-25.0.5+8'));
+    const serverPath = fs.realpathSync(process.env.RB_DESKTOP_JDTLS ||
+      path.join(root, 'test-output/java-runtime/jdtls-1.63.0'));
+    const debugBundle = resolveDebugBundle(process.env.RB_DESKTOP_JAVA_DEBUG_BUNDLE, serverPath);
+    assert.ok(debugBundle, 'The pinned Java debug bundle must be available for the launch test.');
+    Object.assign(settings, {
+      'rocketbrain.java.javaHome': javaHome,
+      'rocketbrain.java.serverPath': serverPath,
+      'rocketbrain.java.debugBundlePath': debugBundle.path,
+    });
+  }
+  fs.writeFileSync(path.join(user, 'settings.json'), JSON.stringify(settings));
   fs.writeFileSync(path.join(driver, 'package.json'), JSON.stringify({
     publisher: 'rocketbrain-smoke', name: 'desktop-native-driver', version: '1.0.0',
     engines: { vscode: '^1.100.0' }, main: './driver.cjs',
@@ -300,7 +307,7 @@ async function run(db) {
     assert.equal(ready.bundled, true);
     assert.equal(ready.extension, manifest.version);
     assert.deepEqual(fs.readdirSync(extensions).filter(name => name.startsWith('rocketbrain-local.rocketbrain')), []);
-    await exerciseJava(page);
+    if (!databaseOnly) await exerciseJava(page);
     await exerciseDatabase(page, db.config);
     await page.screenshot({ path: path.join(output, 'desktop-db-after-commit.png') });
     await action(titlebar(page), 'Java Mode').click({ timeout: 12000 });
@@ -311,7 +318,8 @@ async function run(db) {
     return { executableSha256, ...hashes, product: product.nameShort, core: ready.vscode,
       build: product.rocketbrainDesktop.version, codeOssCommit: product.rocketbrainDesktop.codeOssCommit,
       extension: ready.extension, bundledVsixSha256: product.rocketbrainDesktop.extensionVsixSha256,
-      builtInExtension: ready.bundled, database: db.server.version, steps };
+      builtInExtension: ready.bundled, database: db.server.version,
+      scope: databaseOnly ? 'database' : 'java-and-database', steps };
   } catch (error) {
     failure = error;
     if (page) {

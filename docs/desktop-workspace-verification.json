@@ -1,0 +1,212 @@
+{
+  "desktopVersion": "0.2.0-preview.1",
+  "platform": "win32-x64",
+  "baseArchiveSha256": "a1090868af8ac0ac04c22d79fdd02246fa115a78daf38a741d8db06df1753c1d",
+  "codeOssCommit": "e646868227c3e3a9e3f24277c8c7220be42c0be7",
+  "workbenchSha256": "f8846f7944e5feb11a5a4ea5c3a07f94eca4e3826947d585b2dd7c8023b4aa9b",
+  "extensionVersion": "0.180.0",
+  "extensionVsixSha256": "29a9413e89b430e853a75747db10f5330a8ed063d76aae1a4049f3666f2c4283",
+  "installerFile": "RocketbrainDesktop-0.2.0-preview.1-win32-x64-setup.exe",
+  "installerSha256": "a1193b1a8f22dc07d1670e50e79fc39fde68a31708ed00196adfdaf779a2ae17",
+  "installerBytes": 218588663,
+  "verifiedAt": "2026-11-27T10:11:53.099Z",
+  "installation": {
+    "profile": "isolated Windows x64 installation",
+    "exitCode": 0,
+    "authenticode": "unsigned-preview",
+    "executableSha256": "38ed869b89c23e7bb17844d43caa359a50d770e330aee945f6b9d3b6ff620a91",
+    "installedWorkbenchSha256": "f8846f7944e5feb11a5a4ea5c3a07f94eca4e3826947d585b2dd7c8023b4aa9b",
+    "installedExtensionSha256": "7e46fb364c8125e3032cdc3d1e98ee852410e274b214aa1c436e162c9f4293a6"
+  },
+  "release": {
+    "tag": "desktop-v0.2.0-preview.1",
+    "url": "https://github.com/Fenrindale/Rocketbrain/releases/tag/desktop-v0.2.0-preview.1",
+    "commit": "32f57fc418125f09a2cd33634815ab7d7bd75128",
+    "installerDigest": "sha256:a1193b1a8f22dc07d1670e50e79fc39fde68a31708ed00196adfdaf779a2ae17",
+    "installerUrl": "https://github.com/Fenrindale/Rocketbrain/releases/download/desktop-v0.2.0-preview.1/RocketbrainDesktop-0.2.0-preview.1-win32-x64-setup.exe",
+    "descriptorDigest": "sha256:97d528b3e23ffa2396fc0c948ad3bcfc09a56c341fe108644c0abcfc9273c67d",
+    "prerelease": true
+  },
+  "nativeVerification": {
+    "driver": "test/desktop-native-host.cjs",
+    "databaseTrials": [
+      {
+        "engine": "MariaDB",
+        "version": "11.4.8-MariaDB",
+        "testedVsixSha256": "29a9413e89b430e853a75747db10f5330a8ed063d76aae1a4049f3666f2c4283",
+        "evidenceSha256": "5aa8efdd47aa32ef82605d75f0861988f86300927fada3b87a2cae3ec56bd65f",
+        "scope": "java-and-database",
+        "steps": [
+          {
+            "action": "Window toolbar → Java Mode",
+            "result": "Java Projects docked left and Structure docked right around the editor"
+          },
+          {
+            "action": "Java editor → Ctrl+Click",
+            "result": "Greeter.java declaration opened from App.java"
+          },
+          {
+            "action": "Window toolbar → Run Java",
+            "result": "Fixture JVM printed its greeting and exited with console docked below the editor"
+          },
+          {
+            "action": "Window toolbar → Debug Java",
+            "result": "Owned Java debug session stopped at breakpoint, resumed and exited"
+          },
+          {
+            "action": "Window toolbar → Database Mode",
+            "result": "Database Explorer left, Files right, and Query Results below the editor"
+          },
+          {
+            "action": "SQL console → Ctrl+Enter",
+            "result": "Observed marker 31807 in the bottom panel after the statement terminator"
+          },
+          {
+            "action": "Database Explorer → bottom result grid edit",
+            "result": "Staged cell, reviewed UPDATE, applied, committed and read back by separate SQL client"
+          },
+          {
+            "action": "Window toolbar → return to Java Mode",
+            "result": "Java docks restored and database results dock closed"
+          }
+        ],
+        "ownedFixtureStopped": true
+      },
+      {
+        "engine": "MySQL",
+        "version": "8.4.13",
+        "testedVsixSha256": "29a9413e89b430e853a75747db10f5330a8ed063d76aae1a4049f3666f2c4283",
+        "evidenceSha256": "632761dd0867eaca28bf16ec8a9493ee117b5765171b79e0e2d628960c84f3c1",
+        "scope": "database",
+        "steps": [
+          {
+            "action": "Window toolbar → Database Mode",
+            "result": "Database Explorer left, Files right, and Query Results below the editor"
+          },
+          {
+            "action": "SQL console → Ctrl+Enter",
+            "result": "Observed marker 31807 in the bottom panel after the statement terminator"
+          },
+          {
+            "action": "Database Explorer → bottom result grid edit",
+            "result": "Staged cell, reviewed UPDATE, applied, committed and read back by separate SQL client"
+          },
+          {
+            "action": "Window toolbar → return to Java Mode",
+            "result": "Java docks restored and database results dock closed"
+          }
+        ],
+        "ownedFixtureStopped": true
+      }
+    ],
+    "java": "Maven sample with JDT LS and Java Debug Adapter",
+    "javaSetup": {
+      "bundledVsixSha256": "29a9413e89b430e853a75747db10f5330a8ed063d76aae1a4049f3666f2c4283",
+      "evidenceSha256": "4efebcffc5faaf8cd3668f6deb2dda37eb1f5e38501fc84a70dc5a3b3a85c19d",
+      "definition": true,
+      "reusedManagedProfile": true,
+      "reopenedInDatabaseWithoutStarting": true,
+      "startedOnJavaMode": true,
+      "toolbarReopensSetup": true
+    },
+    "earlierCandidateJavaProvision": {
+      "checkedInEarlierCandidate": true,
+      "firstRunWindowSha256": "8e07a7347d0c40c3621171ba2274f03993b5eaa0366c2bb54e953c3e9f0bd3c7",
+      "provisionReceiptSha256": "035386a0625b23fc14bffe6742e89658ba7b88e8772075eb42c437ce1b7513ab",
+      "detectedExistingJdk": true,
+      "downloadedManagedLanguageServerAndDebugger": true,
+      "persistedSettingsAndStartedLanguageServer": true
+    }
+  },
+  "updaterVerification": {
+    "driver": "test/desktop-updater-native.cjs",
+    "finalPackageRegistration": {
+      "command": true,
+      "storageScheme": "vscode-userdata",
+      "evidenceSha256": "b6c5134652e614c1965284138ec2695eac281ef83f95a2326152e028273fdfbe"
+    },
+    "realGithubDownload": {
+      "installedVersion": "0.1.0-preview.99",
+      "availableVersion": "0.2.0-preview.1",
+      "bytes": 218588663,
+      "stagedInstallerSha256": "a1193b1a8f22dc07d1670e50e79fc39fde68a31708ed00196adfdaf779a2ae17",
+      "nativeDialog": "Quit Rocketbrain to install version 0.2.0-preview.1?",
+      "unsignedPreviewWarning": true,
+      "nativeCancelButtonInvoked": true,
+      "stagedFileDiscarded": true,
+      "installationUnchanged": true,
+      "evidenceSha256": "038696ef6b9a832a449ab73b1a86daa30f976b455dfe3997119f20662ed0813b",
+      "scope": "synthetic lower preview, download and cancel"
+    }
+  },
+  "referenceObservation": {
+    "tool": "Craft Anything CLI --clean-room",
+    "reference": [
+      {
+        "product": "IntelliJ IDEA",
+        "build": "263.7307.200.0-IU",
+        "projectCaptureSha256": "00b21b107efda1121fefc490d907fc62964dae4d0d7506990d629df18a72de72",
+        "editorCaptureSha256": "af2d32a105becda737a47c2a8ed45263f3951a55c283094cbe783e4f50f4098c"
+      },
+      {
+        "product": "DataGrip",
+        "build": "263.7307.216.0-DB",
+        "projectCaptureSha256": "59a68c7b58ad3cbf0a0202819f001addf84612967c00fb3a7e466030feb995a1",
+        "editorCaptureSha256": "5a54f16893d6629fee2f564fff4793a3edaf4272776fff1bf2fcc8e19a7c9b4c"
+      }
+    ],
+    "windowsAccessibilityWalkthrough": {
+      "operation": "focus Database Explorer",
+      "result": "element_not_found",
+      "evidenceSha256": "428f013b04036d74ffb8cb48d061036aa64edd6ced2c7b8701cf8df543715292"
+    }
+  },
+  "craftAnything": {
+    "channel": "Craft Anything CLI",
+    "vsixFiles": 39,
+    "archiveContradictions": 0,
+    "archiveReceiptSha256": "fc37feefad9783b2eb1dd81f21f5f1af478d93618c9800408cc5dbcbbd07994e",
+    "installedWindow": {
+      "checkedInEarlierCandidate": true,
+      "workbenchSha256": "f8846f7944e5feb11a5a4ea5c3a07f94eca4e3826947d585b2dd7c8023b4aa9b",
+      "title": "sample - Rocketbrain",
+      "width": 1435,
+      "height": 901,
+      "receiptSha256": "7d14437c0973758e576658a5d0005adb19dd29cbf839ee7b7337ad5f4ccbeaee"
+    }
+  },
+  "sourceChecks": {
+    "head": "32f57fc418125f09a2cd33634815ab7d7bd75128",
+    "run": 45977554877,
+    "url": "https://github.com/Fenrindale/Rocketbrain/actions/runs/45977554877",
+    "summary": {
+      "tests": 2331,
+      "suites": 0,
+      "pass": 2078,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 253,
+      "todo": 0
+    },
+    "ciVsixSha256": "cc9330555d878b1d61dcc99b8c6812b723cc56c6cd6c846f660d510e29fc1308",
+    "matchingPayloadBytes": 36,
+    "dependencyPathOnlyDifferences": [
+      "extension/dist/worker.js",
+      "extension/dist/ide-mcp-server.js",
+      "extension/dist/extension.js"
+    ]
+  },
+  "platformCoverage": [
+    "win32-x64"
+  ],
+  "limits": [
+    "Workstation coverage includes the mode toolbar, Java Maven controls and navigation, and the SQL console, dock and data-grid workflows listed above.",
+    "The package is an unsigned Windows preview. The upgrade probe exercised detection, download, signature notice and cancellation. The public installer was exercised separately in a fresh isolated installation.",
+    "The 216-row extension score is independent of desktop preview coverage."
+  ],
+  "progress": {
+    "weightedPoints": 213,
+    "referencePercent": 98.6,
+    "targetWeightedPoints": 216
+  }
+}

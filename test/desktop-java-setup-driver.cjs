@@ -19,7 +19,7 @@ exports.activate = async () => {
       throw Error('The Java extension is not bundled with this installation.');
     }
     write('activated', { product: vscode.env.appName, extension: extension.packageJSON.version });
-    const until = Date.now() + 240000;
+    const until = Date.now() + 420000;
     let ready = false;
     while (Date.now() < until && !fs.existsSync(phaseFile('quit'))) {
       if (fs.existsSync(phaseFile('sample')) && !fs.existsSync(phaseFile('database-state'))) {

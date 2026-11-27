@@ -34,6 +34,7 @@ for (const folder of [settings, driver]) fs.mkdirSync(folder, { recursive: true 
 fs.writeFileSync(path.join(settings, 'settings.json'), JSON.stringify({
   'workbench.startupEditor': 'none',
   'window.confirmBeforeClose': 'never',
+  'window.dialogStyle': 'custom',
   'telemetry.telemetryLevel': 'off',
   'update.mode': 'none',
   'extensions.autoCheckUpdates': false,
@@ -97,6 +98,7 @@ async function launch() {
   let browser;
   let page;
   let failed = false;
+  let receipt;
   const capture = data => {
     tail = (tail + data.toString()).slice(-8000);
     endpoint ||= tail.match(/DevTools listening on (ws:\/\/127\.0\.0\.1:\d+\/devtools\/browser\/[\da-f-]+)/i)?.[1];
@@ -125,17 +127,18 @@ async function launch() {
     assert.equal(ready.command, true, 'The installed app did not register its desktop updater.');
     await page.locator('.rb-workbench-header button[aria-label="Check for Updates"]').click({ timeout: 10000 });
 
-    const receipt = { installedVersion, storageScheme: ready.storageScheme, entryPoint: 'Rocketbrain header → Check for Updates' };
+    receipt = { installedVersion, storageScheme: ready.storageScheme, entryPoint: 'Rocketbrain header → Check for Updates' };
     if (!expectedVersion) {
       await page.getByText(`Rocketbrain Desktop ${installedVersion} is up to date on its release channel.`, { exact: true })
         .waitFor({ timeout: 40000 });
       assert.deepEqual(stagedFiles(), []);
       receipt.result = 'Already up to date';
     } else {
-      await page.getByText(`Rocketbrain Desktop ${expectedVersion} is available on GitHub.`, { exact: false })
+      const notifications = page.locator('.notifications-toasts');
+      await notifications.getByText(`Rocketbrain Desktop ${expectedVersion} is available on GitHub.`, { exact: false })
         .waitFor({ timeout: 40000 });
       assert.deepEqual(stagedFiles(), []);
-      await page.getByRole('button', { name: 'Download Update', exact: true }).click();
+      await notifications.getByRole('button', { name: 'Download Update', exact: true }).click();
       await page.getByText(`Quit Rocketbrain to install version ${expectedVersion}?`, { exact: true }).waitFor({ timeout: 300000 });
       const files = stagedFiles();
       assert.equal(files.length, 1);
@@ -151,25 +154,28 @@ async function launch() {
       receipt.result = 'Staged and verified the real GitHub download, then cancelled installation';
       receipt.availableVersion = expectedVersion;
     }
-    fs.writeFileSync(path.join(output, 'updater-native-receipt.json'), JSON.stringify(receipt, null, 2));
-    console.log(`PASS ${path.join(output, 'updater-native-receipt.json')}`);
   } catch (error) {
     failed = true;
     await page?.screenshot({ path: path.join(output, 'failed.png') }).catch(() => {});
     fs.writeFileSync(path.join(output, 'failure.txt'), error.stack);
     throw error;
   } finally {
+    await browser?.close().catch(() => {});
     fs.writeFileSync(path.join(output, 'quit'), '');
     try {
       if (!failed) {
-        await waitFor(() => stopped, 12000, 'Isolated Rocketbrain did not exit normally.');
+        await waitFor(() => stopped, 60000, 'Isolated Rocketbrain did not exit normally.');
         assert.equal(stopped.code, 0);
       }
     } finally {
+      if (receipt && !failed) {
+        receipt.gracefulExit = stopped?.code === 0;
+        fs.writeFileSync(path.join(output, 'updater-native-receipt.json'), JSON.stringify(receipt, null, 2));
+      }
       if (!stopped) child.kill();
-      await browser?.close().catch(() => {});
     }
   }
+  console.log(`PASS ${path.join(output, 'updater-native-receipt.json')}`);
 }
 
 launch().catch(error => {

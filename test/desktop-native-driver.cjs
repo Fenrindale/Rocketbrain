@@ -7,6 +7,7 @@ const { setTimeout: delay } = require('node:timers/promises');
 const vscode = require('vscode');
 
 const root = process.env.RB_DESKTOP_SMOKE_ROOT;
+const databaseOnly = process.env.RB_DESKTOP_SMOKE_DB_ONLY === '1';
 const extensionId = 'rocketbrain-local.rocketbrain';
 const configurationName = 'Desktop smoke · Java App';
 const write = (name, value) => fs.writeFileSync(path.join(root, name), JSON.stringify(value), { flag: 'wx' });
@@ -19,6 +20,23 @@ async function waitFor(action, milliseconds, message) {
     if (Date.now() >= deadline) throw Error(message);
     await delay(100);
   }
+}
+
+async function connectFixture(api) {
+  const active = await fs.promises.readFile(path.join(root, 'db-connection.json'), 'utf8');
+  const sql = JSON.parse(active);
+  assert.equal(sql.host, '127.0.0.1');
+  assert.equal(sql.database, 'rocketbrain_fixture');
+  await api.connectMysql(sql);
+}
+
+function writeReady(extension, relative, api) {
+  write('ready.json', { vscode: vscode.version, extension: extension.packageJSON.version,
+    bundled: true, extensionPath: relative, jdt: api.java.getState().state });
+}
+
+function awaitQuitSignal() {
+  return waitFor(() => fs.existsSync(path.join(root, 'quit')), 180000, 'The owned desktop test did not finish.');
 }
 
 exports.activate = async context => {
@@ -39,6 +57,14 @@ async function exercise(context) {
   assert.ok(relative && !relative.startsWith('..') && !path.isAbsolute(relative),
     'Rocketbrain must be bundled in the installed desktop application.');
 
+  if (databaseOnly) {
+    await connectFixture(api);
+    writeReady(extension, relative, api);
+    await awaitQuitSignal();
+    await vscode.commands.executeCommand('workbench.action.quit');
+    return;
+  }
+
   const workspace = vscode.workspace.workspaceFolders[0].uri;
   const app = vscode.Uri.joinPath(workspace, 'src/main/java/dev/rocketbrain/App.java');
   const document = await vscode.workspace.openTextDocument(app);
@@ -50,9 +76,15 @@ async function exercise(context) {
     return definitions?.some(hit => (hit.targetUri || hit.uri).path.endsWith('/Greeter.java'));
   }, 75000, 'JDT did not resolve the owned Java fixture.');
 
-  const snapshot = await api.java.workbench.refresh();
-  const project = snapshot.projects.find(item => item.tool === 'maven');
-  assert.ok(project, 'The Maven fixture was not imported.');
+  const project = await waitFor(async () => {
+    try {
+      const snapshot = await api.java.workbench.refresh();
+      return snapshot.projects.find(item => item.tool === 'maven');
+    } catch (error) {
+      if (!String(error.message).startsWith('Java project metadata timed out.')) throw error;
+      return undefined;
+    }
+  }, 90000, 'The Maven fixture metadata was not imported.');
   await api.java.workbench.saveRunConfiguration({
     projectUri: project.uri, mainClass: 'dev.rocketbrain.App', name: configurationName
   });
@@ -89,15 +121,10 @@ async function exercise(context) {
   const breakpointLine = new vscode.Position(document.positionAt(call).line, 0);
   const breakpoint = new vscode.SourceBreakpoint(new vscode.Location(app, breakpointLine), true);
   vscode.debug.addBreakpoints([breakpoint]);
-  const active = await fs.promises.readFile(path.join(root, 'db-connection.json'), 'utf8');
-  const sql = JSON.parse(active);
-  assert.equal(sql.host, '127.0.0.1');
-  assert.equal(sql.database, 'rocketbrain_fixture');
-  await api.connectMysql(sql);
+  await connectFixture(api);
   await vscode.window.showTextDocument(document, { preview: false });
-  write('ready.json', { vscode: vscode.version, extension: extension.packageJSON.version,
-    bundled: true, extensionPath: relative, jdt: api.java.getState().state });
-  await waitFor(() => fs.existsSync(path.join(root, 'quit')), 180000, 'The owned desktop test did not finish.');
+  writeReady(extension, relative, api);
+  await awaitQuitSignal();
   vscode.debug.removeBreakpoints([breakpoint]);
   await vscode.commands.executeCommand('workbench.action.quit');
 }

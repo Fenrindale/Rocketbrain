@@ -23,3 +23,7 @@ Java 프로젝트를 열면 사용 가능한 독립 JDK와 Java 엔진을 확인
 0.1.0-preview.1에서 처음 올라올 때는 앱을 닫고 GitHub Release의 새 설치 파일을 실행한다. 같은 위치에 설치하면 앱 데이터 경로를 계속 사용한다.
 
 패키지 빌드는 설치 파일과 `RocketbrainDesktop-<version>-win32-x64-update.json`을 함께 생성한다. 두 파일은 해당 소스 커밋의 `desktop-v<version>` 릴리스에 제공한다. 시험판에는 시험판 태그와 GitHub prerelease 표시를 사용한다.
+
+Windows 설치 파일과 실행 확인 기록은 [0.2.0-preview.1 릴리스](https://github.com/Fenrindale/Rocketbrain/releases/tag/desktop-v0.2.0-preview.1)와 [설치본 검증](desktop-workspace-verification.json)에서 확인할 수 있다.
+
+IntelliJ IDEA와 DataGrip에서 확인한 조작과 작업 영역은 [화면 관찰과 구현 기준](desktop-interface-observations.md)에 기록한다.

@@ -8,6 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 const { makeUpdater, verifyFile } = require('../src/desktop-updater');
+const { registerDesktopUpdater } = require('../src/desktop-updater-vscode');
 
 const repo = 'https://github.com/Fenrindale/Rocketbrain';
 const assetCdn = 'https://release-assets.githubusercontent.com/github-production-release-asset-2e65be/fake';
@@ -161,3 +162,35 @@ test('offsite redirects, oversized files, checksum failures and cancellation nev
     assert.deepEqual(await fsp.readdir(directory), []);
   }
 });
+
+test('the installed desktop binds the updater when the profile uses the vscode-userdata URI scheme',
+  { skip: process.platform !== 'win32' || process.arch !== 'x64' }, async t => {
+    const directory = String.raw`C:\Isolated Rocketbrain`;
+    const appRoot = path.join(directory, 'resources', 'app');
+    const commands = [];
+    const contexts = [];
+    t.mock.method(fsp, 'realpath', filename => Promise.resolve(
+      filename === process.execPath ? path.join(directory, 'Rocketbrain.exe') : filename));
+    t.mock.method(fsp, 'readFile', async () => JSON.stringify({
+      applicationName: 'rocketbrain-desktop',
+      target: 'user',
+      win32MutexName: 'rocketbrain-desktop',
+      rocketbrainDesktop: { platform: 'win32-x64', version: '1.0.0-preview.1' },
+    }));
+    const context = {
+      extensionPath: path.join(appRoot, 'extensions', 'rocketbrain'),
+      globalStorageUri: { scheme: 'vscode-userdata' },
+      globalStoragePath: path.join(directory, 'User', 'globalStorage', 'rocketbrain-local.rocketbrain'),
+      subscriptions: [],
+    };
+    const vscode = {
+      env: { appRoot },
+      commands: {
+        registerCommand(id) { commands.push(id); return { dispose() {} }; },
+        executeCommand(...args) { contexts.push(args); },
+      },
+    };
+    await registerDesktopUpdater(context, vscode);
+    assert.deepEqual(commands, ['rocketbrain.desktop.checkForUpdates']);
+    assert.deepEqual(contexts, [['setContext', 'rocketbrain.desktopUpdaterAvailable', true]]);
+  });

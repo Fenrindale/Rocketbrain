@@ -1,10 +1,10 @@
 # 기능별 현재 상태
 
-2026-11-27 기준 Rocketbrain 0.179.1. IntelliJ IDEA 120개와 DataGrip 96개, 총 216개 항목을 유지한다.
+2026-11-27 기준 Rocketbrain 0.180.0과 Desktop 0.2.0-preview.1. IntelliJ IDEA 120개와 DataGrip 96개, 총 216개 항목을 유지한다.
 
 각 판정은 기재한 지원 범위의 판정이다. 전체 원본 제품과의 동등성을 검증했다는 뜻은 아니다. 지원 범위·남은 범위·검증 범위와 공개 소스 경로는 [전체 판정 데이터](feature-status.json)에 있다.
 
-미변경 행의 검증 수치와 인용된 최종 VSIX 표현은 보존한 이전 검증 이력이다. 현재 릴리스의 실제 집계와 실행 소스 귀속은 [검증 요약](verification.json)에 별도로 기록한다.
+미변경 행의 검증 수치와 인용된 최종 VSIX 표현은 보존한 이전 검증 이력이다. [이전 확장 검증](verification.json)과 [현재 Desktop 설치본 검증](desktop-workspace-verification.json)에 릴리스별 집계와 실행 근거가 있다.
 
 | 판정 | 항목 수 |
 | --- | ---: |
@@ -32,6 +32,8 @@ v0.178에서는 상단 편집기, 왼쪽 도구 창과 개체 메뉴, 하단 결
 v0.179에서는 Java 코드·리팩터링·프로젝트·Spring 도구와 SQL 콘솔·DB 개체·결과 화면의 메뉴 위치를 보완했다. SQL 문장이 끝난 줄에서 세미콜론 바로 뒤의 `Ctrl+Enter`도 그 문장을 실행한다. 설치본의 조작 검증과 아직 확인이 필요한 조건은 [화면 배치와 입력](ui-reachability-audit.md#v0179-화면-배치와-입력)에 기록한다.
 
 Rocketbrain Desktop 0.1.0-preview.1은 v0.179.1을 내장한 별도 Windows 앱이다. 상단 작업창에서 Java·DB 모드와 실행 도구를 열고 DB 탐색기와 하단 결과 패널을 표시한다. 216개 비교표의 가중치는 확장 기준을 유지한다. [독립 앱 시제품](desktop-preview.md)
+
+Rocketbrain Desktop 0.2.0-preview.1은 모드 전용 상단과 도구창을 사용한다. Java 모드에서는 프로젝트, Structure, 실행 도구, Java Setup을 배치한다. Database 모드에서는 연결, SQL 콘솔, 데이터베이스 탐색기, 결과 편집을 배치한다. 상단에서 GitHub Releases의 Windows 업데이트를 확인한다. 각 행의 `desktopPreview`에서 적용 작업과 검증 근거를 확인할 수 있다. 가중 점수는 213점이다. [작업창·설정·업데이트](desktop-workspace.md) · [화면 관찰과 구현 기준](desktop-interface-observations.md) · [설치본 검증](desktop-workspace-verification.json)
 
 | ID | 제품 | 기능 | 현재 판정 |
 | --- | --- | --- | --- |

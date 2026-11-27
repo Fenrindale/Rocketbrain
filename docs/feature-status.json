@@ -1,5 +1,5 @@
 {
-  "version": "0.179.1",
+  "version": "0.180.0",
   "asOf": "2026-11-27",
   "total": 216,
   "fullProductParityVerified": false,
@@ -44,8 +44,13 @@
   },
   "changedFeatures": [
     "IDEA-001",
+    "IDEA-002",
     "IDEA-015",
+    "IDEA-019",
+    "IDEA-042",
     "IDEA-073",
+    "IDEA-075",
+    "DG-001",
     "DG-044",
     "DG-048",
     "DG-062",
@@ -54,8 +59,13 @@
   ],
   "expandedFeatures": [
     "IDEA-001",
+    "IDEA-002",
     "IDEA-015",
+    "IDEA-019",
+    "IDEA-042",
     "IDEA-073",
+    "IDEA-075",
+    "DG-001",
     "DG-044",
     "DG-048",
     "DG-062",
@@ -64,7 +74,7 @@
   ],
   "boundsReaffirmedFeatures": [],
   "evidenceDisclosure": "공개 소스와 합성 테스트의 경로만 포함한다. 비공개 로컬 조사·실행 보고서·자격 증명·DB 인스턴스·런타임 아카이브는 포함하지 않는다.",
-  "verificationDisclosure": "갱신하지 않은 행의 검증 수치·동일 최종 VSIX 표현은 보존한 이전 검증 이력을 뜻한다. 현재 릴리스의 실제 통합 집계와 실행 소스 귀속은 docs/verification.json에 별도로 기록한다.",
+  "verificationDisclosure": "갱신하지 않은 행의 검증 수치·동일 최종 VSIX 표현은 보존한 이전 검증 이력을 뜻한다. 내장 확장과 독립 앱의 이번 실행 기록은 docs/desktop-workspace-verification.json에서 확인한다.",
   "rows": [
     {
       "id": "IDEA-001",
@@ -95,9 +105,9 @@
         "state": "declared-placement"
       },
       "desktopPreview": {
-        "version": "0.1.0-preview.1",
-        "scope": "독립 앱의 전역 상단 도구 모음에서 Java·DB 모드를 선택한다. Java Projects와 DB 탐색기 및 하단 결과를 선택한 모드에서 연다.",
-        "evidence": "docs/desktop-preview-verification.json"
+        "version": "0.2.0-preview.1",
+        "scope": "앱 상단에서 Java 모드를 선택한다. Mode 전용 상단, 왼쪽 프로젝트·Spring 작업, 오른쪽 Structure, 하단 실행·디버그 도구를 사용한다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     },
     {
@@ -125,6 +135,11 @@
           "test/java-project-layout-host.js"
         ],
         "originalProductParityVerified": false
+      },
+      "desktopPreview": {
+        "version": "0.2.0-preview.1",
+        "scope": "이동식 왼쪽 도구창의 Project와 Java Projects를 상단 및 하단 도킹 버튼을 통해 사용할 수 있다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     },
     {
@@ -515,9 +530,9 @@
         }
       },
       "desktopPreview": {
-        "version": "0.1.0-preview.1",
-        "scope": "설치된 독립 앱의 Maven 예제에서 실제 Ctrl+클릭으로 Greeter.java의 메서드 선언을 열었다.",
-        "evidence": "docs/desktop-preview-verification.json"
+        "version": "0.2.0-preview.1",
+        "scope": "내장 Java 엔진이 활성 문서의 메서드 Ctrl+클릭을 선언 이동에 연결한다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     },
     {
@@ -636,6 +651,11 @@
       "uiPlacement": {
         "version": "0.178.0",
         "evidence": "docs/ui-reachability-audit.md"
+      },
+      "desktopPreview": {
+        "version": "0.2.0-preview.1",
+        "scope": "Java 모드에서 현재 파일의 Outline을 오른쪽 도구창에 표시한다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     },
     {
@@ -1326,6 +1346,11 @@
           "test/java-runtime-matrix-host.js"
         ],
         "originalProductParityVerified": false
+      },
+      "desktopPreview": {
+        "version": "0.2.0-preview.1",
+        "scope": "Java Setup에서 설치된 JDK·엔진을 찾거나 프로필에 관리형 JDK·JDT LS·디버거를 설치한다. 준비된 엔진은 로컬 Java 작업 공간에서 자동 시작한다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     },
     {
@@ -2251,9 +2276,9 @@
         "state": "declared-placement"
       },
       "desktopPreview": {
-        "version": "0.1.0-preview.1",
-        "scope": "상단 Run Java와 Debug Java를 직접 눌러 실행 및 실제 JVM 중단점에서 정지·재개를 확인했다.",
-        "evidence": "docs/desktop-preview-verification.json"
+        "version": "0.2.0-preview.1",
+        "scope": "상단 Run·Debug에서 실행 구성을 선택하고 실제 Java 프로세스를 시작한다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     },
     {
@@ -2311,6 +2336,11 @@
           "test/java-async-trace-host.js"
         ],
         "originalProductParityVerified": false
+      },
+      "desktopPreview": {
+        "version": "0.2.0-preview.1",
+        "scope": "상단 Debug에서 JDT LS의 디버거로 JVM을 시작하고 하단 실행·디버그 도구를 연다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     },
     {
@@ -3672,6 +3702,11 @@
         "evidence": "docs/ui-reachability-audit.md",
         "state": "installed-input-observed",
         "observedAction": "Open SQL Console"
+      },
+      "desktopPreview": {
+        "version": "0.2.0-preview.1",
+        "scope": "Database 모드 왼쪽에서 데이터베이스 탐색기와 연결 뷰를 표시하고, 상단에서 연결 추가를 연다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     },
     {
@@ -4947,9 +4982,9 @@
         "observedAction": "SQL default input"
       },
       "desktopPreview": {
-        "version": "0.1.0-preview.1",
-        "scope": "독립 앱에서 두 실제 DB에 각각 연결하고 세미콜론 바로 뒤 Ctrl+Enter로 SQL 결과를 열었다.",
-        "evidence": "docs/desktop-preview-verification.json"
+        "version": "0.2.0-preview.1",
+        "scope": "상단 SQL 콘솔에서 Ctrl+Enter로 현재 문장을 실행하고 하단 Query Results에서 결과를 확인한다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     },
     {
@@ -5077,9 +5112,9 @@
         "evidence": "docs/ui-reachability-audit.md"
       },
       "desktopPreview": {
-        "version": "0.1.0-preview.1",
-        "scope": "독립 앱 하단 그리드 커밋 전후의 결과를 별도 연결로 대조했다.",
-        "evidence": "docs/desktop-preview-verification.json"
+        "version": "0.2.0-preview.1",
+        "scope": "상단 SQL 도구와 하단 Query Results에서 트랜잭션 제어를 제공한다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     },
     {
@@ -5530,9 +5565,9 @@
         "evidence": "docs/ui-reachability-audit.md"
       },
       "desktopPreview": {
-        "version": "0.1.0-preview.1",
-        "scope": "독립 앱의 하단 그리드에서 셀 편집, SQL 검토, 적용, 커밋과 저장값을 확인했다.",
-        "evidence": "docs/desktop-preview-verification.json"
+        "version": "0.2.0-preview.1",
+        "scope": "왼쪽 데이터베이스 탐색기에서 테이블 미리보기를 열고 하단에서 셀을 편집·검토·적용·커밋한다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     },
     {
@@ -6542,9 +6577,9 @@
         "state": "declared-placement"
       },
       "desktopPreview": {
-        "version": "0.1.0-preview.1",
-        "scope": "독립 앱의 상단 DB 모드 버튼을 눌러 왼쪽 Database 탐색기와 하단 Query Results를 열었다.",
-        "evidence": "docs/desktop-preview-verification.json"
+        "version": "0.2.0-preview.1",
+        "scope": "Database 모드 전용 상단, 왼쪽 데이터베이스 탐색기, 중앙 SQL 콘솔, 오른쪽 작업 파일 및 하단 Query Results를 배치한다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     },
     {
@@ -6589,9 +6624,9 @@
         "observedAction": "Show Result SQL"
       },
       "desktopPreview": {
-        "version": "0.1.0-preview.1",
-        "scope": "상단 SQL 콘솔, 편집기의 Ctrl+Enter와 하단 결과 그리드를 설치본에서 연속으로 조작했다.",
-        "evidence": "docs/desktop-preview-verification.json"
+        "version": "0.2.0-preview.1",
+        "scope": "SQL 편집기에 Ctrl+Enter를 연결하고 결과 패널을 도킹 버튼으로 연다.",
+        "evidence": "docs/desktop-workspace-verification.json"
       }
     }
   ],

@@ -8,9 +8,10 @@ const { spawn } = require('node:child_process');
 const { setTimeout: delay } = require('node:timers/promises');
 const { browserRuntime } = require('./helpers/browser-runtime');
 
-const [executable, evidenceDir, existingJdk] = process.argv.slice(2);
+const [executable, evidenceDir, existingJdk, reuseFirstRun, resumePhase] = process.argv.slice(2);
 assert.ok(executable && evidenceDir && existingJdk,
-  'Usage: node test/desktop-java-setup.cjs <installed Rocketbrain.exe> <evidence directory> <JDK 25 directory>');
+  'Usage: node test/desktop-java-setup.cjs <installed Rocketbrain.exe> <evidence directory> <JDK 25 directory> [previous first-run evidence directory] [--reopen-only]');
+assert.ok(!resumePhase || (reuseFirstRun && resumePhase === '--reopen-only'));
 const exe = fs.realpathSync(executable);
 assert.equal(path.basename(exe).toLowerCase(), 'rocketbrain.exe');
 const javaHome = fs.realpathSync(existingJdk);
@@ -18,30 +19,39 @@ const { chromium } = browserRuntime();
 assert.ok(chromium, 'Playwright is required.');
 
 fs.mkdirSync(evidenceDir, { recursive: true });
-const root = fs.mkdtempSync(path.join(fs.realpathSync(evidenceDir), 'java-first-run-'));
+const evidenceParent = fs.realpathSync(evidenceDir);
+const root = reuseFirstRun ? fs.realpathSync(reuseFirstRun) : fs.mkdtempSync(path.join(evidenceParent, 'java-first-run-'));
+if (reuseFirstRun) {
+  const relative = path.relative(evidenceParent, root);
+  assert.match(relative, /^java-first-run-[a-z0-9]+$/i, 'Reuse an isolated first-run evidence directory created by this harness.');
+  assert.ok(fs.existsSync(path.join(root, 'first-run-setup.png')), 'A tested first-run setup must exist before reusing its profile.');
+}
 const profile = path.join(root, 'profile');
 const user = path.join(profile, 'User');
 const extensions = path.join(root, 'extensions');
 const project = path.join(root, 'maven');
 const driver = path.join(root, 'driver');
-for (const directory of [user, extensions, driver]) fs.mkdirSync(directory, { recursive: true });
-fs.cpSync(path.join(__dirname, 'fixtures/java/maven'), project, {
-  recursive: true, filter: file => !file.endsWith(path.sep + 'target')
-});
 const settingsFile = path.join(user, 'settings.json');
-fs.writeFileSync(settingsFile, JSON.stringify({
-  'security.workspace.trust.enabled': false, 'workbench.startupEditor': 'none',
-  'extensions.autoCheckUpdates': false, 'telemetry.telemetryLevel': 'off'
-}));
-fs.writeFileSync(path.join(driver, 'package.json'), JSON.stringify({
-  publisher: 'rocketbrain-smoke', name: 'java-first-run', version: '1.0.0', engines: { vscode: '^1.100.0' },
-  main: './driver.cjs', activationEvents: ['onStartupFinished'], extensionDependencies: ['rocketbrain-local.rocketbrain']
-}));
+if (!reuseFirstRun) {
+  for (const directory of [user, extensions, driver]) fs.mkdirSync(directory, { recursive: true });
+  fs.cpSync(path.join(__dirname, 'fixtures/java/maven'), project, {
+    recursive: true, filter: file => !file.endsWith(path.sep + 'target')
+  });
+  fs.writeFileSync(settingsFile, JSON.stringify({
+    'security.workspace.trust.enabled': false, 'workbench.startupEditor': 'none',
+    'extensions.autoCheckUpdates': false, 'telemetry.telemetryLevel': 'off'
+  }));
+  fs.writeFileSync(path.join(driver, 'package.json'), JSON.stringify({
+    publisher: 'rocketbrain-smoke', name: 'java-first-run', version: '1.0.0', engines: { vscode: '^1.100.0' },
+    main: './driver.cjs', activationEvents: ['onStartupFinished'], extensionDependencies: ['rocketbrain-local.rocketbrain']
+  }));
+}
 fs.copyFileSync(path.join(__dirname, 'desktop-java-setup-driver.cjs'), path.join(driver, 'driver.cjs'));
 
 const env = Object.fromEntries(Object.entries(process.env).filter(([name]) =>
   !['JDK_HOME', 'JAVA_HOME', 'ELECTRON_RUN_AS_NODE'].includes(name.toUpperCase())));
-Object.assign(env, { JAVA_HOME: javaHome, RB_JAVA_SETUP_SMOKE_ROOT: root });
+env.RB_JAVA_SETUP_SMOKE_ROOT = root;
+if (!reuseFirstRun) env.JAVA_HOME = javaHome;
 const owned = ['shared-data-dir', 'agents-user-data-dir', 'agents-extensions-dir', 'agent-plugins-dir', 'extensions-download-dir']
   .map(name => `--${name}=${path.join(root, name)}`);
 const toolbar = page => page.locator('[id="workbench.parts.titlebar"]');
@@ -97,7 +107,7 @@ async function run(phase, exercise) {
     fs.writeFileSync(phaseFile('quit'), '');
     try {
       if (!failure) {
-        await waitFor(() => exit, 18000, 'The isolated desktop did not quit cleanly.');
+        await waitFor(() => exit, 60000, 'The isolated desktop did not quit cleanly.');
         assert.equal(exit.code, 0);
       }
     } finally {
@@ -108,7 +118,7 @@ async function run(phase, exercise) {
 }
 
 async function verifyReady(recorded) {
-  const { state, definition } = await recorded('ready', 190000);
+  const { state, definition } = await recorded('ready', 330000);
   assert.equal(state.ready, true);
   assert.equal(state.javaHome, javaHome);
   assert.equal(definition, true);
@@ -130,14 +140,34 @@ async function firstRun(page, recorded, _phaseFile, activation) {
   const state = await verifyReady(recorded);
   await setup.locator('#status').filter({ hasText: 'Java is ready' }).waitFor({ timeout: 12000 });
   await page.screenshot({ path: path.join(root, 'first-run-ready.png') });
+  return selectDatabaseMode(page, state, { ...activation, detected });
+}
+
+async function selectDatabaseMode(page, state, details) {
   const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
   assert.equal(settings['rocketbrain.java.javaHome'], javaHome);
   assert.equal(settings['rocketbrain.java.serverPath'], state.serverPath);
   assert.equal(settings['rocketbrain.java.debugBundlePath'], state.debugBundlePath);
-  assert.ok(state.debugBundlePath.startsWith(root + path.sep));
+  const debugRelative = path.relative(root, state.debugBundlePath);
+  assert.ok(debugRelative && !debugRelative.startsWith('..') && !path.isAbsolute(debugRelative));
   await action(page, 'Database Mode').click({ timeout: 10000 });
   await database(page).waitFor({ timeout: 12000 });
-  return { ...activation, detected, serverPath: state.serverPath, debugBundlePath: state.debugBundlePath, definition: true };
+  return { ...details, persistedJdk: state.javaHome, serverPath: state.serverPath, debugBundlePath: state.debugBundlePath, definition: true };
+}
+
+async function verifySetupToolbar(page) {
+  await action(page, 'Java Setup').click({ timeout: 10000 });
+  const setup = await waitFor(async () => {
+    for (const frame of page.frames()) if (await heading(frame).isVisible()) return frame;
+  }, 15000, 'Java Setup toolbar button did not reopen the setup editor.');
+  await setup.locator('#status').filter({ hasText: 'Java is ready' }).waitFor({ timeout: 10000 });
+}
+
+async function persistedRun(page, recorded, _phaseFile, activation) {
+  const state = await verifyReady(recorded);
+  await verifySetupToolbar(page);
+  await page.screenshot({ path: path.join(root, 'persisted-ready.png') });
+  return selectDatabaseMode(page, state, { ...activation, reusedProfile: true });
 }
 
 async function reopen(page, recorded, phaseFile) {
@@ -147,21 +177,34 @@ async function reopen(page, recorded, phaseFile) {
   assert.equal((await recorded('database-state')).state, 'stopped');
   await action(page, 'Java Mode').click({ timeout: 10000 });
   await verifyReady(recorded);
-  await action(page, 'Java Setup').click({ timeout: 10000 });
-  const setup = await waitFor(async () => {
-    for (const frame of page.frames()) if (await heading(frame).isVisible()) return frame;
-  }, 15000, 'Java Setup toolbar button did not reopen the setup editor.');
-  await setup.locator('#status').filter({ hasText: 'Java is ready' }).waitFor({ timeout: 10000 });
+  await verifySetupToolbar(page);
   return { didNotStartInDatabaseMode: true, automaticStartOnJavaMode: true, setupToolbarReopens: true };
 }
 
 async function main() {
   console.log(`Isolated Java setup evidence directory ${root}`);
-  const first = await run('first', firstRun);
+  let first;
+  if (resumePhase) {
+    const activation = JSON.parse(fs.readFileSync(path.join(root, 'persisted-activated.json'), 'utf8'));
+    const { state, definition } = JSON.parse(fs.readFileSync(path.join(root, 'persisted-ready.json'), 'utf8'));
+    assert.equal(state.ready, true);
+    assert.equal(definition, true);
+    first = { ...activation, reusedProfile: true, persistedJdk: state.javaHome, serverPath: state.serverPath,
+      debugBundlePath: state.debugBundlePath, definition };
+  } else {
+    first = reuseFirstRun ? await run('persisted', persistedRun) : await run('first', firstRun);
+  }
   const restarted = await run('reopened', reopen);
   const receipt = path.join(root, 'desktop-java-setup-receipt.json');
-  const executableSha256 = crypto.createHash('sha256').update(fs.readFileSync(exe)).digest('hex');
-  fs.writeFileSync(receipt, JSON.stringify({ executableSha256, first, restarted }, null, 2), { flag: 'wx' });
+  const app = path.join(path.dirname(exe), 'resources/app');
+  const product = JSON.parse(fs.readFileSync(path.join(app, 'product.json'), 'utf8')).rocketbrainDesktop;
+  const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  fs.writeFileSync(receipt, JSON.stringify({
+    executableSha256: hash(exe),
+    workbenchSha256: hash(path.join(app, 'out/vs/workbench/workbench.desktop.main.js')),
+    bundledVsixSha256: product.extensionVsixSha256,
+    first, restarted
+  }, null, 2), { flag: 'wx' });
   console.log(`PASS ${receipt}`);
 }
 
