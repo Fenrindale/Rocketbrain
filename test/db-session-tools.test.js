@@ -73,12 +73,11 @@ test('session command wiring anchors the picker, captures selected SQL and stops
   const commands = new Map();
   const calls = [];
   const errors = [];
-  const resource = path => ({ scheme: 'file', toString: () => 'file:///' + path });
+  const resource = path => ({ scheme: 'file', path: '/' + path, toString: () => 'file:///' + path });
   const document = { languageId: 'sql', version: 1, isClosed: false, uri: resource('active.sql') };
   const editor = { document };
   let updateWhileNaming = false;
   const vscode = {
-    Uri: { isUri: value => value?.scheme === 'file' },
     workspace: { isTrusted: true, workspaceFolders: [{}] },
     window: {
       activeTextEditor: editor,
