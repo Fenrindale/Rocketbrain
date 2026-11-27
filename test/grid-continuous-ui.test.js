@@ -92,10 +92,13 @@ test('continuous result Webview loads lazily on wheel movement and restores its 
       const visible = [...control.querySelectorAll('[data-snapshot-row]')].find(row => row.getBoundingClientRect().bottom > top);
       return { id: visible.dataset.snapshotRow, top: visible.getBoundingClientRect().top };
     });
+    const chosen = page.locator('[data-snapshot-row="' + anchor.id + '"] [data-result-cell]').first();
+    await chosen.evaluate(cell => cell.focus({ preventScroll: true }));
     releasePage();
     await page.waitForFunction(() => document.getElementById('page-label').textContent.startsWith('Pages 1–2') && !document.getElementById('continuous-scroll').disabled);
     const topAfter = await page.locator('[data-snapshot-row="' + anchor.id + '"]').evaluate(row => row.getBoundingClientRect().top);
     assert.ok(Math.abs(topAfter - anchor.top) <= 1, `${anchor.top} to ${topAfter}`);
+    assert.equal(await chosen.evaluate(cell => document.activeElement === cell), true);
     assert.equal(messages.filter(type => type === 'scrollTable').length, 1);
     for (const range of ['Pages 1–3', 'Pages 1–4', 'Pages 2–5', 'Pages 3–6']) {
       await page.getByRole('button', { name: 'Next Page' }).click();

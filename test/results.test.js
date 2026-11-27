@@ -358,6 +358,98 @@ test('actual result Webview renders database values as text and routes history/c
     assert.equal(await page.getByRole('button', { name: 'Back to Source Row' }).count(), 0);
   });
 
+  await t.test('Grid keyboard movement follows visible columns and retains focus across result refreshes', async () => {
+    const id = host.begin('SELECT id, label, note FROM grid_keyboard', 'Keyboard fixture');
+    host.finish(id, { columns: ['id', 'label', 'note'], rows: [[1, 'One', 'Other'], [2, 'Two', 'Last']],
+      rowCount: 2, durationMs: 1 });
+    await lastPost;
+    const cell = page.locator('#grid td[data-result-cell]');
+    const focused = page.locator('#grid td[data-result-cell]:focus');
+    assert.equal(await cell.and(page.locator('[tabindex="0"]')).count(), 1);
+    await cell.first().focus();
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await focused.textContent(), 'One');
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await focused.textContent(), 'Two');
+    await page.keyboard.press('End');
+    assert.equal(await focused.textContent(), 'Last');
+    await page.keyboard.press('Home');
+    assert.equal(await focused.textContent(), '2');
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await focused.textContent(), '2');
+    host.editState(id, { editMessage: 'Retained focus' });
+    await lastPost;
+    assert.equal(await focused.textContent(), '2');
+    await page.locator('#result-view').selectOption('record');
+    assert.equal(await page.locator('#grid dd').first().textContent(), '2');
+    await page.locator('#result-view').selectOption('grid');
+    await page.locator('#result-columns').click();
+    await page.getByRole('checkbox', { name: 'Show column 2 label' }).uncheck();
+    await page.getByRole('checkbox', { name: 'Pin column 3 note' }).check();
+    await cell.first().focus();
+    await page.keyboard.press('Home');
+    assert.equal(await focused.textContent(), 'Other');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await focused.textContent(), '1');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await focused.textContent(), '1');
+    assert.equal(await cell.and(page.locator('[tabindex="0"]')).count(), 1);
+  });
+
+  await t.test('SQL NULL, Cancel, Escape and successful Stage restore the right grid or record cell', async () => {
+    const columns = [{name: 'id', type: 'int', editable: false},
+      {name: 'label', type: 'varchar(40)', editable: true, nullable: false},
+      {name: 'note', type: 'varchar(40)', editable: true, nullable: true}];
+    const id = host.begin('SELECT id, label, note FROM edit_keyboard', 'Editor fixture', { readOnly: false });
+    const sample = { columns: columns.map(column => column.name), rows: [[1, 'One', null], [2, 'Two', 'note']],
+      rowCount: 2, durationMs: 1, edit: { modelId: 'keyboard-first', table: 'edit_keyboard', canEdit: true,
+        columns, rowIds: ['one', 'two'] } };
+    host.finish(id, sample);
+    await lastPost;
+    const editor = page.locator('#cell-editor');
+    const focused = page.locator(':focus');
+    const edited = (...key) => page.getByRole('button', { name: 'Edit row ' + key[0] + ' column ' + key[1] });
+    const changesSent = () => page.evaluate(id => window.__sent.filter(message => message.id === id && message.type === 'draftChanged').length, id);
+    const initial = await changesSent();
+
+    await edited('one', 'note').press('F2');
+    assert.equal(await focused.getAttribute('id'), 'cell-null');
+    assert.equal(await page.locator('#cell-value').isDisabled(), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await editor.isVisible(), false);
+    assert.equal(await focused.getAttribute('aria-label'), 'Edit row one column note');
+
+    await edited('one', 'label').press('Enter');
+    await page.locator('#cell-value').fill('discard this');
+    await page.locator('#cell-value').dispatchEvent('keydown', { key: 'Escape', isComposing: true, bubbles: true });
+    assert.equal(await editor.isVisible(), true);
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    assert.equal(await focused.getAttribute('aria-label'), 'Edit row one column label');
+    assert.equal(await edited('one', 'label').textContent(), 'One');
+    assert.equal(await changesSent(), initial);
+
+    await page.locator('#result-view').selectOption('record');
+    await edited('one', 'label').press('F2');
+    await page.locator('#cell-value').fill('staged by keyboard');
+    await page.getByRole('button', { name: 'Stage Cell' }).click();
+    assert.equal(await focused.getAttribute('aria-label'), 'Edit row one column label');
+    assert.equal(await focused.textContent(), 'staged by keyboard');
+    assert.equal(await changesSent(), initial + 1);
+    await edited('one', 'note').press('Enter');
+    await page.keyboard.press('Escape');
+    assert.equal(await focused.getAttribute('aria-label'), 'Edit row one column note');
+    assert.equal(await changesSent(), initial + 1);
+
+    await edited('one', 'label').press('F2');
+    host.finish(id, { ...sample, edit: { ...sample.edit, modelId: 'keyboard-reloaded', rowIds: ['new-one', 'new-two'] } });
+    await lastPost;
+    assert.equal(await editor.isVisible(), false);
+    assert.equal(await focused.getAttribute('role'), 'tab');
+    assert.equal(await changesSent(), initial + 1);
+    host.editState(id, { readOnly: true, hasDraft: false });
+    await lastPost;
+  });
+
   await t.test('Grid and Record share staged cells and review; a named table retains display settings after reopening', async () => {
     const connection = tableLayoutConnectionKey({ host: 'localhost', database: 'fixture', user: 'test' });
     const table = 'records';

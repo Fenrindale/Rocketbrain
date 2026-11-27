@@ -3,6 +3,8 @@
   const vscode = acquireVsCodeApi();
   let history = [], currentId = null, editingCell = null, requestSequence = 0;
   let renderedWindow, scrollTop = 0;
+  let gridTabCell;
+  const cellPositions = new WeakMap(), selectedCells = new Map();
   const drafts = new Map(), browseForms = new Map(),bulkForms=new Map(), layouts = new Map();
   const charts = new Map();
   const maps = new Map();
@@ -65,10 +67,10 @@
     persist(); render();
     vscode.postMessage(message);
   }
-  function changed(record) {
+  function changed(record, returnFocus) {
     const item = draft(record); item.revision++; record.review = undefined;
     vscode.postMessage({ type: 'draftChanged', id: record.id,modelId:record.result.edit.modelId,count: count(item), draftRevision: item.revision });
-    persist(); render();
+    persist(); render(returnFocus);
   }
   const cellLimit = 128 * 1024;
   const lineEndings = { lf: '\n', crlf: '\r\n', cr: '\r' };
@@ -133,13 +135,25 @@
     $('cell-hint').textContent = cellModes[mode].hint + (editingCell?.column.kind === 'json' ?
       ' JSON syntax is checked without rewriting the supplied text. JSON null is a value separate from SQL NULL.' : '');
   }
-  function openCell(record, rowId, column, value, inserted = false) {
-    if (editingCell) { $('cell-value').focus(); return; }
+  function focusCellEditor(selectValue = false) {
+    const value = $('cell-value'), sqlNull = $('cell-null');
+    const focus = !value.disabled ? value : !sqlNull.disabled ? sqlNull : $('cancel-cell');
+    focus.focus();
+    if (selectValue && focus === value) value.select();
+  }
+  function closeCellEditor() {
+    const returnFocus = editingCell?.position;
+    editingCell = null;
+    $('cell-editor').hidden = true;
+    return returnFocus;
+  }
+  function openCell(record, rowId, column, value, inserted, position) {
+    if (editingCell) { focusCellEditor(); return; }
     const source = value === null || value === undefined ? '' : String(value);
     const modes = column.kind === 'binary' ? ['hex', 'base64'] :
       !column.kind || ['text', 'json'].includes(column.kind) ? ['lf', 'crlf', 'cr', 'escaped'] : ['raw'];
     const mode = modes[0] === 'lf' ? preferredTextMode(source) : modes[0];
-    editingCell = { id: record.id, rowId, column, inserted, modelId: record.result.edit.modelId, mode };
+    editingCell = { id: record.id, rowId, column, inserted, modelId: record.result.edit.modelId, mode, position };
     $('cell-label').textContent = `${column.name} · ${column.type}`;
     $('cell-value').value = encodeCell(source, mode);
     $('cell-null').checked = value === null;
@@ -148,12 +162,13 @@
     $('cell-format-label').hidden = modes.length === 1;
     showCellMode(mode);
     cellError();
-    $('cell-editor').hidden = false; render(); $('cell-value').focus(); $('cell-value').select();
+    $('cell-editor').hidden = false; render(); focusCellEditor(true);
   }
   function editableCell(td, record, rowId, column, value, inserted) {
-    td.tabIndex = 0; td.classList.add('editable'); td.setAttribute('role', 'button');
+    if (td.tagName !== 'TD') td.tabIndex = 0;
+    td.classList.add('editable'); td.setAttribute('role', 'button');
     td.setAttribute('aria-label', `Edit ${inserted ? 'new row' : 'row'} ${rowId} column ${column.name}`);
-    const edit = () => openCell(record, rowId, column, value, inserted);
+    const edit = () => openCell(record, rowId, column, value, inserted, cellPositions.get(td));
     td.ondblclick = edit;
     td.onkeydown = event => { if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); edit(); } };
     if (!inserted) {
@@ -501,7 +516,7 @@
     } else $('copy').title = $('export').title = 'Use all captured rows and columns, including hidden columns.';
     $('draft-count').textContent = `${count(item)} staged row changes`;
     $('edit-status').className = record.editError || session?.outcomeUnknown ? 'error' : '';
-    $('edit-status').textContent = record.editError || record.editMessage || model.reason || (record.readOnly ? 'Enable Editing to stage changes. Apply and Commit are separate actions.' : 'Double-click a cell or press Enter/F2. Values remain local until Review and Apply.');
+    $('edit-status').textContent = record.editError || record.editMessage || model.reason || (record.readOnly ? 'Enable Editing to stage changes. Apply and Commit are separate actions.' : 'Use the arrow keys to move between grid cells. Press Enter or F2 to edit and Escape to cancel. Values remain local until Review and Apply.');
     if (session?.outcomeUnknown) $('edit-status').textContent += ' Write outcome unknown. Inspect the server before retrying.';
     if (session?.needsReconnect) $('edit-status').textContent += ' Reconnect this console explicitly; then discard drafts and reload.';
     if (record.review) $('review-sql').textContent = record.review.statements.map((statement, index) => `${index + 1}. ${statement.sql}\nBound values: ${JSON.stringify(statement.parameters)}\n`).join('\n');
@@ -665,6 +680,50 @@
     }
   }
 
+  function registerDataCell(cell, record, row, column, mode) {
+    const { edit, relatedRows, browse } = record.result;
+    cellPositions.set(cell, { result: record.id, model: (edit || relatedRows)?.modelId,
+      window: browse?.window?.id, mode, rowId: row.id, number: row.number, inserted: row.inserted, column });
+  }
+
+  function sameCellRow(candidate, position) {
+    if (!candidate || candidate.result !== position.result || candidate.mode !== position.mode ||
+        candidate.inserted !== position.inserted) return false;
+    if (position.window && candidate.window === position.window) return candidate.number === position.number;
+    if (candidate.model !== position.model || candidate.window !== position.window) return false;
+    return position.rowId === undefined ? candidate.number === position.number : candidate.rowId === position.rowId;
+  }
+
+  function setGridTabCell(cell) {
+    if (gridTabCell && gridTabCell !== cell) gridTabCell.tabIndex = -1;
+    gridTabCell = cell;
+    if (!cell) return;
+    cell.tabIndex = 0;
+    const position = cellPositions.get(cell);
+    selectedCells.set(position.result, position);
+  }
+
+  function findDataCell(position) {
+    const grid = $('grid');
+    if (position.mode === 'record') {
+      return [...grid.querySelectorAll('dd.editable')].find(cell => {
+        const candidate = cellPositions.get(cell);
+        return sameCellRow(candidate, position) && candidate.column === position.column;
+      });
+    }
+    const rows = grid.querySelector('table')?.tBodies[0]?.rows;
+    const row = rows && Array.from(rows).find(item => sameCellRow(cellPositions.get(item.cells[1]), position));
+    return row && ([...row.cells].find(cell => cellPositions.get(cell)?.column === position.column) || row.cells[1]);
+  }
+
+  function restoreCellFocus(position) {
+    if (!position) return;
+    const cell = findDataCell(position);
+    if (cell) cell.focus({ preventScroll: true });
+    else if (renderedWindow && current()?.id === position.result) $('grid').focus({ preventScroll: true });
+    else focusResultTab(resultTabs().find(button => button.getAttribute('aria-selected') === 'true'));
+  }
+
   function addRowEditActions(target, record, row) {
     const item = draft(record), model = record.result.edit, cellOpen = editingCell?.id === record.id;
     const remove = document.createElement('button');
@@ -716,6 +775,7 @@
     for (const index of columns) {
       const name = document.createElement('dt'), value = document.createElement('dd');
       name.textContent = record.result.columns[index];
+      registerDataCell(value, record, row, index, 'record');
       presentDataCell(value, record, row, index, enabled);
       fields.append(name, value);
     }
@@ -1456,7 +1516,7 @@
       const tr = body.insertRow();
       tr.dataset.resultRowIndex = rowIndex;
       if (result.browse?.window) tr.dataset.snapshotRow = row.number;
-      tr.onpointerdown = tr.onfocusin = () => { layout.row = rowIndex; };
+      tr.onpointerdown = () => { layout.row = rowIndex; };
       if (row.deleted) tr.className = 'deleted';
       if (row.inserted) tr.classList.add('inserted');
       const number = tr.insertCell();
@@ -1466,11 +1526,16 @@
       addRelatedRowAction(number, active, row, true);
       for (const index of columns) {
         const td = tr.insertCell();
+        td.tabIndex = -1;
+        td.dataset.resultCell = '';
+        registerDataCell(td, active, row, index, 'grid');
         presentDataCell(td, active, row, index, enabled);
         pin(td, index);
       }
     }
     $('grid').append(table);
+    const selected = selectedCells.get(active.id);
+    setGridTabCell((selected && findDataCell(selected)) || body.rows[layout.row]?.cells[1]);
   }
 
   function renderExportAction(record) {
@@ -1534,9 +1599,10 @@
     if (record?.hasQueryEditor) vscode.postMessage({ type: 'focusQueryEditor', id: record.id });
   }
 
-  function render() {
+  function render(requestedFocus) {
     const active = current();
     const grid = $('grid'), windowId = active?.result?.browse?.window?.id;
+    const returnFocus = requestedFocus || cellPositions.get(document.activeElement);
     const anchor = renderedWindow === windowId && windowId ? visibleScrollAnchor(grid) : null;
     renderedWindow = undefined;
     grid.removeAttribute('tabindex');
@@ -1553,6 +1619,7 @@
     chartObserver = undefined;
     mapObserver?.disconnect();
     mapObserver = undefined;
+    gridTabCell = undefined;
     grid.replaceChildren();
     $('chart-tools').hidden = true;
     $('compare-tools').hidden = true;
@@ -1580,13 +1647,14 @@
       options(statement,captured.map(item=>({value:statementKey(item),label:item.label})),selected);
     }
     $('edit-tools').hidden = $('edit-status').hidden = $('review-panel').hidden = $('browse-tools').hidden = $('bulk-panel').hidden = true;
-    if (!active) { editingCell = null; $('cell-editor').hidden = true; $('source').textContent = 'No result selected'; $('message').textContent = 'Run SQL from the editor with Ctrl+Enter.'; $('status').textContent = 'Ready'; return; }
+    if (!active) { closeCellEditor(); $('source').textContent = 'No result selected'; $('message').textContent = 'Run SQL from the editor with Ctrl+Enter.'; $('status').textContent = 'Ready'; restoreCellFocus(returnFocus); return; }
     $('source').textContent = active.source;
     $('message').textContent = active.state === 'running' ? 'Running query…' : active.error || '';
     $('message').className = active.state === 'error' ? 'error' : '';
     if (!active.result) {
       $('status').textContent = active.state === 'running' ? `${active.readOnly ? 'Read-only' : 'Read/write'} query · 5 second limit` : active.sessionState?.outcomeUnknown ? 'Write outcome unknown · inspect the database before retrying' : 'Query failed';
       if (active.sessionState?.needsReconnect) $('message').textContent += active.sessionState.outcomeUnknown ? ' The write may have completed. Inspect the database before retrying, then reconnect explicitly.' : ' Session lost. Reconnect explicitly before running another statement.';
+      restoreCellFocus(returnFocus);
       return;
     }
     const result = active.result, enabled = renderTools(active, result), layout = resultLayout(active);
@@ -1623,6 +1691,7 @@
     $('status').textContent = `${result.columns.length ? `${result.rowCount} rows` : `${result.affectedRows || 0} rows affected`}${result.truncated ? ' · limit reached, more rows available' : ''}   ·   ${Number(result.durationMs).toFixed(1)} ms   ·   ${mode}${transaction}${result.warningCount ? ` · ${result.warningCount} warnings` : ''}`;
     if (!rows.length) $('message').textContent = result.columns.length ? 'Query completed. No rows returned.' : `Statement completed. ${result.affectedRows || 0} rows affected.`;
     if (result.state?.needsReconnect) $('message').textContent += ' Session closed; reconnect explicitly before running another statement.';
+    if (!editingCell) restoreCellFocus(returnFocus);
   }
 
   function visibleScrollAnchor(grid) {
@@ -1649,7 +1718,7 @@
   }
   window.addEventListener('message', event => {
     if (event.data?.type === 'focusResults') {
-      if (editingCell && !$('cell-editor').hidden) $('cell-value').focus();
+      if (editingCell && !$('cell-editor').hidden) focusCellEditor();
       else focusResultTab(resultTabs().find(button => button.getAttribute('aria-selected') === 'true'));
       return;
     }
@@ -1703,7 +1772,12 @@
     }
     if (event.data?.type !== 'results' || !Array.isArray(event.data.history)) return;
     const previous = history.at(-1)?.id, keepEditor = editingCell || current()?.result?.edit && !current().readOnly; history = event.data.history;
-    if (editingCell && history.find(record => record.id === editingCell.id)?.result?.edit?.modelId !== editingCell.modelId) { editingCell = null; $('cell-editor').hidden = true; }
+    let returnFocus;
+    if (editingCell && history.find(record => record.id === editingCell.id)?.result?.edit?.modelId !== editingCell.modelId) {
+      const hadEditorFocus = $('cell-editor').contains(document.activeElement);
+      const position = closeCellEditor();
+      if (hadEditorFocus) returnFocus = position;
+    }
     if (!keepEditor) {
       if (history.some(record => record.id === event.data.selectedResultId)) currentId = event.data.selectedResultId;
       else if (history.at(-1)?.id !== previous) currentId = history.at(-1)?.id;
@@ -1712,6 +1786,7 @@
     for (const id of browseForms.keys()) if (!history.some(record => record.id === id)) browseForms.delete(id);
     for(const id of bulkForms.keys())if(!history.some(record=>record.id===id))bulkForms.delete(id);
     for (const id of layouts.keys()) if (!history.some(record => record.id === id)) layouts.delete(id);
+    for (const id of selectedCells.keys()) if (!history.some(record => record.id === id)) selectedCells.delete(id);
     for (const id of charts.keys()) if (!history.some(record => record.id === id)) charts.delete(id);
     for (const id of maps.keys()) if (!history.some(record => record.id === id)) maps.delete(id);
     for (const id of comparisons.keys()) if (!history.some(record => record.id === id)) comparisons.delete(id);
@@ -1738,7 +1813,7 @@
         vscode.postMessage({ type: 'draftChanged', id: record.id, modelId: model.modelId, count: count(item), draftRevision: item.revision });
       }
     }
-    render(); persist();
+    render(returnFocus); persist();
   });
   $('cell-null').onchange = () => { if (editingCell) showCellMode(editingCell.mode); cellError(); };
   $('cell-value').oninput = () => cellError();
@@ -1755,7 +1830,7 @@
     }
     showCellMode(editingCell.mode);
   };
-  $('cancel-cell').onclick = () => { editingCell = null; $('cell-editor').hidden = true; render(); };
+  $('cancel-cell').onclick = () => render(closeCellEditor());
   $('cell-editor').onsubmit = event => {
     event.preventDefault();
     const record = current();
@@ -1786,9 +1861,11 @@
     } else candidate.updates.set(editingCell.rowId, { ...candidate.updates.get(editingCell.rowId), [editingCell.column.name]: cell });
     if (new TextEncoder().encode(JSON.stringify(changes(candidate))).length > 1024 * 1024) { cellError('The local change set must be at most 1 MiB. Apply the current batch first.'); return; }
     item.updates = candidate.updates; item.inserts = candidate.inserts;
-    editingCell = null; $('cell-editor').hidden = true; changed(record);
+    changed(record, closeCellEditor());
   };
-  $('cell-editor').onkeydown = event => { if (event.key === 'Escape') { event.preventDefault(); $('cancel-cell').click(); } };
+  $('cell-editor').onkeydown = event => {
+    if (event.key === 'Escape' && !event.isComposing) { event.preventDefault(); $('cancel-cell').click(); }
+  };
   $('add-row').onclick = () => {
     const record = current(), item = draft(record), layout = resultLayout(record);
     item.inserts.push({ id: `new-${++item.next}`, values: {} });
@@ -1991,10 +2068,39 @@
       moveScroll(event.deltaY > 0 ? 'next' : 'previous', true);
     }
   }, { passive: true });
+  $('grid').addEventListener('focusin', event => {
+    const row = event.target.closest('[data-result-row-index]'), record = current();
+    if (row && record) resultLayout(record).row = Number(row.dataset.resultRowIndex);
+    if (cellPositions.get(event.target)?.mode === 'grid') setGridTabCell(event.target);
+  });
   $('grid').addEventListener('keydown', event => {
-    if (event.target !== $('grid')) return;
-    if (['PageDown', 'ArrowDown', 'End'].includes(event.key)) moveScroll('next', true);
-    else if (['PageUp', 'ArrowUp', 'Home'].includes(event.key)) moveScroll('previous', true);
+    const cell = event.target;
+    if (cell === $('grid')) {
+      if (['PageDown', 'ArrowDown', 'End'].includes(event.key)) moveScroll('next', true);
+      else if (['PageUp', 'ArrowUp', 'Home'].includes(event.key)) moveScroll('previous', true);
+      return;
+    }
+    if (cellPositions.get(cell)?.mode !== 'grid' || editingCell || event.defaultPrevented ||
+        event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const row = cell.parentElement, rows = row.parentElement.rows;
+    let rowIndex = row.sectionRowIndex, column = cell.cellIndex;
+    switch (event.key) {
+      case 'ArrowLeft': column--; break;
+      case 'ArrowRight': column++; break;
+      case 'ArrowUp': rowIndex--; break;
+      case 'ArrowDown': rowIndex++; break;
+      case 'Home': column = 1; break;
+      case 'End': column = row.cells.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    const destination = column > 0 && rows[rowIndex]?.cells[column];
+    if (destination && destination !== cell) {
+      destination.focus({ preventScroll: true });
+      destination.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    } else if (rowIndex < 0 || rowIndex >= rows.length) {
+      moveScroll(rowIndex < 0 ? 'previous' : 'next', true);
+    }
   });
   $('page-size').onchange = () => browse(0, Number($('page-size').value));
   $('browse-options').onclick = () => { const form = browseForms.get(current()?.id); if (form) { form.expanded = !form.expanded; render(); } };

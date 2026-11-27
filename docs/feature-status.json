@@ -1,5 +1,5 @@
 {
-  "version": "0.176.1",
+  "version": "0.176.2",
   "asOf": "2026-11-27",
   "total": 216,
   "fullProductParityVerified": false,
@@ -43,7 +43,8 @@
     "meaning": "기능 개수에 따른 참고지표이며 실제 개발 공수나 원본 제품 동등성의 완료율이 아니다."
   },
   "changedFeatures": [
-    "DG-083"
+    "DG-062",
+    "DG-096"
   ],
   "expandedFeatures": [],
   "boundsReaffirmedFeatures": [],
@@ -5303,7 +5304,7 @@
       "status": "implemented",
       "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "실제 InnoDB table의 셀 수정·typed value·복합 PK/충돌 검토·원자적 변경을 검증했다.",
+      "scope": "실제 InnoDB table의 셀 수정·typed value·복합 PK/충돌 검토·원자적 변경을 검증했다. 그리드와 레코드의 셀 편집을 취소하거나 스테이징하면 같은 셀로 돌아가며, SQL NULL로 시작할 때는 체크박스에 포커스를 둔다.",
       "remaining": [
         "view·trigger·비트랜잭션/불명확 식별 행은 편집 대상에서 제한한다."
       ],
@@ -5321,7 +5322,12 @@
           "src/db/grid.js",
           "src/ui/results.js"
         ],
-        "originalProductParityVerified": false
+        "originalProductParityVerified": false,
+        "polish": {
+          "version": "0.176.2",
+          "scope": "합성 결과의 실제 Chromium에서 Enter·F2 편집, NULL 체크박스, Escape·취소, 스테이징 후 포커스와 새 모델 전환을 확인했다.",
+          "test": "test/results.test.js"
+        }
       }
     },
     {
@@ -6321,7 +6327,7 @@
       "status": "implemented",
       "label": "구현",
       "delivery": "rocketbrain",
-      "scope": "언어와 편집 컨텍스트에 맞춰 실행 키를 연결하고, 결과 탭의 접근 가능한 키보드 선택과 원래 SQL 편집기로 돌아가는 명령을 제공한다.",
+      "scope": "언어와 편집 컨텍스트에 맞춰 실행 키를 연결하고, 결과 탭의 접근 가능한 키보드 선택과 원래 SQL 편집기로 돌아가는 명령을 제공한다. 결과 그리드의 데이터 셀에는 단일 Tab 진입점이 있으며, 방향키와 Home·End로 보이는 셀을 이동한다.",
       "remaining": [],
       "verification": {
         "state": "v0.76-installed-coverage",
@@ -6339,7 +6345,13 @@
           "test/results.test.js",
           "test/sql-navigation-host.js"
         ],
-        "originalProductParityVerified": false
+        "originalProductParityVerified": false,
+        "polish": {
+          "version": "0.176.2",
+          "scope": "실제 Chromium에서 읽기 전용 결과, 고정·숨김 컬럼, 레코드 전환 및 연속 페이지 갱신 시 키보드 포커스를 확인했다.",
+          "test": "test/results.test.js",
+          "continuousTest": "test/grid-continuous-ui.test.js"
+        }
       }
     }
   ],

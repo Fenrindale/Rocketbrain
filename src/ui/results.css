@@ -132,6 +132,7 @@ header select, #insert-export input, #result-column-panel input[type=number] {
 #export-columns { width: 15em; }
 #grid .result-grid-sized { table-layout: fixed; min-width: 0; }
 #grid .result-grid-sized th, #grid .result-grid-sized td { max-width: none; }
+#grid td[data-result-cell]:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -2px; }
 .result-pinned {
   position: sticky;
   z-index: 1;
