@@ -1,6 +1,7 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),{randomUUID}=require('node:crypto');
 const engine=require('./schema-diff');
+const {asciiFold}=require('./schema-diff-options');
 const {isSelectableRebuildChange,projectSelectedRebuild}=require('./schema-rebuild-selection');
 
 const rebuildChangeLabels={
@@ -236,7 +237,7 @@ function registerSchemaComparison(context,vscode,{capture,chooseOrigin,prepare,a
   const desired=engine.normalizeSnapshot(origin.snapshot);
   const sameServer=current.server.dialect===desired.server.dialect&&current.server.serverUniqueId===desired.server.serverUniqueId;
   const sameSchema=current.database===desired.database||
-   !current.server.tableNameCaseSensitive&&!desired.server.tableNameCaseSensitive&&current.database.toLowerCase()===desired.database.toLowerCase();
+   !current.server.tableNameCaseSensitive&&!desired.server.tableNameCaseSensitive&&asciiFold(current.database)===asciiFold(desired.database);
   if(sameServer&&sameSchema)throw Error('The selected origin and active target refer to the same database schema.');
   const report=await api.compare(desired,{current,originProfileName:origin.name});
   return reviewComparedMigration(report);

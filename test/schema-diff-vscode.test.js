@@ -77,12 +77,12 @@ test('an editable SQL draft leaves the retained migration document and applicati
 
 test('a saved origin profile plans SQL for the reviewed active target and refuses target drift',async t=>{
  const target=fixture({database:'target_app'}),origin=addColumn(fixture({database:'origin_app'}),'note');
- let active=target,changeDuringOrigin=false,prepared=0;
+ let active=target,selectedOrigin=origin,changeDuringOrigin=false,prepared=0;
  const errors=[],opened=[];
  const h=host(async()=>active,{chooseOrigin:async options=>{
   assert.deepEqual(options,{includeStoredObjects:true});
   if(changeDuringOrigin)active=fixture({database:'replaced_target'});
-  return {snapshot:origin,name:'Design profile'};
+  return {snapshot:selectedOrigin,name:'Design profile'};
  },prepare:async request=>{
   prepared++;
   assert.equal(request.current.database,'target_app');
@@ -114,6 +114,13 @@ test('a saved origin profile plans SQL for the reviewed active target and refuse
  assert.equal(await compare(),undefined);
  assert.equal(prepared,1);
  assert.match(errors[0],/server identity changed/);
+
+ changeDuringOrigin=false;
+ active=target;
+ selectedOrigin=addColumn(fixture({database:'target_app'}),'hidden_changed');
+ assert.equal(await compare(),undefined);
+ assert.equal(prepared,1);
+ assert.match(errors[1],/same database schema/);
 });
 
 test('reprojection review can select an unchanged InnoDB geometry table without offering unrelated unchanged tables',async()=>{

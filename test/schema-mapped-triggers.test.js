@@ -26,9 +26,10 @@ function observedRow(trigger, source = AST.render(trigger.ast)) {
     trigger.charset, trigger.collation, trigger.databaseCollation, trigger.order, trigger.schema];
 }
 
-function showCreate(trigger, {event = trigger.event, definer = q('fixture') + '@' + q('localhost')} = {}) {
+function showCreate(trigger, {event = trigger.event, definer = q('fixture') + '@' + q('localhost'),
+  body = AST.render(trigger.ast)} = {}) {
   return [[trigger.name, trigger.sqlMode, 'CREATE DEFINER=' + definer + ' TRIGGER ' + q(trigger.schema) + '.' + q(trigger.name) +
-    ' ' + trigger.timing + ' ' + event + ' ON ' + q(trigger.table) + ' FOR EACH ROW ' + AST.render(trigger.ast)]];
+    ' ' + trigger.timing + ' ' + event + ' ON ' + q(trigger.table) + ' FOR EACH ROW ' + body]];
 }
 
 const first = actor('fix_note', "BEGIN DECLARE note VARCHAR(32) DEFAULT 'NEW.note'; " +
@@ -67,6 +68,37 @@ test('refuses noncanonical header, opaque or cross-schema targets, and an opt-in
   const compound = actor('comparison', 'IF OLD.note <> NEW.note THEN SET NEW.note=OLD.note; END IF');
   assert.throws(() => assertOrdinaryTriggerSource(showCreate(compound), compound), /compound SQL token/u);
   assert.throws(() => projectMappedTriggers(plan, [compound]), /compound SQL token/u);
+});
+
+test('refuses trigger function spellings whose rendered whitespace can alter their binding', () => {
+  const plan = {database: 'one', columnMappings: mapping};
+  for (const expression of ['CAST(OLD.note AS CHAR)', 'NOW()', 'SUBSTR(OLD.note,1,4)',
+    'SUBSTRING(OLD.note,1,4)', 'TRIM(OLD.note)', 'substring (OLD.note,1,4)']) {
+    const before = 'SET NEW.note=' + expression;
+    const trigger = actor('sensitive', before);
+    for (const mode of [sqlMode, sqlMode + ',IGNORE_SPACE']) {
+      const observed = {...trigger, sqlMode: mode};
+      assert.throws(() => assertOrdinaryTriggerSource(showCreate(observed, {body: before}), observed),
+        /whitespace-sensitive trigger function/u);
+      assert.throws(() => projectMappedTriggers(plan, [observed]), /whitespace-sensitive trigger function/u);
+    }
+  }
+});
+
+test('retains ordinary INTERVAL tokens while refusing fused literals and conditional comments', () => {
+  const interval = 'SET NEW.note=OLD.note + INTERVAL 1 DAY';
+  const trigger = actor('interval_test', interval);
+  assert.doesNotThrow(() => assertOrdinaryTriggerSource(showCreate(trigger, {body: interval}), trigger));
+  const [after] = projectMappedTriggers({database: 'one', columnMappings: mapping}, [trigger]);
+  assert.match(AST.render(after.ast), /INTERVAL 1 DAY/u);
+  for (const expression of ['OLD.note + INTERVAL 1DAY', '0xAB', "X'AB'", "B'01'", "_utf8mb4'NEW.note'", '.5', '1.']) {
+    const body = 'SET NEW.note=' + expression;
+    const observed = actor('literal_test', body);
+    assert.throws(() => assertOrdinaryTriggerSource(showCreate(observed, {body}), observed), /compound SQL token/u);
+  }
+  assert.throws(() => actor('comment_test', "SET NEW.note=/*!80000 'NEW.note' */ OLD.note"), /comments/iu);
+  assert.throws(() => actor('qualified_function', 'SET NEW.note=one.COALESCE(OLD.note,NEW.note)'),
+    /qualified stored functions/iu);
 });
 
 function mockedCatalog(dialect) {

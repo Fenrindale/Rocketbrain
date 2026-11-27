@@ -30,8 +30,8 @@ function storage(...profiles) {
   };
 }
 
-function metadata(sql, database = schema) {
-  if (sql.startsWith('SELECT VERSION(),@@hostname')) return [[dbVersion, 'owned-origin', 3306, 19, 0, sqlMode, currentUser, database]];
+function metadata(sql, database = schema, caseMode = 0) {
+  if (sql.startsWith('SELECT VERSION(),@@hostname')) return [[dbVersion, 'owned-origin', 3306, 19, caseMode, sqlMode, currentUser, database]];
   if (sql === 'SELECT @@server_uuid') return [[serverId]];
   if (sql.startsWith('SELECT VERSION(),DATABASE(),CURRENT_USER(),')) return [[dbVersion, database, currentUser, serverId, sqlMode]];
   if (sql.startsWith('SELECT TABLE_NAME,TABLE_TYPE FROM')) return [['people', 'BASE TABLE']];
@@ -111,6 +111,29 @@ test('origin cancellation and profile revision drift prevent opening the separat
     return 'never-used-fixture';
   };
   await assert.rejects(api.chooseSchemaComparisonOrigin(), /origin profile changed/);
+});
+
+test('origin schema identity follows server ASCII case handling and requires exact Unicode spelling', async t => {
+  const cases = [
+    { saved: 'ORIGIN_SCHEMA', observed: 'origin_schema', caseMode: 1, matches: true },
+    { saved: 'ORIGIN_SCHEMA', observed: 'origin_schema', caseMode: 0, matches: false },
+    { saved: 'ORIGIN_SCHEMA', observed: 'other_schema', caseMode: 1, matches: false },
+    { saved: 'Äpp', observed: 'äpp', caseMode: 1, matches: false },
+    { saved: 'Äpp', observed: 'Äpp', caseMode: 1, matches: true }
+  ];
+  for (const { saved, observed, caseMode, matches } of cases) {
+    const origin = savedProfile('Case test', saved);
+    const { workspaceState, secrets } = storage(origin);
+    let releases = 0;
+    const api = createConnectionProfiles({ state: workspaceState, secrets, isTrusted: () => true,
+      createService: () => ({ async _metadataQuery(sql) { return { rows: metadata(sql, observed, caseMode) }; },
+        async dispose() { releases++; } }) });
+    t.after(() => api.dispose());
+    const result = api.captureSchemaComparisonOrigin({ id: origin.profile.id, revision: origin.revision });
+    if (matches) assert.equal((await result).snapshot.database, observed);
+    else await assert.rejects(result, /opened a different schema/);
+    assert.equal(releases, 1);
+  }
 });
 
 test('origin failure closes both the isolated metadata service and its tunnel', async t => {

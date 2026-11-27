@@ -9,12 +9,19 @@ const identity = trigger => trigger.schema + '/' + trigger.name;
 const standardAst = ast => ast?.format === 'RocketbrainStructuredTrigger' && ast.formatVersion === 1;
 const isMappedTriggerPlan = plan => plan.formatVersion === 9;
 const splitOperators = new Set(['<=', '>=', '<>', '!=', '<<', '>>', '==']);
+// The structured renderer inserts a space before parentheses. These function
+// names in its scalar grammar are whitespace-sensitive in both vendor lexers.
+const spacingSensitiveFunctions = new Set(['CAST', 'NOW', 'SUBSTR', 'SUBSTRING', 'TRIM']);
 
 function replayableTokens(body, sqlMode) {
   const tokens = AST.lex(body, {sqlMode});
   for (let i = 1; i < tokens.length; i++) {
     const prior = tokens[i - 1], token = tokens[i];
+    if (prior.kind === 'word' && token.value === '(' && spacingSensitiveFunctions.has(prior.value.toUpperCase())) {
+      throw fail('The structured renderer cannot preserve the binding of this whitespace-sensitive trigger function.');
+    }
     if (prior.kind === 'punct' && token.kind === 'punct' && splitOperators.has(prior.value + token.value) ||
+        prior.kind === 'number' && token.value === '.' || prior.value === '.' && token.kind === 'number' ||
         prior.end === token.start && (prior.kind === 'number' && token.kind === 'word' ||
         prior.kind === 'word' && token.kind === 'literal')) {
       throw fail('The trigger uses a compound SQL token whose spelling cannot be retained by the structured renderer.');

@@ -8,6 +8,7 @@ const { normalizeLocalTransport, transportKey } = require('./local-transport');
 const { normalizeRdsIam, validateRdsIamRoute } = require('./rds-iam');
 const { usesAzureMysqlEntra, normalizeAzureMysqlEntra, validateAzureMysqlRoute } = require('./azure-mysql-entra');
 const { normalizeWriteProtection } = require('./write-protection');
+const { asciiFold } = require('./schema-diff-options');
 const { sessionLifecycle } = require('./session-lifecycle');
 const { caFingerprint, expectReviewedTls } = require('./server-tls-trust');
 const { readClientPem, readPkcs12Identity, clientPassphrase, readJksTrustStore, jksPassphrase } = require('./client-identity');
@@ -367,7 +368,9 @@ function createConnectionProfiles({state,secrets,connect,disconnect,getActivePro
       guard(ticket);
       return result;
      }},{includeStoredObjects});
-     if(snapshot.database!==profile.database)throw fail('The origin connection opened a different schema. Review the saved profile.');
+     const sameSchema=snapshot.database===profile.database||!snapshot.server.tableNameCaseSensitive&&
+      asciiFold(snapshot.database)===asciiFold(profile.database);
+     if(!sameSchema)throw fail('The origin connection opened a different schema. Review the saved profile.');
     }finally{
      try{await service?.dispose();}
      finally{await prepared.dispose();}
